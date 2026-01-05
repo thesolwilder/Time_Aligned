@@ -1,0 +1,8 @@
+#ignore settings files, database files, and compiled code
+settings.py 
+data.json
+*.db
+*.pyc
+__pycache__/
+.env
+.vscode/

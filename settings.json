@@ -1,0 +1,5 @@
+{
+  "idle_threshold": 60,
+  "idle_break_threshold": 300,
+  "default_sphere": "General"
+}
