@@ -1,8 +1,21 @@
 #ignore settings files, database files, and compiled code
-settings.py 
-data.json
+
 *.db
 *.pyc
 __pycache__/
 .env
 .vscode/
+
+# Python virtual environment
+.venv/
+
+# App settings and user data
+settings.json
+data.json
+time_track_timer.txt
+
+# Logs and backups
+*.log
+*.pkl
+*.pickle
+*.bak
