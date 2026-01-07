@@ -72,7 +72,10 @@ class TimeTracker:
                 "idle_threshold": 60,  # seconds before considering idle
                 "idle_break_threshold": 300,  # seconds of idle before auto-break
             },
-            "spheres": {"default_sphere": "General"},
+            "spheres": {
+                "default_sphere": "General",
+                "active_spheres": ["General"],
+            },
             "projects": {"default_project": "General", "active_projects": ["General"]},
             "break_actions": {"default_break_action": "Resting"},
         }

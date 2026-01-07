@@ -30,13 +30,22 @@ class CompletionFrame(ttk.Frame):
 
     def create_widgets(self):
         """Create all UI elements for the completion frame"""
+
+        # sphere dropdown menu for sphere selection (optional)
+        self._sphere_menu()
+
         # Title
         ttk.Label(self, text="Session Complete", font=("Arial", 16, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=10
+            row=0, column=0, columnspan=2, pady=10, sticky=tk.W
         )
 
         # display date, start time, end time and duration
         self._session_info_display()
+
+        # separator
+        ttk.Separator(self, orient="horizontal").grid(
+            row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
+        )
 
         # Display durations
         self._create_duration_display()
@@ -76,20 +85,39 @@ class CompletionFrame(ttk.Frame):
             .strftime("%I:%M %p")
             .lstrip("0")
         )
-        duration = self.tracker.format_time(self.session_duration)
 
-        ttk.Label(self, text=f"Date: {session_date}", font=("Arial", 10)).grid(
-            row=2, column=0, sticky=tk.W
+        # Create a frame to hold all time labels in a single row
+        time_frame = ttk.Frame(self)
+        time_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        col = 0
+        ttk.Label(time_frame, text=f"{session_date}:", font=("Arial", 12, "bold")).grid(
+            row=0, column=col, sticky=tk.W, padx=(0, 5)
         )
-        ttk.Label(self, text=f"Start Time: {start_time}", font=("Arial", 10)).grid(
-            row=2, column=1, sticky=tk.W
+        col += 1
+        ttk.Label(time_frame, text=f"{start_time}", font=("Arial", 12)).grid(
+            row=0, column=col, sticky=tk.W
         )
-        ttk.Label(self, text=f"End Time: {end_time}", font=("Arial", 10)).grid(
-            row=3, column=0, sticky=tk.W
-        )
-        ttk.Label(self, text=f"Duration: {duration}", font=("Arial", 10)).grid(
-            row=3, column=1, sticky=tk.W
-        )
+        col += 1
+
+        ttk.Label(
+            time_frame,
+            text=" - ",
+            font=(
+                "Arial",
+                12,
+            ),
+        ).grid(row=0, column=col, sticky=tk.W)
+        col += 1
+        ttk.Label(
+            time_frame,
+            text=f"{end_time}",
+            font=(
+                "Arial",
+                12,
+            ),
+        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 5))
+        col += 1
 
     def _create_duration_display(self):
         """Create the duration display section"""
@@ -100,7 +128,7 @@ class CompletionFrame(ttk.Frame):
 
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
 
         col = 0
         # Total time
@@ -164,6 +192,9 @@ class CompletionFrame(ttk.Frame):
                     total_idle += idle_period["duration"]
 
         return total_idle
+
+    def _sphere_menu(self):
+        pass
 
     def _create_timeline(self):
         """Create chronological timeline of all active/break/idle periods"""
