@@ -31,13 +31,8 @@ class CompletionFrame(ttk.Frame):
     def create_widgets(self):
         """Create all UI elements for the completion frame"""
 
-        # sphere dropdown menu for sphere selection (optional)
-        self._sphere_menu()
-
-        # Title
-        ttk.Label(self, text="Session Complete", font=("Arial", 16, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=10, sticky=tk.W
-        )
+        # Title and sphere selection
+        self._title_and_sphere()
 
         # display date, start time, end time and duration
         self._session_info_display()
@@ -68,6 +63,35 @@ class CompletionFrame(ttk.Frame):
 
         # Buttons
         self._create_buttons()
+
+    # title and sphere selection method
+    def _title_and_sphere(self):
+        # Create a frame to hold all time labels in a single row
+        time_frame = ttk.Frame(self)
+        time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
+        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
+        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+        # Set initial value
+        initial_value = (
+            default_sphere
+            if default_sphere in active_spheres
+            else active_spheres[0] if active_spheres else ""
+        )
+        project_menu = ttk.Combobox(
+            time_frame,
+            values=list(active_spheres),
+            # values to be centered
+            justify="center",
+            state="readonly",
+            width=10,
+            font=("Arial", 16, "bold"),
+        )
+        project_menu.set(initial_value)
+        project_menu.grid(row=0, column=0, sticky=tk.W, padx=5, pady=10)
+        # Title
+        ttk.Label(time_frame, text="Session Complete", font=("Arial", 16, "bold")).grid(
+            row=0, column=1, pady=10, sticky=tk.W, padx=5
+        )
 
     # session data display date, start time, end time and duration
     def _session_info_display(self):
@@ -192,9 +216,6 @@ class CompletionFrame(ttk.Frame):
                     total_idle += idle_period["duration"]
 
         return total_idle
-
-    def _sphere_menu(self):
-        pass
 
     def _create_timeline(self):
         """Create chronological timeline of all active/break/idle periods"""
