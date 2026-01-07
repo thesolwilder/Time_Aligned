@@ -37,6 +37,13 @@ class TimeTracker:
         self.idle_start_time = None
         self.last_user_input = time.time()
 
+        self.backup_loop_count = 0  # auto back up save end time if crash
+        self.update_timer_interval = 100  # in milliseconds
+        self.one_minute_ms = 60000  # one minute in milliseconds
+        self.backup_frequency = (
+            self.one_minute_ms // self.update_timer_interval
+        )  # save every minute
+
         # File paths
         self.settings_file = "settings.json"
         self.data_file = "data.json"
@@ -61,9 +68,13 @@ class TimeTracker:
     def get_settings(self):
         """Load or create settings file"""
         default_settings = {
-            "idle_threshold": 60,  # seconds before considering idle
-            "idle_break_threshold": 300,  # seconds of idle before auto-break
-            "default_sphere": "General",
+            "idle_settings": {
+                "idle_threshold": 60,  # seconds before considering idle
+                "idle_break_threshold": 300,  # seconds of idle before auto-break
+            },
+            "spheres": {"default_sphere": "General"},
+            "projects": {"default_project": "General", "active_projects": ["General"]},
+            "break_actions": {"default_break_action": "Resting"},
         }
 
         if not os.path.exists(self.settings_file):
@@ -285,7 +296,9 @@ class TimeTracker:
         # Create session data
         session_data = {
             self.session_name: {
-                "sphere": settings["default_sphere"] if settings else "General",
+                "sphere": (
+                    settings["spheres"]["default_sphere"] if settings else "General"
+                ),
                 "date": current_date,
                 "start_time": current_time,
                 "start_timestamp": self.session_start_time,
@@ -353,7 +366,9 @@ class TimeTracker:
         self.session_timer_label.config(text="00:00:00")
 
         # Show completion frame to label actions
-        self.show_completion_frame(total_elapsed, active_time, break_time)
+        self.show_completion_frame(
+            total_elapsed, active_time, break_time, original_start, end_time
+        )
 
     def toggle_break(self):
         """Start or end a break"""
@@ -425,7 +440,9 @@ class TimeTracker:
             # Start new active period
             self.active_period_start_time = time.time()
 
-    def show_completion_frame(self, total_elapsed, active_time, break_time):
+    def show_completion_frame(
+        self, total_elapsed, active_time, break_time, original_start, end_time
+    ):
         """Show completion frame for labeling session actions"""
         # Hide main frame
         self.main_frame_container.grid_remove()
@@ -446,6 +463,8 @@ class TimeTracker:
             "total_elapsed": total_elapsed,
             "active_time": active_time,
             "break_time": break_time,
+            "session_start_timestamp": original_start,
+            "session_end_timestamp": end_time,
         }
         self.completion_frame = CompletionFrame(canvas, self, session_data)
 
@@ -509,7 +528,10 @@ class TimeTracker:
         idle_time = time.time() - self.last_user_input
 
         # Check if newly idle
-        if not self.session_idle and idle_time >= self.settings["idle_threshold"]:
+        if (
+            not self.session_idle
+            and idle_time >= self.settings["idle_settings"]["idle_threshold"]
+        ):
             self.session_idle = True
             self.idle_start_time = self.last_user_input
             self.status_label.config(text="Idle detected")
@@ -528,7 +550,10 @@ class TimeTracker:
                 self.save_data(all_data)
 
         # Check if idle long enough for auto-break
-        elif self.session_idle and idle_time >= self.settings["idle_break_threshold"]:
+        elif (
+            self.session_idle
+            and idle_time >= self.settings["idle_settings"]["idle_break_threshold"]
+        ):
             if not self.break_active:
                 # stat of break should be idle start time
                 self.auto_break_start_time_from_idle = self.idle_start_time
@@ -551,8 +576,33 @@ class TimeTracker:
         else:
             self.break_timer_label.config(text="00:00:00")
 
+        # save in case computer crashes or runtime stops unexpectedly
+
+        if self.backup_loop_count == self.backup_frequency:
+            # Update session data
+            if self.session_active:
+                all_data = self.load_data()
+                if self.session_name in all_data:
+                    all_data[self.session_name]["end_time"] = datetime.now().strftime(
+                        "%H:%M:%S"
+                    )
+                    all_data[self.session_name]["end_timestamp"] = time.time()
+                    all_data[self.session_name]["total_duration"] = (
+                        time.time() - all_data[self.session_name]["start_timestamp"]
+                    )
+                    all_data[self.session_name]["active_duration"] = (
+                        all_data[self.session_name]["total_duration"]
+                        - self.total_break_time
+                    )
+                    all_data[self.session_name][
+                        "break_duration"
+                    ] = self.total_break_time
+                    self.save_data(all_data)
+            self.backup_loop_count = 0
+        self.backup_loop_count += 1
+
         # Schedule next update
-        self.root.after(100, self.update_timers)
+        self.root.after(self.update_timer_interval, self.update_timers)
 
     def on_closing(self):
         """Clean up before closing"""

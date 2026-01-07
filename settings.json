@@ -1,5 +1,16 @@
 {
-  "idle_threshold": 60,
-  "idle_break_threshold": 300,
-  "default_sphere": "General"
+  "idle_settings": {
+    "idle_threshold": 60,
+    "idle_break_threshold": 300
+  },
+  "spheres": {
+    "default_sphere": "General"
+  },
+  "projects": {
+    "default_project": "General",
+    "active_projects": ["General", "Work", "Personal"]
+  },
+  "break_actions": {
+    "default_break_action": "Resting"
+  }
 }

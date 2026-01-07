@@ -22,6 +22,9 @@ class CompletionFrame(ttk.Frame):
         self.tracker = tracker
         self.session_data = session_data
         self.session_name = session_data["session_name"]
+        self.session_start_timestamp = session_data.get("session_start_timestamp", 0)
+        self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
+        self.session_duration = session_data.get("total_duration", 0)
 
         self.create_widgets()
 
@@ -31,6 +34,9 @@ class CompletionFrame(ttk.Frame):
         ttk.Label(self, text="Session Complete", font=("Arial", 16, "bold")).grid(
             row=0, column=0, columnspan=2, pady=10
         )
+
+        # display date, start time, end time and duration
+        self._session_info_display()
 
         # Display durations
         self._create_duration_display()
@@ -54,44 +60,98 @@ class CompletionFrame(ttk.Frame):
         # Buttons
         self._create_buttons()
 
+    # session data display date, start time, end time and duration
+    def _session_info_display(self):
+        """Create the session info display section"""
+        session_date = datetime.fromtimestamp(self.session_start_timestamp).strftime(
+            "%B %d, %Y"
+        )
+        start_time = (
+            datetime.fromtimestamp(self.session_start_timestamp)
+            .strftime("%I:%M %p")
+            .lstrip("0")
+        )
+        end_time = (
+            datetime.fromtimestamp(self.session_end_timestamp)
+            .strftime("%I:%M %p")
+            .lstrip("0")
+        )
+        duration = self.tracker.format_time(self.session_duration)
+
+        ttk.Label(self, text=f"Date: {session_date}", font=("Arial", 10)).grid(
+            row=2, column=0, sticky=tk.W
+        )
+        ttk.Label(self, text=f"Start Time: {start_time}", font=("Arial", 10)).grid(
+            row=2, column=1, sticky=tk.W
+        )
+        ttk.Label(self, text=f"End Time: {end_time}", font=("Arial", 10)).grid(
+            row=3, column=0, sticky=tk.W
+        )
+        ttk.Label(self, text=f"Duration: {duration}", font=("Arial", 10)).grid(
+            row=3, column=1, sticky=tk.W
+        )
+
     def _create_duration_display(self):
         """Create the duration display section"""
         total_elapsed = self.session_data["total_elapsed"]
-        active_time = self.session_data["active_time"]
         break_time = self.session_data["break_time"]
+        total_idle = self._calculate_total_idle()
+        active_time = self.session_data["active_time"] - total_idle
 
+        # Create a frame to hold all time labels in a single row
+        time_frame = ttk.Frame(self)
+        time_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        col = 0
         # Total time
-        ttk.Label(self, text="Total Time:", font=("Arial", 12, "bold")).grid(
-            row=1, column=0, sticky=tk.W, pady=5
+        ttk.Label(time_frame, text="Total Time:", font=("Arial", 12, "bold")).grid(
+            row=0, column=col, sticky=tk.W, padx=(0, 5)
         )
+        col += 1
         ttk.Label(
-            self, text=self.tracker.format_time(total_elapsed), font=("Arial", 12)
-        ).grid(row=1, column=1, sticky=tk.W, pady=5)
+            time_frame, text=self.tracker.format_time(total_elapsed), font=("Arial", 12)
+        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
+        col += 1
 
         # Active time
-        ttk.Label(self, text="Active Time:", font=("Arial", 12, "bold")).grid(
-            row=2, column=0, sticky=tk.W, pady=5
-        )
         ttk.Label(
-            self, text=self.tracker.format_time(active_time), font=("Arial", 12)
-        ).grid(row=2, column=1, sticky=tk.W, pady=5)
+            time_frame,
+            text=f"Active Time",
+            font=("Arial", 12, "bold"),
+        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 5))
+        col += 1
+
+        # minus idle time italics and smaller font
+        ttk.Label(
+            time_frame,
+            text="(minus Idle Time):",
+            font=("Arial", 10, "italic"),
+        ).grid(row=0, column=col, sticky=tk.W)
+
+        col += 1
+        ttk.Label(
+            time_frame, text=self.tracker.format_time(active_time), font=("Arial", 12)
+        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
+        col += 1
 
         # Break time
-        ttk.Label(self, text="Break Time:", font=("Arial", 12, "bold")).grid(
-            row=3, column=0, sticky=tk.W, pady=5
+        ttk.Label(time_frame, text="Break Time:", font=("Arial", 12, "bold")).grid(
+            row=0, column=col, sticky=tk.W, padx=(0, 5)
         )
+        col += 1
         ttk.Label(
-            self, text=self.tracker.format_time(break_time), font=("Arial", 12)
-        ).grid(row=3, column=1, sticky=tk.W, pady=5)
+            time_frame, text=self.tracker.format_time(break_time), font=("Arial", 12)
+        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
+        col += 1
 
-        # Calculate and display idle time
-        total_idle = self._calculate_total_idle()
-        ttk.Label(self, text="Idle Time:", font=("Arial", 12, "bold")).grid(
-            row=4, column=0, sticky=tk.W, pady=5
+        # Idle time
+        ttk.Label(time_frame, text="Idle Time:", font=("Arial", 12, "bold")).grid(
+            row=0, column=col, sticky=tk.W, padx=(0, 5)
         )
+        col += 1
         ttk.Label(
-            self, text=self.tracker.format_time(total_idle), font=("Arial", 12)
-        ).grid(row=4, column=1, sticky=tk.W, pady=5)
+            time_frame, text=self.tracker.format_time(total_idle), font=("Arial", 12)
+        ).grid(row=0, column=col, sticky=tk.W)
 
     def _calculate_total_idle(self):
         """Calculate total idle time from session data"""
@@ -132,6 +192,8 @@ class CompletionFrame(ttk.Frame):
                         "type": "Active",
                         "start": period.get("start", ""),
                         "start_timestamp": period.get("start_timestamp", 0),
+                        "end": period.get("end", ""),
+                        "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
                     }
                 )
@@ -143,6 +205,8 @@ class CompletionFrame(ttk.Frame):
                         "type": "Break",
                         "start": period.get("start", ""),
                         "start_timestamp": period.get("start_timestamp", 0),
+                        "end": period.get("end", ""),
+                        "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
                     }
                 )
@@ -154,6 +218,8 @@ class CompletionFrame(ttk.Frame):
                         "type": "Idle",
                         "start": period.get("start", ""),
                         "start_timestamp": period.get("start_timestamp", 0),
+                        "end": period.get("end", ""),
+                        "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
                     }
                 )
@@ -166,6 +232,8 @@ class CompletionFrame(ttk.Frame):
         periods_frame.pack(fill="both", expand=True)
 
         for idx, period in enumerate(all_periods):
+            col = 0
+
             # Period type with color coding
             type_label = ttk.Label(
                 periods_frame,
@@ -173,25 +241,81 @@ class CompletionFrame(ttk.Frame):
                 font=("Arial", 10, "bold"),
                 width=10,
             )
-            type_label.grid(row=idx, column=0, sticky=tk.W, padx=5, pady=2)
+            type_label.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            col += 1
 
-            # Start time
-            ttk.Label(periods_frame, text=period["start"], font=("Arial", 10)).grid(
-                row=idx, column=1, sticky=tk.W, padx=5, pady=2
+            # Start time (from timestamp)
+            start_time = (
+                datetime.fromtimestamp(period["start_timestamp"])
+                .strftime("%I:%M:%S %p")
+                .lstrip("0")
+                if period["start_timestamp"]
+                else ""
             )
+            ttk.Label(periods_frame, text=start_time, font=("Arial", 10)).grid(
+                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            )
+            col += 1
+
+            # insert dash between start and end time
+            ttk.Label(periods_frame, text="-", font=("Arial", 10)).grid(
+                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            )
+            col += 1
+
+            # End time (from timestamp)
+            end_time = (
+                datetime.fromtimestamp(period["end_timestamp"])
+                .strftime("%I:%M:%S %p")
+                .lstrip("0")
+                if period["end_timestamp"]
+                else ""
+            )
+            ttk.Label(periods_frame, text=end_time, font=("Arial", 10)).grid(
+                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            )
+            col += 1
 
             # Duration
             ttk.Label(
                 periods_frame,
                 text=self.tracker.format_time(period["duration"]),
                 font=("Arial", 10),
-            ).grid(row=idx, column=2, sticky=tk.W, padx=5, pady=2)
+            ).grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            col += 1
+
+            # dropdown menu for project selection (optional)
+            if period["type"] == "Active":
+                # Get default project first
+                default_project = self.tracker.settings["projects"].get(
+                    "default_project", ""
+                )
+                active_projects = self.tracker.settings["projects"].get(
+                    "active_projects", []
+                )
+
+                # Set initial value
+                initial_value = (
+                    default_project
+                    if default_project in active_projects
+                    else "Select Project"
+                )
+
+                project_menu = ttk.Combobox(
+                    periods_frame,
+                    values=list(self.tracker.settings["projects"]["active_projects"]),
+                    state="readonly",
+                    width=15,
+                )
+                project_menu.set(initial_value)
+                project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                col += 1
 
     def _create_action_tags(self):
         """Create the action tags input section"""
-        ttk.Label(
-            self, text="Label Your Session Actions", font=("Arial", 12, "bold")
-        ).grid(row=8, column=0, columnspan=2, pady=10)
+        ttk.Label(self, text="Session Actions", font=("Arial", 12, "bold")).grid(
+            row=8, column=0, columnspan=2, pady=10
+        )
 
         # Active work action
         ttk.Label(self, text="Active Work Action:", font=("Arial", 10)).grid(
