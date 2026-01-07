@@ -71,27 +71,101 @@ class CompletionFrame(ttk.Frame):
         time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
         default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
         active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+
+        # Add "Add New Sphere..." option to the list
+        sphere_options = list(active_spheres) + ["Add New Sphere..."]
+
         # Set initial value
         initial_value = (
             default_sphere
             if default_sphere in active_spheres
             else active_spheres[0] if active_spheres else ""
         )
-        project_menu = ttk.Combobox(
+
+        self.sphere_menu = ttk.Combobox(
             time_frame,
-            values=list(active_spheres),
-            # values to be centered
+            values=sphere_options,
             justify="center",
             state="readonly",
             width=10,
             font=("Arial", 16, "bold"),
         )
-        project_menu.set(initial_value)
-        project_menu.grid(row=0, column=0, sticky=tk.W, padx=5, pady=10)
+        self.sphere_menu.set(initial_value)
+        self.sphere_menu.grid(row=0, column=0, sticky=tk.W, padx=5, pady=10)
+
+        # Bind event to handle selection
+        self.sphere_menu.bind("<<ComboboxSelected>>", self._on_sphere_selected)
+
         # Title
         ttk.Label(time_frame, text="Session Complete", font=("Arial", 16, "bold")).grid(
             row=0, column=1, pady=10, sticky=tk.W, padx=5
         )
+
+    def _on_sphere_selected(self, event):
+        """Handle sphere selection - enable editing if 'Add New Sphere...' is selected"""
+        selected = self.sphere_menu.get()
+
+        if selected == "Add New Sphere...":
+            # Change to normal state and clear the field
+            self.sphere_menu.config(state="normal")
+            self.sphere_menu.set("")
+            self.sphere_menu.focus()
+
+            # Bind Return key to save the new sphere
+            self.sphere_menu.bind("<Return>", self._save_new_sphere)
+            # Bind FocusOut to handle if user clicks away
+            self.sphere_menu.bind("<FocusOut>", self._cancel_new_sphere)
+
+    def _save_new_sphere(self, event):
+        """Save the new sphere to settings"""
+        new_sphere = self.sphere_menu.get().strip()
+
+        if new_sphere and new_sphere != "Add New Sphere...":
+            # Add to active spheres
+            active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+            if new_sphere not in active_spheres:
+                active_spheres.append(new_sphere)
+
+                
+                # Save settings to file
+                import json
+                with open(self.tracker.settings_file, "w") as f:
+                    json.dump(self.tracker.settings, f, indent=2)
+
+                # Update the combobox values
+                sphere_options = list(active_spheres) + ["Add New Sphere..."]
+                self.sphere_menu.config(values=sphere_options, state="readonly")
+                self.sphere_menu.set(new_sphere)
+            else:
+                # Already exists, just set it
+                self.sphere_menu.config(state="readonly")
+                self.sphere_menu.set(new_sphere)
+        else:
+            # Cancel if empty
+            self._cancel_new_sphere(event)
+
+        # Unbind the events
+        self.sphere_menu.unbind("<Return>")
+        self.sphere_menu.unbind("<FocusOut>")
+        self.sphere_menu.unbind("<FocusOut>")
+
+    def _cancel_new_sphere(self, event):
+        """Cancel adding new sphere and revert to previous state"""
+        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
+        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+
+        initial_value = (
+            default_sphere
+            if default_sphere in active_spheres
+            else active_spheres[0] if active_spheres else ""
+        )
+
+        self.sphere_menu.config(state="readonly")
+        self.sphere_menu.set(initial_value)
+
+        # Unbind the events if they exist
+        self.sphere_menu.unbind("<Return>")
+        self.sphere_menu.unbind("<FocusOut>")
 
     # session data display date, start time, end time and duration
     def _session_info_display(self):
