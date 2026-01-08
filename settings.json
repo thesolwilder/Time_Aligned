@@ -8,8 +8,71 @@
     "active_spheres": ["General", "Coding", "Music", "Exercise"]
   },
   "projects": {
-    "default_project": "General",
-    "active_projects": ["General", "Work", "Personal"]
+    "General": {
+      "sphere": "General",
+      "is_default": false,
+      "active": true
+    },
+    "Work": {
+      "sphere": "General",
+      "is_default": true,
+      "active": true
+    },
+    "Personal": {
+      "sphere": "General",
+      "is_default": false,
+      "active": true
+    },
+    "time_tracker": {
+      "sphere": "Coding",
+      "is_default": true,
+      "active": true
+    },
+    "learning_to_code": {
+      "sphere": "Coding",
+      "is_default": false,
+      "active": true
+    },
+    "sequencer": {
+      "sphere": "Coding",
+      "is_default": false,
+      "active": true
+    },
+    "Coding": {
+      "sphere": "General",
+      "is_default": false,
+      "active": true
+    },
+    "recording": {
+      "sphere": "Music",
+      "is_default": true,
+      "active": true
+    },
+    "composing": {
+      "sphere": "Music",
+      "is_default": false,
+      "active": true
+    },
+    "mixing": {
+      "sphere": "Music",
+      "is_default": false,
+      "active": true
+    },
+    "lifting": {
+      "sphere": "Exercise",
+      "is_default": true,
+      "active": true
+    },
+    "running": {
+      "sphere": "Exercise",
+      "is_default": false,
+      "active": true
+    },
+    "meditation": {
+      "sphere": "Exercise",
+      "is_default": false,
+      "active": true
+    }
   },
   "break_actions": {
     "default_break_action": "Resting"

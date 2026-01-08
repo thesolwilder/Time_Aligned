@@ -76,7 +76,23 @@ class TimeTracker:
                 "default_sphere": "General",
                 "active_spheres": ["General"],
             },
-            "projects": {"default_project": "General", "active_projects": ["General"]},
+            "projects": {
+                "General": {
+                    "sphere": "General",
+                    "is_default": True,
+                    "active": True
+                },
+                "Work": {
+                    "sphere": "General",
+                    "is_default": False,
+                    "active": True
+                },
+                "Personal": {
+                    "sphere": "General",
+                    "is_default": False,
+                    "active": True
+                },
+            },
             "break_actions": {"default_break_action": "Resting"},
         }
 

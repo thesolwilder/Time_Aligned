@@ -3,6 +3,7 @@ Completion Frame - Displayed when a session ends.
 Allows user to tag actions for active time, breaks, and idle periods.
 """
 
+import json
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
@@ -25,6 +26,7 @@ class CompletionFrame(ttk.Frame):
         self.session_start_timestamp = session_data.get("session_start_timestamp", 0)
         self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
         self.session_duration = session_data.get("total_duration", 0)
+        
 
         self.create_widgets()
 
@@ -81,6 +83,7 @@ class CompletionFrame(ttk.Frame):
             if default_sphere in active_spheres
             else active_spheres[0] if active_spheres else ""
         )
+        self.selected_sphere = initial_value
 
         self.sphere_menu = ttk.Combobox(
             time_frame,
@@ -101,9 +104,11 @@ class CompletionFrame(ttk.Frame):
             row=0, column=1, pady=10, sticky=tk.W, padx=5
         )
 
-    def _on_sphere_selected(self, event):
+    def _on_sphere_selected(self, _):
         """Handle sphere selection - enable editing if 'Add New Sphere...' is selected"""
         selected = self.sphere_menu.get()
+        self.selected_sphere = selected
+        # call the project dropdown to refresh with new data
 
         if selected == "Add New Sphere...":
             # Change to normal state and clear the field
@@ -119,6 +124,7 @@ class CompletionFrame(ttk.Frame):
     def _save_new_sphere(self, event):
         """Save the new sphere to settings"""
         new_sphere = self.sphere_menu.get().strip()
+        self.selected_sphere = new_sphere
 
         if new_sphere and new_sphere != "Add New Sphere...":
             # Add to active spheres
@@ -126,9 +132,7 @@ class CompletionFrame(ttk.Frame):
             if new_sphere not in active_spheres:
                 active_spheres.append(new_sphere)
 
-                
                 # Save settings to file
-                import json
                 with open(self.tracker.settings_file, "w") as f:
                     json.dump(self.tracker.settings, f, indent=2)
 
@@ -146,7 +150,6 @@ class CompletionFrame(ttk.Frame):
 
         # Unbind the events
         self.sphere_menu.unbind("<Return>")
-        self.sphere_menu.unbind("<FocusOut>")
         self.sphere_menu.unbind("<FocusOut>")
 
     def _cancel_new_sphere(self, event):
@@ -412,24 +415,39 @@ class CompletionFrame(ttk.Frame):
 
             # dropdown menu for project selection (optional)
             if period["type"] == "Active":
-                # Get default project first
-                default_project = self.tracker.settings["projects"].get(
-                    "default_project", ""
-                )
-                active_projects = self.tracker.settings["projects"].get(
-                    "active_projects", []
-                )
+                # Get all active projects
+                active_projects = [
+                    proj
+                    for proj, data in self.tracker.settings["projects"].items()
+                    if data.get("active", True)
+                    and data.get("sphere") == self.selected_sphere
+                ]
+                print(f"selected sphere: {self.selected_sphere}")
+                print(f"active projects: {active_projects}")
 
-                # Set initial value
+                # Get default project (can be None if not set)
+                default_project = next(
+                    (
+                        proj
+                        for proj, data in self.tracker.settings["projects"].items()
+                        if data.get("is_default", True)
+                        and data.get("sphere") == self.selected_sphere
+                    ),
+                    None,
+                )
+                print(f"default project: {default_project}")
+
+                # Set initial value for project dropdown
                 initial_value = (
                     default_project
-                    if default_project in active_projects
+                    if default_project and default_project in active_projects
                     else "Select Project"
                 )
+                print(f"initial value for project dropdown: {initial_value}")
 
                 project_menu = ttk.Combobox(
                     periods_frame,
-                    values=list(self.tracker.settings["projects"]["active_projects"]),
+                    values=active_projects,
                     state="readonly",
                     width=15,
                 )
