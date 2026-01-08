@@ -26,7 +26,9 @@ class CompletionFrame(ttk.Frame):
         self.session_start_timestamp = session_data.get("session_start_timestamp", 0)
         self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
         self.session_duration = session_data.get("total_duration", 0)
-        
+
+        # Store references to project dropdowns for updating when sphere changes
+        self.project_menus = []
 
         self.create_widgets()
 
@@ -108,7 +110,9 @@ class CompletionFrame(ttk.Frame):
         """Handle sphere selection - enable editing if 'Add New Sphere...' is selected"""
         selected = self.sphere_menu.get()
         self.selected_sphere = selected
-        # call the project dropdown to refresh with new data
+
+        # Update all project dropdowns with projects from the selected sphere
+        self._update_project_dropdowns()
 
         if selected == "Add New Sphere...":
             # Change to normal state and clear the field
@@ -294,6 +298,44 @@ class CompletionFrame(ttk.Frame):
 
         return total_idle
 
+    def _get_sphere_projects(self):
+        """Get active projects and default project for the currently selected sphere"""
+        active_projects = [
+            proj
+            for proj, data in self.tracker.settings["projects"].items()
+            if data.get("active", True) and data.get("sphere") == self.selected_sphere
+        ]
+
+        default_project = next(
+            (
+                proj
+                for proj, data in self.tracker.settings["projects"].items()
+                if data.get("is_default", True)
+                and data.get("sphere") == self.selected_sphere
+            ),
+            None,
+        )
+
+        return active_projects, default_project
+
+    def _get_break_actions(self):
+        """Get break actions for the currently selected sphere"""
+        break_actions = [
+            action
+            for action, data in self.tracker.settings["break_actions"].items()
+            if data.get("active", True)
+        ]
+
+        default_action = next(
+            (
+                action
+                for action, data in self.tracker.settings["break_actions"].items()
+                if data.get("is_default", True)
+            ),
+            None,
+        )
+        return break_actions, default_action
+
     def _create_timeline(self):
         """Create chronological timeline of all active/break/idle periods"""
         # Container for timeline section
@@ -415,27 +457,8 @@ class CompletionFrame(ttk.Frame):
 
             # dropdown menu for project selection (optional)
             if period["type"] == "Active":
-                # Get all active projects
-                active_projects = [
-                    proj
-                    for proj, data in self.tracker.settings["projects"].items()
-                    if data.get("active", True)
-                    and data.get("sphere") == self.selected_sphere
-                ]
-                print(f"selected sphere: {self.selected_sphere}")
-                print(f"active projects: {active_projects}")
-
-                # Get default project (can be None if not set)
-                default_project = next(
-                    (
-                        proj
-                        for proj, data in self.tracker.settings["projects"].items()
-                        if data.get("is_default", True)
-                        and data.get("sphere") == self.selected_sphere
-                    ),
-                    None,
-                )
-                print(f"default project: {default_project}")
+                # Get projects for the selected sphere
+                active_projects, default_project = self._get_sphere_projects()
 
                 # Set initial value for project dropdown
                 initial_value = (
@@ -443,7 +466,6 @@ class CompletionFrame(ttk.Frame):
                     if default_project and default_project in active_projects
                     else "Select Project"
                 )
-                print(f"initial value for project dropdown: {initial_value}")
 
                 project_menu = ttk.Combobox(
                     periods_frame,
@@ -453,7 +475,51 @@ class CompletionFrame(ttk.Frame):
                 )
                 project_menu.set(initial_value)
                 project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+
+                # Store reference to update later when sphere changes
+                self.project_menus.append(project_menu)
+
                 col += 1
+            else:
+                # For non-active periods (break and idle),  project dropdown with break actions
+                break_actions, default_break_action = self._get_break_actions()
+                initial_value = (
+                    default_break_action
+                    if default_break_action in break_actions
+                    else "Select Break Action"
+                )
+
+                break_action_menu = ttk.Combobox(
+                    periods_frame,
+                    values=break_actions,
+                    state="readonly",
+                    width=15,
+                )
+                break_action_menu.set(initial_value)
+                break_action_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+
+                # Store reference to update later when sphere changes
+                self.project_menus.append(break_action_menu)
+
+                col += 1
+
+    def _update_project_dropdowns(self):
+        """Update all project dropdown menus when sphere selection changes"""
+        # Get projects for the currently selected sphere
+        active_projects, default_project = self._get_sphere_projects()
+
+        # Update each project dropdown
+        for menu in self.project_menus:
+            current_selection = menu.get()
+            menu["values"] = active_projects
+
+            # Keep current selection if it's still in the new list, otherwise use default
+            if current_selection in active_projects:
+                menu.set(current_selection)
+            elif default_project and default_project in active_projects:
+                menu.set(default_project)
+            else:
+                menu.set("Select Project")
 
     def _create_action_tags(self):
         """Create the action tags input section"""

@@ -5,7 +5,7 @@
   },
   "spheres": {
     "default_sphere": "General",
-    "active_spheres": ["General", "Coding", "Music", "Exercise"]
+    "active_spheres": ["General", "Coding", "Music", "Exercise", "test"]
   },
   "projects": {
     "General": {
@@ -75,6 +75,29 @@
     }
   },
   "break_actions": {
-    "default_break_action": "Resting"
+    "resting": {
+      "is_default": true,
+      "active": true
+    },
+    "stretching": {
+      "is_default": false,
+      "active": true
+    },
+    "walking": {
+      "is_default": false,
+      "active": true
+    },
+    "chores": {
+      "is_default": false,
+      "active": true
+    },
+    "snacking": {
+      "is_default": false,
+      "active": true
+    },
+    "bathroom": {
+      "is_default": false,
+      "active": true
+    }
   }
 }
