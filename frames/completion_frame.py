@@ -74,8 +74,7 @@ class CompletionFrame(ttk.Frame):
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
         time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
-        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
-        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+        active_spheres, default_sphere = self._get_active_spheres()
 
         # Add "Add New Sphere..." option to the list
         sphere_options = list(active_spheres) + ["Add New Sphere..."]
@@ -130,18 +129,19 @@ class CompletionFrame(ttk.Frame):
         new_sphere = self.sphere_menu.get().strip()
 
         if new_sphere and new_sphere != "Add New Sphere...":
-            active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+            spheres = self.tracker.settings["spheres"]
 
-            if new_sphere not in active_spheres:
+            if new_sphere not in spheres:
                 # Add new sphere
-                active_spheres.append(new_sphere)
+                spheres[new_sphere] = {"is_default": False, "active": True}
                 self.selected_sphere = new_sphere
 
                 # Save to file
                 with open(self.tracker.settings_file, "w") as f:
                     json.dump(self.tracker.settings, f, indent=2)
 
-                # Update  sphere combobox
+                # Update sphere combobox
+                active_spheres, _ = self._get_active_spheres()
                 sphere_options = list(active_spheres) + ["Add New Sphere..."]
                 self.sphere_menu.config(values=sphere_options, state="readonly")
                 self.sphere_menu.set(new_sphere)
@@ -162,8 +162,7 @@ class CompletionFrame(ttk.Frame):
 
     def _cancel_new_sphere(self, event):
         """Cancel adding new sphere and revert to previous state"""
-        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
-        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+        active_spheres, default_sphere = self._get_active_spheres()
 
         fallback = (
             default_sphere
@@ -299,6 +298,25 @@ class CompletionFrame(ttk.Frame):
                     total_idle += idle_period["duration"]
 
         return total_idle
+
+    def _get_active_spheres(self):
+        """Get active spheres and default sphere"""
+        active_spheres = [
+            sphere
+            for sphere, data in self.tracker.settings["spheres"].items()
+            if data.get("active", True)
+        ]
+
+        default_sphere = next(
+            (
+                sphere
+                for sphere, data in self.tracker.settings["spheres"].items()
+                if data.get("is_default", False)
+            ),
+            None,
+        )
+
+        return active_spheres, default_sphere
 
     def _get_sphere_projects(self):
         """Get active projects and default project for the currently selected sphere"""
