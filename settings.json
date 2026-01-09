@@ -15,7 +15,8 @@
       "thing",
       "1",
       "2",
-      "3"
+      "3",
+      "4"
     ]
   },
   "projects": {
@@ -98,6 +99,11 @@
       "active": true,
       "sphere": "General",
       "is_default": false
+    },
+    "proj2": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -134,6 +140,10 @@
       "is_default": false
     },
     "break2": {
+      "active": true,
+      "is_default": false
+    },
+    "break3": {
       "active": true,
       "is_default": false
     }
