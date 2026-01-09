@@ -142,10 +142,13 @@ class CompletionFrame(ttk.Frame):
                 with open(self.tracker.settings_file, "w") as f:
                     json.dump(self.tracker.settings, f, indent=2)
 
-                # Update combobox
+                # Update  sphere combobox
                 sphere_options = list(active_spheres) + ["Add New Sphere..."]
                 self.sphere_menu.config(values=sphere_options, state="readonly")
                 self.sphere_menu.set(new_sphere)
+
+                # Update all project dropdowns with projects from the selected sphere
+                self._update_project_dropdowns()
             else:
                 # Already exists
                 self.sphere_menu.config(state="readonly")
