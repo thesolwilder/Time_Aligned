@@ -27,8 +27,10 @@ class CompletionFrame(ttk.Frame):
         self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
         self.session_duration = session_data.get("total_duration", 0)
 
-        # Store references to project dropdowns for updating when sphere changes
+        # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
+        # #no need to store break action menus for updating when sphere changes
+        # self.break_action_menus = []
 
         self.create_widgets()
 
@@ -109,10 +111,6 @@ class CompletionFrame(ttk.Frame):
     def _on_sphere_selected(self, _):
         """Handle sphere selection - enable editing if 'Add New Sphere...' is selected"""
         selected = self.sphere_menu.get()
-        self.selected_sphere = selected
-
-        # Update all project dropdowns with projects from the selected sphere
-        self._update_project_dropdowns()
 
         if selected == "Add New Sphere...":
             # Enable editing mode
@@ -121,6 +119,12 @@ class CompletionFrame(ttk.Frame):
             self.sphere_menu.focus()
             self.sphere_menu.bind("<Return>", self._save_new_sphere)
             self.sphere_menu.bind("<FocusOut>", self._cancel_new_sphere)
+        else:
+            # Only update selected_sphere for actual sphere names
+            self.selected_sphere = selected
+
+            # Update all project dropdowns with projects from the selected sphere
+            self._update_project_dropdowns()
 
     def _save_new_sphere(self, event):
         """Save the new sphere to settings"""
@@ -451,7 +455,7 @@ class CompletionFrame(ttk.Frame):
             ).grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
             col += 1
 
-            # dropdown menu for project selection (optional)
+            # dropdown menu for project selection
             if period["type"] == "Active":
                 # Get projects for the selected sphere
                 active_projects, default_project = self._get_sphere_projects()
@@ -515,8 +519,8 @@ class CompletionFrame(ttk.Frame):
                     ),
                 )
 
-                # Store reference to update later when sphere changes
-                self.project_menus.append(break_action_menu)
+                # # no need Store reference to update later when sphere changes
+                # self.break_action_menus.append(break_action_menu)
 
                 col += 1
 
@@ -653,18 +657,27 @@ class CompletionFrame(ttk.Frame):
         # Get projects for the currently selected sphere
         active_projects, default_project = self._get_sphere_projects()
 
+        # Add "Add New Project..." option
+        project_options = list(active_projects) + ["Add New Project..."]
+
         # Update each project dropdown
         for menu in self.project_menus:
             current_selection = menu.get()
-            menu["values"] = active_projects
+            menu["values"] = project_options
 
             # Keep current selection if it's still in the new list, otherwise use default
-            if current_selection in active_projects:
+            if current_selection in project_options:
                 menu.set(current_selection)
-            elif default_project and default_project in active_projects:
+            elif default_project and default_project in project_options:
                 menu.set(default_project)
             else:
                 menu.set("Select Project")
+
+            # Bind selection event to handle "Add New Project..."
+            menu.bind(
+                "<<ComboboxSelected>>",
+                lambda e, menu=menu: self._on_project_selected(e, menu),
+            )
 
     def _create_action_tags(self):
         """Create the action tags input section"""

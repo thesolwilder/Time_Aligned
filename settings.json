@@ -16,7 +16,11 @@
       "1",
       "2",
       "3",
-      "4"
+      "4",
+      "5",
+      "6",
+      "7",
+      "8"
     ]
   },
   "projects": {
@@ -104,6 +108,41 @@
       "active": true,
       "sphere": "General",
       "is_default": false
+    },
+    "dfsadfadf": {
+      "active": true,
+      "sphere": "Exercise",
+      "is_default": false
+    },
+    "tummo": {
+      "active": true,
+      "sphere": "Exercise",
+      "is_default": false
+    },
+    "counting": {
+      "active": true,
+      "sphere": "Exercise",
+      "is_default": false
+    },
+    "expanding": {
+      "active": true,
+      "sphere": "Exercise",
+      "is_default": false
+    },
+    "testproj1": {
+      "active": true,
+      "sphere": "test",
+      "is_default": false
+    },
+    "1proj1": {
+      "active": true,
+      "sphere": "1",
+      "is_default": false
+    },
+    "exericse new": {
+      "active": true,
+      "sphere": "Exercise",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -144,6 +183,10 @@
       "is_default": false
     },
     "break3": {
+      "active": true,
+      "is_default": false
+    },
+    "sneezing": {
       "active": true,
       "is_default": false
     }
