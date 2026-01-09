@@ -26,10 +26,9 @@ class CompletionFrame(ttk.Frame):
         self.session_start_timestamp = session_data.get("session_start_timestamp", 0)
         self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
         self.session_duration = session_data.get("total_duration", 0)
-
+        self.text_boxes = []  # Store references to text boxes for each period
         # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
-
 
         self.create_widgets()
 
@@ -544,9 +543,16 @@ class CompletionFrame(ttk.Frame):
 
                 col += 1
 
+            # add text box associated with combobox
+            text_box = ttk.Entry(periods_frame, width=20)
+            text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            col += 1
+            self.text_boxes.append(text_box)
+
     def _on_project_selected(self, event, combobox):
         """Handle project selection - enable editing if 'Add New Project...' is selected"""
         selected = combobox.get()
+        print(combobox, selected)
 
         if selected == "Add New Project...":
             # Enable editing mode
@@ -578,6 +584,7 @@ class CompletionFrame(ttk.Frame):
                 project_options = list(active_projects) + ["Add New Project..."]
                 combobox.config(values=project_options, state="readonly")
                 combobox.set(new_project)
+                #if adding project, text box to self.all_periods list add it here if new project
 
                 # Update all other project dropdowns
                 self._update_project_dropdowns()
@@ -744,6 +751,14 @@ class CompletionFrame(ttk.Frame):
         """Save action tags and return to main frame"""
         # Save action tags to session data
         all_data = self.tracker.load_data()
+
+        # Save text box values for each period
+        period_texts = [text_box.get() for text_box in self.text_boxes]
+        # save the periods and the text associated with them
+        periods = [menu.get() for menu in self.project_menus]
+        all_data[self.session_name]["periods"] = periods
+        all_data[self.session_name]["period_texts"] = period_texts
+        self.tracker.save_data(all_data)
 
         if self.session_name in all_data:
             all_data[self.session_name]["actions"] = {
