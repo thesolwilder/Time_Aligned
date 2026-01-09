@@ -5,7 +5,7 @@
   },
   "spheres": {
     "default_sphere": "General",
-    "active_spheres": ["General", "Coding", "Music", "Exercise", "test"]
+    "active_spheres": ["General", "Coding", "Music", "Exercise"]
   },
   "projects": {
     "General": {
@@ -98,6 +98,26 @@
     "bathroom": {
       "is_default": false,
       "active": true
+    },
+    "staring": {
+      "active": true,
+      "is_default": false
+    },
+    "break1": {
+      "active": true,
+      "is_default": false
+    },
+    "break2": {
+      "active": true,
+      "is_default": false
+    },
+    "break3": {
+      "active": true,
+      "is_default": false
+    },
+    "sneezing": {
+      "active": true,
+      "is_default": false
     }
   }
 }
