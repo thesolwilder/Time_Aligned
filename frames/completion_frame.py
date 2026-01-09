@@ -115,147 +115,60 @@ class CompletionFrame(ttk.Frame):
         self._update_project_dropdowns()
 
         if selected == "Add New Sphere...":
-            self._handle_add_new(
-                combobox=self.sphere_menu,
-                add_new_text="Add New Sphere...",
-                save_func=self._get_save_sphere_func(),
-                get_fallback_func=self._get_sphere_fallback,
-                post_save_callback=None,
-            )
+            # Enable editing mode
+            self.sphere_menu.config(state="normal")
+            self.sphere_menu.set("")
+            self.sphere_menu.focus()
+            self.sphere_menu.bind("<Return>", self._save_new_sphere)
+            self.sphere_menu.bind("<FocusOut>", self._cancel_new_sphere)
 
-    def _get_save_sphere_func(self):
-        """Return a function that saves a new sphere"""
+    def _save_new_sphere(self, event):
+        """Save the new sphere to settings"""
+        new_sphere = self.sphere_menu.get().strip()
 
-        def save_sphere(sphere_name):
+        if new_sphere and new_sphere != "Add New Sphere...":
             active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
-            if sphere_name not in active_spheres:
-                active_spheres.append(sphere_name)
-                self.selected_sphere = sphere_name
-                return list(active_spheres) + ["Add New Sphere..."]
-            return None
 
-        return save_sphere
+            if new_sphere not in active_spheres:
+                # Add new sphere
+                active_spheres.append(new_sphere)
+                self.selected_sphere = new_sphere
 
-    def _get_sphere_fallback(self):
-        """Get fallback value for sphere combobox"""
+                # Save to file
+                with open(self.tracker.settings_file, "w") as f:
+                    json.dump(self.tracker.settings, f, indent=2)
+
+                # Update combobox
+                sphere_options = list(active_spheres) + ["Add New Sphere..."]
+                self.sphere_menu.config(values=sphere_options, state="readonly")
+                self.sphere_menu.set(new_sphere)
+            else:
+                # Already exists
+                self.sphere_menu.config(state="readonly")
+                self.sphere_menu.set(new_sphere)
+        else:
+            # Empty input, cancel
+            self._cancel_new_sphere(event)
+
+        # Cleanup bindings
+        self.sphere_menu.unbind("<Return>")
+        self.sphere_menu.unbind("<FocusOut>")
+
+    def _cancel_new_sphere(self, event):
+        """Cancel adding new sphere and revert to previous state"""
         default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
         active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
-        return (
+
+        fallback = (
             default_sphere
             if default_sphere in active_spheres
             else active_spheres[0] if active_spheres else ""
         )
 
-    def _handle_add_new(
-        self,
-        combobox,
-        add_new_text,
-        save_func,
-        get_fallback_func,
-        post_save_callback=None,
-    ):
-        """Generic handler for 'Add New...' workflow
-
-        Args:
-            combobox: The combobox widget
-            add_new_text: The 'Add New...' text (e.g., 'Add New Sphere...')
-            save_func: Function that saves the item and returns updated list (or None if already exists)
-            get_fallback_func: Function that returns the fallback value if cancelled
-            post_save_callback: Optional callback to run after successful save
-        """
-
-        def save_callback(event):
-            new_item = combobox.get().strip()
-            if new_item and new_item != add_new_text:
-                updated_values = save_func(new_item)
-                if updated_values is not None:
-                    with open(self.tracker.settings_file, "w") as f:
-                        json.dump(self.tracker.settings, f, indent=2)
-                    combobox.config(values=updated_values, state="readonly")
-                    combobox.set(new_item)
-                    if post_save_callback:
-                        post_save_callback()
-                else:
-                    combobox.config(state="readonly")
-                    combobox.set(new_item)
-            else:
-                cancel_callback(None)
-            combobox.unbind("<Return>")
-            combobox.unbind("<FocusOut>")
-
-        def cancel_callback(event):
-            combobox.config(state="readonly")
-            combobox.set(get_fallback_func())
-            combobox.unbind("<Return>")
-            combobox.unbind("<FocusOut>")
-
-        # Enable editing
-        combobox.config(state="normal")
-        combobox.set("")
-        combobox.focus()
-        combobox.bind("<Return>", save_callback)
-        combobox.bind("<FocusOut>", cancel_callback)
-
-    def _enable_combobox_add_new(self, combobox, save_callback, cancel_callback):
-        """Generic method to enable adding a new item to a combobox"""
-        # Change to normal state and clear the field
-        combobox.config(state="normal")
-        combobox.set("")
-        combobox.focus()
-
-        # Bind Return key to save the new item
-        combobox.bind("<Return>", save_callback)
-        # Bind FocusOut to handle if user clicks away
-        combobox.bind("<FocusOut>", cancel_callback)
-
-    def _save_new_item(
-        self, combobox, new_item, add_new_text, save_func, cancel_callback
-    ):
-        """Generic method to save a new item to a combobox
-
-        Args:
-            combobox: The combobox widget
-            new_item: The new item name entered by user
-            add_new_text: The 'Add New...' text to filter out
-            save_func: Function that saves the item and returns updated list (or None if already exists)
-            cancel_callback: Function to call if save is cancelled
-        """
-        if new_item and new_item != add_new_text:
-            updated_values = save_func(new_item)
-
-            if updated_values is not None:
-                # Save settings to file
-                with open(self.tracker.settings_file, "w") as f:
-                    json.dump(self.tracker.settings, f, indent=2)
-
-                # Update the combobox values
-                combobox.config(values=updated_values, state="readonly")
-                combobox.set(new_item)
-            else:
-                # Already exists, just set it
-                combobox.config(state="readonly")
-                combobox.set(new_item)
-        else:
-            # Cancel if empty
-            cancel_callback(None)
-
-        # Unbind the events
-        combobox.unbind("<Return>")
-        combobox.unbind("<FocusOut>")
-
-    def _cancel_new_item(self, combobox, fallback_value):
-        """Generic method to cancel adding a new item to a combobox
-
-        Args:
-            combobox: The combobox widget
-            fallback_value: The value to revert to
-        """
-        combobox.config(state="readonly")
-        combobox.set(fallback_value)
-
-        # Unbind the events if they exist
-        combobox.unbind("<Return>")
-        combobox.unbind("<FocusOut>")
+        self.sphere_menu.config(state="readonly")
+        self.sphere_menu.set(fallback)
+        self.sphere_menu.unbind("<Return>")
+        self.sphere_menu.unbind("<FocusOut>")
 
     # session data display date, start time, end time and duration
     def _session_info_display(self):
@@ -612,75 +525,128 @@ class CompletionFrame(ttk.Frame):
         selected = combobox.get()
 
         if selected == "Add New Project...":
-            self._handle_add_new(
-                combobox=combobox,
-                add_new_text="Add New Project...",
-                save_func=self._get_save_project_func(),
-                get_fallback_func=self._get_project_fallback,
-                post_save_callback=self._update_project_dropdowns,
-            )
+            # Enable editing mode
+            combobox.config(state="normal")
+            combobox.set("")
+            combobox.focus()
+            combobox.bind("<Return>", lambda e: self._save_new_project(e, combobox))
+            combobox.bind("<FocusOut>", lambda e: self._cancel_new_project(e, combobox))
 
-    def _get_save_project_func(self):
-        """Return a function that saves a new project"""
+    def _save_new_project(self, event, combobox):
+        """Save the new project to settings"""
+        new_project = combobox.get().strip()
 
-        def save_project(project_name):
-            if project_name not in self.tracker.settings["projects"]:
-                self.tracker.settings["projects"][project_name] = {
+        if new_project and new_project != "Add New Project...":
+            if new_project not in self.tracker.settings["projects"]:
+                # Add new project
+                self.tracker.settings["projects"][new_project] = {
                     "active": True,
                     "sphere": self.selected_sphere,
                     "is_default": False,
                 }
+
+                # Save to file
+                with open(self.tracker.settings_file, "w") as f:
+                    json.dump(self.tracker.settings, f, indent=2)
+
+                # Update combobox
                 active_projects, _ = self._get_sphere_projects()
-                return list(active_projects) + ["Add New Project..."]
-            return None
+                project_options = list(active_projects) + ["Add New Project..."]
+                combobox.config(values=project_options, state="readonly")
+                combobox.set(new_project)
 
-        return save_project
+                # Update all other project dropdowns
+                self._update_project_dropdowns()
+            else:
+                # Already exists
+                combobox.config(state="readonly")
+                combobox.set(new_project)
+        else:
+            # Empty input, cancel
+            self._cancel_new_project(event, combobox)
 
-    def _get_project_fallback(self):
-        """Get fallback value for project combobox"""
+        # Cleanup bindings
+        combobox.unbind("<Return>")
+        combobox.unbind("<FocusOut>")
+
+    def _cancel_new_project(self, event, combobox):
+        """Cancel adding new project and revert to previous state"""
         active_projects, default_project = self._get_sphere_projects()
-        return (
+
+        fallback = (
             default_project
             if default_project and default_project in active_projects
             else "Select Project"
         )
+
+        combobox.config(state="readonly")
+        combobox.set(fallback)
+        combobox.unbind("<Return>")
+        combobox.unbind("<FocusOut>")
 
     def _on_break_action_selected(self, event, combobox):
         """Handle break action selection - enable editing if 'Add New Break Action...' is selected"""
         selected = combobox.get()
 
         if selected == "Add New Break Action...":
-            self._handle_add_new(
-                combobox=combobox,
-                add_new_text="Add New Break Action...",
-                save_func=self._get_save_break_action_func(),
-                get_fallback_func=self._get_break_action_fallback,
-                post_save_callback=None,
+            # Enable editing mode
+            combobox.config(state="normal")
+            combobox.set("")
+            combobox.focus()
+            combobox.bind(
+                "<Return>", lambda e: self._save_new_break_action(e, combobox)
+            )
+            combobox.bind(
+                "<FocusOut>", lambda e: self._cancel_new_break_action(e, combobox)
             )
 
-    def _get_save_break_action_func(self):
-        """Return a function that saves a new break action"""
+    def _save_new_break_action(self, event, combobox):
+        """Save the new break action to settings"""
+        new_action = combobox.get().strip()
 
-        def save_break_action(action_name):
-            if action_name not in self.tracker.settings["break_actions"]:
-                self.tracker.settings["break_actions"][action_name] = {
+        if new_action and new_action != "Add New Break Action...":
+            if new_action not in self.tracker.settings["break_actions"]:
+                # Add new break action
+                self.tracker.settings["break_actions"][new_action] = {
                     "active": True,
                     "is_default": False,
                 }
+
+                # Save to file
+                with open(self.tracker.settings_file, "w") as f:
+                    json.dump(self.tracker.settings, f, indent=2)
+
+                # Update combobox
                 break_actions, _ = self._get_break_actions()
-                return list(break_actions) + ["Add New Break Action..."]
-            return None
+                action_options = list(break_actions) + ["Add New Break Action..."]
+                combobox.config(values=action_options, state="readonly")
+                combobox.set(new_action)
+            else:
+                # Already exists
+                combobox.config(state="readonly")
+                combobox.set(new_action)
+        else:
+            # Empty input, cancel
+            self._cancel_new_break_action(event, combobox)
 
-        return save_break_action
+        # Cleanup bindings
+        combobox.unbind("<Return>")
+        combobox.unbind("<FocusOut>")
 
-    def _get_break_action_fallback(self):
-        """Get fallback value for break action combobox"""
+    def _cancel_new_break_action(self, event, combobox):
+        """Cancel adding new break action and revert to previous state"""
         break_actions, default_break_action = self._get_break_actions()
-        return (
+
+        fallback = (
             default_break_action
             if default_break_action in break_actions
             else "Select Break Action"
         )
+
+        combobox.config(state="readonly")
+        combobox.set(fallback)
+        combobox.unbind("<Return>")
+        combobox.unbind("<FocusOut>")
 
     def _update_project_dropdowns(self):
         """Update all project dropdown menus when sphere selection changes"""

@@ -12,7 +12,10 @@
       "Exercise",
       "test",
       "test test",
-      "thing"
+      "thing",
+      "1",
+      "2",
+      "3"
     ]
   },
   "projects": {
@@ -90,6 +93,11 @@
       "active": true,
       "sphere": "General",
       "is_default": false
+    },
+    "proj1": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -118,6 +126,14 @@
       "active": true
     },
     "staring": {
+      "active": true,
+      "is_default": false
+    },
+    "break1": {
+      "active": true,
+      "is_default": false
+    },
+    "break2": {
       "active": true,
       "is_default": false
     }
