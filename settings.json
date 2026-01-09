@@ -72,11 +72,6 @@
       "sphere": "Exercise",
       "is_default": false,
       "active": true
-    },
-    "Sleeping": {
-      "active": true,
-      "sphere": "General",
-      "is_default": false
     }
   },
   "break_actions": {

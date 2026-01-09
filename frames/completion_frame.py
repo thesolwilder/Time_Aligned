@@ -29,8 +29,7 @@ class CompletionFrame(ttk.Frame):
 
         # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
-        # #no need to store break action menus for updating when sphere changes
-        # self.break_action_menus = []
+
 
         self.create_widgets()
 
@@ -675,12 +674,6 @@ class CompletionFrame(ttk.Frame):
                 menu.set(default_project)
             else:
                 menu.set("Select Project")
-
-            # Bind selection event to handle "Add New Project..."
-            menu.bind(
-                "<<ComboboxSelected>>",
-                lambda e, menu=menu: self._on_project_selected(e, menu),
-            )
 
     def _create_action_tags(self):
         """Create the action tags input section"""
