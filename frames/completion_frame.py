@@ -535,7 +535,9 @@ class CompletionFrame(ttk.Frame):
                 # Bind selection event to handle "Add New Break Action..."
                 break_action_menu.bind(
                     "<<ComboboxSelected>>",
-                    lambda e, menu=break_action_menu: self._on_break_action_selected(e, menu),
+                    lambda e, menu=break_action_menu: self._on_break_action_selected(
+                        e, menu
+                    ),
                 )
 
                 # Store reference based on period type
