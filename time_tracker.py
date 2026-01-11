@@ -73,8 +73,7 @@ class TimeTracker:
                 "idle_break_threshold": 300,  # seconds of idle before auto-break
             },
             "spheres": {
-                "default_sphere": "General",
-                "active_spheres": ["General"],
+                "General": {"is_default": True, "active": True},
             },
             "projects": {
                 "General": {"sphere": "General", "is_default": True, "active": True},
@@ -95,6 +94,17 @@ class TimeTracker:
         except Exception as e:
             print(f"Failed to read settings file: {e}")
             return default_settings
+
+    def _get_default_sphere(self):
+        """Get the default sphere from settings"""
+        for sphere, data in self.settings["spheres"].items():
+            if data.get("is_default", False):
+                return sphere
+        # Fallback to first active sphere if no default found
+        for sphere, data in self.settings["spheres"].items():
+            if data.get("active", True):
+                return sphere
+        return "General"
 
     def load_data(self):
         """Load existing session data"""
@@ -303,9 +313,7 @@ class TimeTracker:
         # Create session data
         session_data = {
             self.session_name: {
-                "sphere": (
-                    settings["spheres"]["default_sphere"] if settings else "General"
-                ),
+                "sphere": (self._get_default_sphere() if settings else "General"),
                 "date": current_date,
                 "start_time": current_time,
                 "start_timestamp": self.session_start_time,

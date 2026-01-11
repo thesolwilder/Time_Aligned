@@ -4,8 +4,22 @@
     "idle_break_threshold": 300
   },
   "spheres": {
-    "default_sphere": "General",
-    "active_spheres": ["General", "Coding", "Music", "Exercise"]
+    "General": {
+      "is_default": true,
+      "active": true
+    },
+    "Coding": {
+      "is_default": false,
+      "active": true
+    },
+    "Music": {
+      "is_default": false,
+      "active": true
+    },
+    "Exercise": {
+      "is_default": false,
+      "active": true
+    }
   },
   "projects": {
     "General": {

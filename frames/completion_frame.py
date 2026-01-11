@@ -26,10 +26,11 @@ class CompletionFrame(ttk.Frame):
         self.session_start_timestamp = session_data.get("session_start_timestamp", 0)
         self.session_end_timestamp = session_data.get("session_end_timestamp", 0)
         self.session_duration = session_data.get("total_duration", 0)
-
+        self.text_boxes = []  # Store references to text boxes for each period
         # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
-
+        self.break_action_menus = []  # Store references to break action dropdowns
+        self.idle_action_menus = []  # Store references to idle action dropdowns
 
         self.create_widgets()
 
@@ -74,8 +75,7 @@ class CompletionFrame(ttk.Frame):
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
         time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
-        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
-        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+        active_spheres, default_sphere = self._get_active_spheres()
 
         # Add "Add New Sphere..." option to the list
         sphere_options = list(active_spheres) + ["Add New Sphere..."]
@@ -130,18 +130,19 @@ class CompletionFrame(ttk.Frame):
         new_sphere = self.sphere_menu.get().strip()
 
         if new_sphere and new_sphere != "Add New Sphere...":
-            active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+            spheres = self.tracker.settings["spheres"]
 
-            if new_sphere not in active_spheres:
+            if new_sphere not in spheres:
                 # Add new sphere
-                active_spheres.append(new_sphere)
+                spheres[new_sphere] = {"is_default": False, "active": True}
                 self.selected_sphere = new_sphere
 
                 # Save to file
                 with open(self.tracker.settings_file, "w") as f:
                     json.dump(self.tracker.settings, f, indent=2)
 
-                # Update  sphere combobox
+                # Update sphere combobox
+                active_spheres, _ = self._get_active_spheres()
                 sphere_options = list(active_spheres) + ["Add New Sphere..."]
                 self.sphere_menu.config(values=sphere_options, state="readonly")
                 self.sphere_menu.set(new_sphere)
@@ -162,8 +163,7 @@ class CompletionFrame(ttk.Frame):
 
     def _cancel_new_sphere(self, event):
         """Cancel adding new sphere and revert to previous state"""
-        default_sphere = self.tracker.settings["spheres"].get("default_sphere", "")
-        active_spheres = self.tracker.settings["spheres"].get("active_spheres", [])
+        active_spheres, default_sphere = self._get_active_spheres()
 
         fallback = (
             default_sphere
@@ -300,6 +300,25 @@ class CompletionFrame(ttk.Frame):
 
         return total_idle
 
+    def _get_active_spheres(self):
+        """Get active spheres and default sphere"""
+        active_spheres = [
+            sphere
+            for sphere, data in self.tracker.settings["spheres"].items()
+            if data.get("active", True)
+        ]
+
+        default_sphere = next(
+            (
+                sphere
+                for sphere, data in self.tracker.settings["spheres"].items()
+                if data.get("is_default", False)
+            ),
+            None,
+        )
+
+        return active_spheres, default_sphere
+
     def _get_sphere_projects(self):
         """Get active projects and default project for the currently selected sphere"""
         active_projects = [
@@ -352,7 +371,7 @@ class CompletionFrame(ttk.Frame):
         ).pack(anchor=tk.W, pady=(0, 5))
 
         # Build master list of all periods
-        all_periods = []
+        self.all_periods = []
         all_data = self.tracker.load_data()
 
         if self.session_name in all_data:
@@ -360,7 +379,7 @@ class CompletionFrame(ttk.Frame):
 
             # Add active periods
             for period in session.get("active", []):
-                all_periods.append(
+                self.all_periods.append(
                     {
                         "type": "Active",
                         "start": period.get("start", ""),
@@ -373,7 +392,7 @@ class CompletionFrame(ttk.Frame):
 
             # Add breaks
             for period in session.get("breaks", []):
-                all_periods.append(
+                self.all_periods.append(
                     {
                         "type": "Break",
                         "start": period.get("start", ""),
@@ -386,7 +405,7 @@ class CompletionFrame(ttk.Frame):
 
             # Add idle periods
             for period in session.get("idle_periods", []):
-                all_periods.append(
+                self.all_periods.append(
                     {
                         "type": "Idle",
                         "start": period.get("start", ""),
@@ -398,13 +417,13 @@ class CompletionFrame(ttk.Frame):
                 )
 
         # Sort by start timestamp
-        all_periods.sort(key=lambda x: x["start_timestamp"])
+        self.all_periods.sort(key=lambda x: x["start_timestamp"])
 
         # Display timeline directly in frame
         periods_frame = ttk.Frame(timeline_container)
         periods_frame.pack(fill="both", expand=True)
 
-        for idx, period in enumerate(all_periods):
+        for idx, period in enumerate(self.all_periods):
             col = 0
 
             # Period type with color coding
@@ -521,10 +540,19 @@ class CompletionFrame(ttk.Frame):
                     ),
                 )
 
-                # # no need Store reference to update later when sphere changes
-                # self.break_action_menus.append(break_action_menu)
+                # Store reference based on period type
+                if period["type"] == "Break":
+                    self.break_action_menus.append(break_action_menu)
+                else:  # Idle
+                    self.idle_action_menus.append(break_action_menu)
 
                 col += 1
+
+            # add text box associated with combobox
+            text_box = ttk.Entry(periods_frame, width=20)
+            text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            col += 1
+            self.text_boxes.append(text_box)
 
     def _on_project_selected(self, event, combobox):
         """Handle project selection - enable editing if 'Add New Project...' is selected"""
@@ -724,18 +752,103 @@ class CompletionFrame(ttk.Frame):
 
     def save_and_close(self):
         """Save action tags and return to main frame"""
-        # Save action tags to session data
         all_data = self.tracker.load_data()
 
-        if self.session_name in all_data:
-            all_data[self.session_name]["actions"] = {
-                "active_action": self.active_action_entry.get(),
-                "break_action": self.break_action_entry.get(),
-                "idle_notes": self.idle_notes_entry.get(),
-                "session_notes": self.session_notes_text.get("1.0", tk.END).strip(),
-            }
-            self.tracker.save_data(all_data)
+        if self.session_name not in all_data:
+            self.tracker.show_main_frame()
+            return
 
+        session = all_data[self.session_name]
+
+        # Update sphere
+        session["sphere"] = self.selected_sphere
+
+        # Track indices for each dropdown type
+        project_idx = 0
+        break_action_idx = 0
+        idle_action_idx = 0
+
+        # Map each period in all_periods to its corresponding data.json entry
+        for idx, period in enumerate(self.all_periods):
+            period_type = period["type"]
+            start_ts = period["start_timestamp"]
+
+            # Get the text box value for this period
+            comment = (
+                self.text_boxes[idx].get().strip() if idx < len(self.text_boxes) else ""
+            )
+
+            # Find and update the corresponding period in the session data
+            if period_type == "Active":
+                project = (
+                    self.project_menus[project_idx].get()
+                    if project_idx < len(self.project_menus)
+                    else ""
+                )
+                project_idx += 1
+
+                # Find matching active period by timestamp
+                for active_period in session.get("active", []):
+                    if active_period.get("start_timestamp") == start_ts:
+                        if project and project not in [
+                            "Select Project",
+                            "Add New Project...",
+                        ]:
+                            active_period["project"] = project
+                        if comment:
+                            active_period["comment"] = comment
+                        break
+
+            elif period_type == "Break":
+                break_action = (
+                    self.break_action_menus[break_action_idx].get()
+                    if break_action_idx < len(self.break_action_menus)
+                    else ""
+                )
+                break_action_idx += 1
+
+                # Find matching break period by timestamp
+                for break_period in session.get("breaks", []):
+                    if break_period.get("start_timestamp") == start_ts:
+                        if break_action and break_action not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
+                            break_period["action"] = break_action
+                        if comment:
+                            break_period["comment"] = comment
+                        break
+
+            elif period_type == "Idle":
+                idle_action = (
+                    self.idle_action_menus[idle_action_idx].get()
+                    if idle_action_idx < len(self.idle_action_menus)
+                    else ""
+                )
+                idle_action_idx += 1
+
+                # Find matching idle period by timestamp
+                for idle_period in session.get("idle_periods", []):
+                    if idle_period.get("start_timestamp") == start_ts:
+                        if idle_action and idle_action not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
+                            idle_period["action"] = idle_action
+                        if comment:
+                            idle_period["comment"] = comment
+                        break
+
+        # Save session-level notes
+        session["actions"] = {
+            "active_action": self.active_action_entry.get(),
+            "break_action": self.break_action_entry.get(),
+            "idle_notes": self.idle_notes_entry.get(),
+            "session_notes": self.session_notes_text.get("1.0", tk.END).strip(),
+        }
+
+        # Single save operation - minimizes I/O and reduces corruption risk
+        self.tracker.save_data(all_data)
         self.tracker.show_main_frame()
 
     def skip_and_close(self):
