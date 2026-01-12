@@ -19,6 +19,14 @@
     "Exercise": {
       "is_default": false,
       "active": true
+    },
+    "1": {
+      "is_default": false,
+      "active": true
+    },
+    "2": {
+      "is_default": false,
+      "active": true
     }
   },
   "projects": {
@@ -86,6 +94,26 @@
       "sphere": "Exercise",
       "is_default": false,
       "active": true
+    },
+    "1": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
+    },
+    "2": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
+    },
+    "3": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
+    },
+    "4": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -130,6 +158,26 @@
       "is_default": false
     },
     "sneezing": {
+      "active": true,
+      "is_default": false
+    },
+    "1": {
+      "active": true,
+      "is_default": false
+    },
+    "2": {
+      "active": true,
+      "is_default": false
+    },
+    "3": {
+      "active": true,
+      "is_default": false
+    },
+    "4": {
+      "active": true,
+      "is_default": false
+    },
+    "5": {
       "active": true,
       "is_default": false
     }
