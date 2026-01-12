@@ -36,6 +36,7 @@ class CompletionFrame(ttk.Frame):
 
     def create_widgets(self):
         """Create all UI elements for the completion frame"""
+        self.current_row = 0
 
         # Title and sphere selection
         self._title_and_sphere()
@@ -43,26 +44,23 @@ class CompletionFrame(ttk.Frame):
         # display date, start time, end time and duration
         self._session_info_display()
 
+        # change project and break/idle actions
+        self.change_defaults_for_session()
+
         # separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Display durations
         self._create_duration_display()
 
         # Separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Timeline of all periods
         self._create_timeline()
 
         # Separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Action tags section
         self._create_session_notes()
@@ -70,11 +68,21 @@ class CompletionFrame(ttk.Frame):
         # Buttons
         self._create_buttons()
 
+    def _add_separator(self):
+        """Add a horizontal separator and increment row counter"""
+        ttk.Separator(self, orient="horizontal").grid(
+            row=self.current_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
+        )
+        self.current_row += 1
+
     # title and sphere selection method
     def _title_and_sphere(self):
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
         active_spheres, default_sphere = self._get_active_spheres()
 
         # Add "Add New Sphere..." option to the list
@@ -106,6 +114,30 @@ class CompletionFrame(ttk.Frame):
         ttk.Label(time_frame, text="Session Complete", font=("Arial", 16, "bold")).grid(
             row=0, column=1, pady=10, sticky=tk.W, padx=5
         )
+
+    def change_defaults_for_session(self):
+        """Change default project and break/idle actions for the session"""
+        default_container = ttk.Frame(self)
+        default_container.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
+
+        ttk.Label(default_container, text="Default Project:").grid(
+            row=0, column=0, sticky=tk.W, padx=5
+        )
+        self.default_project_menu = ttk.Combobox(
+            default_container, values=[], state="readonly", width=20
+        )
+        self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
+
+        ttk.Label(default_container, text="Default Break/Idle Action:").grid(
+            row=1, column=0, sticky=tk.W, padx=5
+        )
+        self.default_action_menu = ttk.Combobox(
+            default_container, values=[], state="readonly", width=20
+        )
+        self.default_action_menu.grid(row=1, column=1, sticky=tk.W, padx=5)
 
     def _on_sphere_selected(self, _):
         """Handle sphere selection - enable editing if 'Add New Sphere...' is selected"""
@@ -195,7 +227,10 @@ class CompletionFrame(ttk.Frame):
 
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
 
         col = 0
         ttk.Label(time_frame, text=f"{session_date}:", font=("Arial", 12, "bold")).grid(
@@ -235,7 +270,10 @@ class CompletionFrame(ttk.Frame):
 
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
 
         col = 0
         # Total time
@@ -362,8 +400,13 @@ class CompletionFrame(ttk.Frame):
         # Container for timeline section
         timeline_container = ttk.Frame(self)
         timeline_container.grid(
-            row=6, column=0, columnspan=2, pady=(5, 0), sticky=(tk.W, tk.E)
+            row=self.current_row,
+            column=0,
+            columnspan=2,
+            pady=(5, 0),
+            sticky=(tk.W, tk.E),
         )
+        self.current_row += 1
 
         # Title
         ttk.Label(
@@ -706,43 +749,51 @@ class CompletionFrame(ttk.Frame):
     def _create_session_notes(self):
         """Create the notes input section"""
         session_comments_container = ttk.Frame(self)
-        session_comments_container.grid(row=8, column=0, columnspan=2, pady=10, sticky=tk.W)
-        
-        ttk.Label(session_comments_container, text="Session Comments:", font=("Arial", 12, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=10
+        session_comments_container.grid(
+            row=self.current_row, column=0, columnspan=2, pady=10, sticky=tk.W
         )
+        self.current_row += 1
+
+        ttk.Label(
+            session_comments_container,
+            text="Session Comments:",
+            font=("Arial", 12, "bold"),
+        ).grid(row=0, column=0, columnspan=2, pady=10)
 
         # Active notes
-        ttk.Label(session_comments_container, text="Active Notes:", font=("Arial", 10)).grid(
-            row=1, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Active Notes:", font=("Arial", 10)
+        ).grid(row=1, column=0, sticky=tk.W, pady=5)
         self.active_notes = ttk.Entry(session_comments_container, width=30)
         self.active_notes.grid(row=1, column=1, sticky=tk.W, pady=5)
         # Break notes
-        ttk.Label(session_comments_container, text="Break Notes:", font=("Arial", 10)).grid(
-            row=2, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Break Notes:", font=("Arial", 10)
+        ).grid(row=2, column=0, sticky=tk.W, pady=5)
         self.break_notes = ttk.Entry(session_comments_container, width=30)
         self.break_notes.grid(row=2, column=1, sticky=tk.W, pady=5)
 
         # Idle notes
-        ttk.Label(session_comments_container, text="Idle Notes:", font=("Arial", 10)).grid(
-            row=3, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Idle Notes:", font=("Arial", 10)
+        ).grid(row=3, column=0, sticky=tk.W, pady=5)
         self.idle_notes = ttk.Entry(session_comments_container, width=30)
         self.idle_notes.grid(row=3, column=1, sticky=tk.W, pady=5)
 
         # Session notes
-        ttk.Label(session_comments_container, text="Session Notes:", font=("Arial", 10)).grid(
-            row=12, column=0, sticky=(tk.W, tk.N), pady=5
+        ttk.Label(
+            session_comments_container, text="Session Notes:", font=("Arial", 10)
+        ).grid(row=12, column=0, sticky=(tk.W, tk.N), pady=5)
+        self.session_notes_text = tk.Text(
+            session_comments_container, width=30, height=4, font=("Arial", 10)
         )
-        self.session_notes_text = tk.Text(session_comments_container, width=30, height=4, font=("Arial", 10))
         self.session_notes_text.grid(row=12, column=1, sticky=tk.W, pady=5)
 
     def _create_buttons(self):
         """Create action buttons"""
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=13, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=self.current_row, column=0, columnspan=2, pady=20)
+        self.current_row += 1
 
         ttk.Button(
             button_frame, text="Save & Complete", command=self.save_and_close
