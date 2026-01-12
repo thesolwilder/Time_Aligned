@@ -65,7 +65,7 @@ class CompletionFrame(ttk.Frame):
         )
 
         # Action tags section
-        self._create_action_tags()
+        self._create_session_notes()
 
         # Buttons
         self._create_buttons()
@@ -703,38 +703,40 @@ class CompletionFrame(ttk.Frame):
             else:
                 menu.set("Select Project")
 
-    def _create_action_tags(self):
-        """Create the action tags input section"""
-        ttk.Label(self, text="Session Actions", font=("Arial", 12, "bold")).grid(
-            row=8, column=0, columnspan=2, pady=10
+    def _create_session_notes(self):
+        """Create the notes input section"""
+        session_comments_container = ttk.Frame(self)
+        session_comments_container.grid(row=8, column=0, columnspan=2, pady=10, sticky=tk.W)
+        
+        ttk.Label(session_comments_container, text="Session Comments:", font=("Arial", 12, "bold")).grid(
+            row=0, column=0, columnspan=2, pady=10
         )
 
-        # Active work action
-        ttk.Label(self, text="Active Work Action:", font=("Arial", 10)).grid(
-            row=9, column=0, sticky=tk.W, pady=5
+        # Active notes
+        ttk.Label(session_comments_container, text="Active Notes:", font=("Arial", 10)).grid(
+            row=1, column=0, sticky=tk.W, pady=5
         )
-        self.active_action_entry = ttk.Entry(self, width=30)
-        self.active_action_entry.grid(row=9, column=1, sticky=tk.W, pady=5)
-
-        # Break action
-        ttk.Label(self, text="Break Action:", font=("Arial", 10)).grid(
-            row=10, column=0, sticky=tk.W, pady=5
+        self.active_notes = ttk.Entry(session_comments_container, width=30)
+        self.active_notes.grid(row=1, column=1, sticky=tk.W, pady=5)
+        # Break notes
+        ttk.Label(session_comments_container, text="Break Notes:", font=("Arial", 10)).grid(
+            row=2, column=0, sticky=tk.W, pady=5
         )
-        self.break_action_entry = ttk.Entry(self, width=30)
-        self.break_action_entry.grid(row=10, column=1, sticky=tk.W, pady=5)
+        self.break_notes = ttk.Entry(session_comments_container, width=30)
+        self.break_notes.grid(row=2, column=1, sticky=tk.W, pady=5)
 
         # Idle notes
-        ttk.Label(self, text="Idle Notes:", font=("Arial", 10)).grid(
-            row=11, column=0, sticky=tk.W, pady=5
+        ttk.Label(session_comments_container, text="Idle Notes:", font=("Arial", 10)).grid(
+            row=3, column=0, sticky=tk.W, pady=5
         )
-        self.idle_notes_entry = ttk.Entry(self, width=30)
-        self.idle_notes_entry.grid(row=11, column=1, sticky=tk.W, pady=5)
+        self.idle_notes = ttk.Entry(session_comments_container, width=30)
+        self.idle_notes.grid(row=3, column=1, sticky=tk.W, pady=5)
 
         # Session notes
-        ttk.Label(self, text="Session Notes:", font=("Arial", 10)).grid(
-            row=12, column=0, sticky=tk.W, pady=5
+        ttk.Label(session_comments_container, text="Session Notes:", font=("Arial", 10)).grid(
+            row=12, column=0, sticky=(tk.W, tk.N), pady=5
         )
-        self.session_notes_text = tk.Text(self, width=30, height=4, font=("Arial", 10))
+        self.session_notes_text = tk.Text(session_comments_container, width=30, height=4, font=("Arial", 10))
         self.session_notes_text.grid(row=12, column=1, sticky=tk.W, pady=5)
 
     def _create_buttons(self):
@@ -840,10 +842,10 @@ class CompletionFrame(ttk.Frame):
                         break
 
         # Save session-level notes
-        session["actions"] = {
-            "active_action": self.active_action_entry.get(),
-            "break_action": self.break_action_entry.get(),
-            "idle_notes": self.idle_notes_entry.get(),
+        session["session_comments"] = {
+            "active_notes": self.active_notes.get(),
+            "break_notes": self.break_notes.get(),
+            "idle_notes": self.idle_notes.get(),
             "session_notes": self.session_notes_text.get("1.0", tk.END).strip(),
         }
 
