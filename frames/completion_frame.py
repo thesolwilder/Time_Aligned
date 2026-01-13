@@ -36,6 +36,7 @@ class CompletionFrame(ttk.Frame):
 
     def create_widgets(self):
         """Create all UI elements for the completion frame"""
+        self.current_row = 0
 
         # Title and sphere selection
         self._title_and_sphere()
@@ -43,26 +44,23 @@ class CompletionFrame(ttk.Frame):
         # display date, start time, end time and duration
         self._session_info_display()
 
+        # change project and break/idle actions
+        self.change_defaults_for_session()
+
         # separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=2, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Display durations
         self._create_duration_display()
 
         # Separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=5, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Timeline of all periods
         self._create_timeline()
 
         # Separator
-        ttk.Separator(self, orient="horizontal").grid(
-            row=7, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
-        )
+        self._add_separator()
 
         # Action tags section
         self._create_session_notes()
@@ -70,11 +68,21 @@ class CompletionFrame(ttk.Frame):
         # Buttons
         self._create_buttons()
 
+    def _add_separator(self):
+        """Add a horizontal separator and increment row counter"""
+        ttk.Separator(self, orient="horizontal").grid(
+            row=self.current_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
+        )
+        self.current_row += 1
+
     # title and sphere selection method
     def _title_and_sphere(self):
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
         active_spheres, default_sphere = self._get_active_spheres()
 
         # Add "Add New Sphere..." option to the list
@@ -105,6 +113,51 @@ class CompletionFrame(ttk.Frame):
         # Title
         ttk.Label(time_frame, text="Session Complete", font=("Arial", 16, "bold")).grid(
             row=0, column=1, pady=10, sticky=tk.W, padx=5
+        )
+
+    def change_defaults_for_session(self):
+        """Change default project and break/idle actions for the session"""
+        active_projects, default_project = self._get_sphere_projects()
+        active_projects = active_projects + ["Add New Project..."]
+
+        # For non-active periods (break and idle), project dropdown with break actions
+        break_actions, default_break_action = self._get_break_actions()
+        break_actions = break_actions + ["Add New Break Action..."]
+
+        default_container = ttk.Frame(self)
+        default_container.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
+
+        ttk.Label(default_container, text="Default Project:").grid(
+            row=0, column=0, sticky=tk.W, padx=5
+        )
+        self.default_project_menu = ttk.Combobox(
+            default_container, values=active_projects, state="readonly", width=20
+        )
+        self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
+        self.default_project_menu.set(default_project)
+        ttk.Label(default_container, text="Default Break/Idle Action:").grid(
+            row=0, column=2, sticky=tk.W, padx=5
+        )
+        self.default_action_menu = ttk.Combobox(
+            default_container, values=break_actions, state="readonly", width=20
+        )
+        self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
+        self.default_action_menu.set(default_break_action)
+
+        self.default_project_menu.bind(
+            "<<ComboboxSelected>>",
+            lambda e, menu=self.default_project_menu: self._on_project_selected(
+                e, menu
+            ),
+        )
+        self.default_action_menu.bind(
+            "<<ComboboxSelected>>",
+            lambda e, menu=self.default_action_menu: self._on_break_action_selected(
+                e, menu
+            ),
         )
 
     def _on_sphere_selected(self, _):
@@ -195,7 +248,10 @@ class CompletionFrame(ttk.Frame):
 
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
 
         col = 0
         ttk.Label(time_frame, text=f"{session_date}:", font=("Arial", 12, "bold")).grid(
@@ -235,7 +291,10 @@ class CompletionFrame(ttk.Frame):
 
         # Create a frame to hold all time labels in a single row
         time_frame = ttk.Frame(self)
-        time_frame.grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=5)
+        time_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
+        )
+        self.current_row += 1
 
         col = 0
         # Total time
@@ -362,8 +421,13 @@ class CompletionFrame(ttk.Frame):
         # Container for timeline section
         timeline_container = ttk.Frame(self)
         timeline_container.grid(
-            row=6, column=0, columnspan=2, pady=(5, 0), sticky=(tk.W, tk.E)
+            row=self.current_row,
+            column=0,
+            columnspan=2,
+            pady=(5, 0),
+            sticky=(tk.W, tk.E),
         )
+        self.current_row += 1
 
         # Title
         ttk.Label(
@@ -558,6 +622,9 @@ class CompletionFrame(ttk.Frame):
         """Handle project selection - enable editing if 'Add New Project...' is selected"""
         selected = combobox.get()
 
+        if combobox == self.default_project_menu:
+            self._update_project_dropdowns(True)
+
         if selected == "Add New Project...":
             # Enable editing mode
             combobox.config(state="normal")
@@ -589,8 +656,10 @@ class CompletionFrame(ttk.Frame):
                 combobox.config(values=project_options, state="readonly")
                 combobox.set(new_project)
 
-                # Update all other project dropdowns
-                self._update_project_dropdowns()
+                if combobox == self.default_project_menu:
+                    self._update_project_dropdowns(True)
+                else:
+                    self._update_project_dropdowns()
             else:
                 # Already exists
                 combobox.config(state="readonly")
@@ -621,6 +690,9 @@ class CompletionFrame(ttk.Frame):
     def _on_break_action_selected(self, event, combobox):
         """Handle break action selection - enable editing if 'Add New Break Action...' is selected"""
         selected = combobox.get()
+
+        if combobox == self.default_action_menu:
+            self._update_break_action_dropdowns(True)
 
         if selected == "Add New Break Action...":
             # Enable editing mode
@@ -655,6 +727,11 @@ class CompletionFrame(ttk.Frame):
                 action_options = list(break_actions) + ["Add New Break Action..."]
                 combobox.config(values=action_options, state="readonly")
                 combobox.set(new_action)
+
+                if combobox == self.default_action_menu:
+                    self._update_break_action_dropdowns(True)
+                else:
+                    self._update_break_action_dropdowns()
             else:
                 # Already exists
                 combobox.config(state="readonly")
@@ -682,8 +759,9 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<Return>")
         combobox.unbind("<FocusOut>")
 
-    def _update_project_dropdowns(self):
+    def _update_project_dropdowns(self, update_all=False):
         """Update all project dropdown menus when sphere selection changes"""
+
         # Get projects for the currently selected sphere
         active_projects, default_project = self._get_sphere_projects()
 
@@ -695,54 +773,106 @@ class CompletionFrame(ttk.Frame):
             current_selection = menu.get()
             menu["values"] = project_options
 
-            # Keep current selection if it's still in the new list, otherwise use default
-            if current_selection in project_options:
+            if update_all:
+                menu.set(self.default_project_menu.get())
+            elif current_selection in project_options:
                 menu.set(current_selection)
             elif default_project and default_project in project_options:
                 menu.set(default_project)
             else:
                 menu.set("Select Project")
 
+        # get current menu for default project
+        current_default_project = self.default_project_menu.get()
+        # update combobox for default projects  in change default method
+        self.default_project_menu.config(values=project_options)
+        if current_default_project in project_options:
+            self.default_project_menu.config(values=project_options)
+            self.default_project_menu.set(current_default_project)
+
+        elif default_project and default_project in project_options:
+            self.default_project_menu.set(default_project)
+        else:
+            self.default_project_menu.set("Select Project")
+
+    def _update_break_action_dropdowns(self, update_all=False):
+        """Update all break action dropdown menus when break action selection changes"""
+        break_actions, default_break_action = self._get_break_actions()
+        action_options = list(break_actions) + ["Add New Break Action..."]
+
+        # Update both break and idle action menus
+        for menu in self.break_action_menus + self.idle_action_menus:
+            current_selection = menu.get()
+            menu["values"] = action_options
+
+            if update_all:
+                menu.set(self.default_action_menu.get())
+            elif current_selection in action_options:
+                menu.set(current_selection)
+            elif default_break_action and default_break_action in action_options:
+                menu.set(default_break_action)
+            else:
+                menu.set("Select Break Action")
+
+        # Update default action menu (once, outside loop)
+        current_default = self.default_action_menu.get()
+        self.default_action_menu.config(values=action_options)
+
+        if current_default in action_options:
+            self.default_action_menu.set(current_default)
+        elif default_break_action and default_break_action in action_options:
+            self.default_action_menu.set(default_break_action)
+        else:
+            self.default_action_menu.set("Select Break Action")
+
     def _create_session_notes(self):
         """Create the notes input section"""
         session_comments_container = ttk.Frame(self)
-        session_comments_container.grid(row=8, column=0, columnspan=2, pady=10, sticky=tk.W)
-        
-        ttk.Label(session_comments_container, text="Session Comments:", font=("Arial", 12, "bold")).grid(
-            row=0, column=0, columnspan=2, pady=10
+        session_comments_container.grid(
+            row=self.current_row, column=0, columnspan=2, pady=10, sticky=tk.W
         )
+        self.current_row += 1
+
+        ttk.Label(
+            session_comments_container,
+            text="Session Comments:",
+            font=("Arial", 12, "bold"),
+        ).grid(row=0, column=0, columnspan=2, pady=10)
 
         # Active notes
-        ttk.Label(session_comments_container, text="Active Notes:", font=("Arial", 10)).grid(
-            row=1, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Active Notes:", font=("Arial", 10)
+        ).grid(row=1, column=0, sticky=tk.W, pady=5)
         self.active_notes = ttk.Entry(session_comments_container, width=30)
         self.active_notes.grid(row=1, column=1, sticky=tk.W, pady=5)
         # Break notes
-        ttk.Label(session_comments_container, text="Break Notes:", font=("Arial", 10)).grid(
-            row=2, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Break Notes:", font=("Arial", 10)
+        ).grid(row=2, column=0, sticky=tk.W, pady=5)
         self.break_notes = ttk.Entry(session_comments_container, width=30)
         self.break_notes.grid(row=2, column=1, sticky=tk.W, pady=5)
 
         # Idle notes
-        ttk.Label(session_comments_container, text="Idle Notes:", font=("Arial", 10)).grid(
-            row=3, column=0, sticky=tk.W, pady=5
-        )
+        ttk.Label(
+            session_comments_container, text="Idle Notes:", font=("Arial", 10)
+        ).grid(row=3, column=0, sticky=tk.W, pady=5)
         self.idle_notes = ttk.Entry(session_comments_container, width=30)
         self.idle_notes.grid(row=3, column=1, sticky=tk.W, pady=5)
 
         # Session notes
-        ttk.Label(session_comments_container, text="Session Notes:", font=("Arial", 10)).grid(
-            row=12, column=0, sticky=(tk.W, tk.N), pady=5
+        ttk.Label(
+            session_comments_container, text="Session Notes:", font=("Arial", 10)
+        ).grid(row=12, column=0, sticky=(tk.W, tk.N), pady=5)
+        self.session_notes_text = tk.Text(
+            session_comments_container, width=30, height=4, font=("Arial", 10)
         )
-        self.session_notes_text = tk.Text(session_comments_container, width=30, height=4, font=("Arial", 10))
         self.session_notes_text.grid(row=12, column=1, sticky=tk.W, pady=5)
 
     def _create_buttons(self):
         """Create action buttons"""
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=13, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=self.current_row, column=0, columnspan=2, pady=20)
+        self.current_row += 1
 
         ttk.Button(
             button_frame, text="Save & Complete", command=self.save_and_close

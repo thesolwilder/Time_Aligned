@@ -19,6 +19,18 @@
     "Exercise": {
       "is_default": false,
       "active": true
+    },
+    "A": {
+      "is_default": false,
+      "active": true
+    },
+    "B": {
+      "is_default": false,
+      "active": true
+    },
+    "C": {
+      "is_default": false,
+      "active": true
     }
   },
   "projects": {
@@ -52,11 +64,6 @@
       "is_default": false,
       "active": true
     },
-    "Coding": {
-      "sphere": "General",
-      "is_default": false,
-      "active": true
-    },
     "recording": {
       "sphere": "Music",
       "is_default": true,
@@ -86,6 +93,31 @@
       "sphere": "Exercise",
       "is_default": false,
       "active": true
+    },
+    "A1": {
+      "active": true,
+      "sphere": "A",
+      "is_default": false
+    },
+    "A2": {
+      "active": true,
+      "sphere": "A",
+      "is_default": false
+    },
+    "A3": {
+      "active": true,
+      "sphere": "A",
+      "is_default": false
+    },
+    "B1": {
+      "active": true,
+      "sphere": "B",
+      "is_default": false
+    },
+    "C1": {
+      "active": true,
+      "sphere": "C",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -113,23 +145,11 @@
       "is_default": false,
       "active": true
     },
-    "staring": {
+    "A": {
       "active": true,
       "is_default": false
     },
-    "break1": {
-      "active": true,
-      "is_default": false
-    },
-    "break2": {
-      "active": true,
-      "is_default": false
-    },
-    "break3": {
-      "active": true,
-      "is_default": false
-    },
-    "sneezing": {
+    "B": {
       "active": true,
       "is_default": false
     }
