@@ -622,6 +622,9 @@ class CompletionFrame(ttk.Frame):
         """Handle project selection - enable editing if 'Add New Project...' is selected"""
         selected = combobox.get()
 
+        if combobox == self.default_project_menu:
+            self._update_project_dropdowns(True)
+
         if selected == "Add New Project...":
             # Enable editing mode
             combobox.config(state="normal")
@@ -653,8 +656,10 @@ class CompletionFrame(ttk.Frame):
                 combobox.config(values=project_options, state="readonly")
                 combobox.set(new_project)
 
-                # Update all other project dropdowns
-                self._update_project_dropdowns()
+                if combobox == self.default_project_menu:
+                    self._update_project_dropdowns(True)
+                else:
+                    self._update_project_dropdowns()
             else:
                 # Already exists
                 combobox.config(state="readonly")
@@ -685,6 +690,9 @@ class CompletionFrame(ttk.Frame):
     def _on_break_action_selected(self, event, combobox):
         """Handle break action selection - enable editing if 'Add New Break Action...' is selected"""
         selected = combobox.get()
+
+        if combobox == self.default_action_menu:
+            self._update_break_action_dropdowns(True)
 
         if selected == "Add New Break Action...":
             # Enable editing mode
@@ -720,8 +728,10 @@ class CompletionFrame(ttk.Frame):
                 combobox.config(values=action_options, state="readonly")
                 combobox.set(new_action)
 
-                # update all other break action dropdowns
-                self._update_break_action_dropdowns()
+                if combobox == self.default_action_menu:
+                    self._update_break_action_dropdowns(True)
+                else:
+                    self._update_break_action_dropdowns()
             else:
                 # Already exists
                 combobox.config(state="readonly")
@@ -749,8 +759,9 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<Return>")
         combobox.unbind("<FocusOut>")
 
-    def _update_project_dropdowns(self):
+    def _update_project_dropdowns(self, update_all=False):
         """Update all project dropdown menus when sphere selection changes"""
+
         # Get projects for the currently selected sphere
         active_projects, default_project = self._get_sphere_projects()
 
@@ -762,8 +773,9 @@ class CompletionFrame(ttk.Frame):
             current_selection = menu.get()
             menu["values"] = project_options
 
-            # Keep current selection if it's still in the new list, otherwise use default
-            if current_selection in project_options:
+            if update_all:
+                menu.set(self.default_project_menu.get())
+            elif current_selection in project_options:
                 menu.set(current_selection)
             elif default_project and default_project in project_options:
                 menu.set(default_project)
@@ -773,6 +785,7 @@ class CompletionFrame(ttk.Frame):
         # get current menu for default project
         current_default_project = self.default_project_menu.get()
         # update combobox for default projects  in change default method
+        self.default_project_menu.config(values=project_options)
         if current_default_project in project_options:
             self.default_project_menu.config(values=project_options)
             self.default_project_menu.set(current_default_project)
@@ -782,30 +795,35 @@ class CompletionFrame(ttk.Frame):
         else:
             self.default_project_menu.set("Select Project")
 
-    def _update_break_action_dropdowns(self):
+    def _update_break_action_dropdowns(self, update_all=False):
         """Update all break action dropdown menus when break action selection changes"""
         break_actions, default_break_action = self._get_break_actions()
         action_options = list(break_actions) + ["Add New Break Action..."]
 
-        for menu in self.break_action_menus:
+        # Update both break and idle action menus
+        for menu in self.break_action_menus + self.idle_action_menus:
             current_selection = menu.get()
             menu["values"] = action_options
 
-            if current_selection in action_options:
+            if update_all:
+                menu.set(self.default_action_menu.get())
+            elif current_selection in action_options:
                 menu.set(current_selection)
             elif default_break_action and default_break_action in action_options:
                 menu.set(default_break_action)
             else:
                 menu.set("Select Break Action")
 
-            current_selection = self.default_action_menu.get()
+        # Update default action menu (once, outside loop)
+        current_default = self.default_action_menu.get()
+        self.default_action_menu.config(values=action_options)
 
-            if current_selection in action_options:
-                self.default_action_menu.set(current_selection)
-            elif default_break_action and default_break_action in action_options:
-                self.default_action_menu.set(default_break_action)
-            else:
-                self.default_action_menu.set("Select Break Action")
+        if current_default in action_options:
+            self.default_action_menu.set(current_default)
+        elif default_break_action and default_break_action in action_options:
+            self.default_action_menu.set(default_break_action)
+        else:
+            self.default_action_menu.set("Select Break Action")
 
     def _create_session_notes(self):
         """Create the notes input section"""

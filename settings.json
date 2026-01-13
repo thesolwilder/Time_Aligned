@@ -20,11 +20,15 @@
       "is_default": false,
       "active": true
     },
-    "1": {
+    "A": {
       "is_default": false,
       "active": true
     },
-    "2": {
+    "B": {
+      "is_default": false,
+      "active": true
+    },
+    "C": {
       "is_default": false,
       "active": true
     }
@@ -60,11 +64,6 @@
       "is_default": false,
       "active": true
     },
-    "Coding": {
-      "sphere": "General",
-      "is_default": false,
-      "active": true
-    },
     "recording": {
       "sphere": "Music",
       "is_default": true,
@@ -95,24 +94,29 @@
       "is_default": false,
       "active": true
     },
-    "1": {
+    "A1": {
       "active": true,
-      "sphere": "General",
+      "sphere": "A",
       "is_default": false
     },
-    "2": {
+    "A2": {
       "active": true,
-      "sphere": "General",
+      "sphere": "A",
       "is_default": false
     },
-    "3": {
+    "A3": {
       "active": true,
-      "sphere": "General",
+      "sphere": "A",
       "is_default": false
     },
-    "4": {
+    "B1": {
       "active": true,
-      "sphere": "General",
+      "sphere": "B",
+      "is_default": false
+    },
+    "C1": {
+      "active": true,
+      "sphere": "C",
       "is_default": false
     }
   },
@@ -141,43 +145,11 @@
       "is_default": false,
       "active": true
     },
-    "staring": {
+    "A": {
       "active": true,
       "is_default": false
     },
-    "break1": {
-      "active": true,
-      "is_default": false
-    },
-    "break2": {
-      "active": true,
-      "is_default": false
-    },
-    "break3": {
-      "active": true,
-      "is_default": false
-    },
-    "sneezing": {
-      "active": true,
-      "is_default": false
-    },
-    "1": {
-      "active": true,
-      "is_default": false
-    },
-    "2": {
-      "active": true,
-      "is_default": false
-    },
-    "3": {
-      "active": true,
-      "is_default": false
-    },
-    "4": {
-      "active": true,
-      "is_default": false
-    },
-    "5": {
+    "B": {
       "active": true,
       "is_default": false
     }
