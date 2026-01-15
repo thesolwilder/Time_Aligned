@@ -988,12 +988,14 @@ class CompletionFrame(ttk.Frame):
     def _create_buttons(self):
         """Create action buttons"""
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=self.current_row, column=0, columnspan=2, pady=20 , sticky=tk.W)
+        button_frame.grid(
+            row=self.current_row, column=0, columnspan=2, pady=20, sticky=tk.W
+        )
         self.current_row += 1
 
         ttk.Button(
             button_frame, text="Save & Complete", command=self.save_and_close
-        ).grid(row=0, column=0, padx=5 )
+        ).grid(row=0, column=0, padx=5)
 
         ttk.Button(button_frame, text="Skip", command=self.skip_and_close).grid(
             row=0, column=1, padx=5
@@ -1022,7 +1024,7 @@ class CompletionFrame(ttk.Frame):
             period_type = period["type"]
             start_ts = period["start_timestamp"]
 
-            # Get the text box value for this period
+            # Get the primary text box value for this period
             comment = (
                 self.text_boxes[idx].get().strip() if idx < len(self.text_boxes) else ""
             )
@@ -1031,6 +1033,13 @@ class CompletionFrame(ttk.Frame):
             secondary_value = ""
             if idx < len(self.secondary_menus):
                 secondary_value = self.secondary_menus[idx].get().strip()
+
+            # get the secondary text box value for this period
+            comment_secondary = (
+                self.secondary_text_boxes[idx].get().strip()
+                if idx < len(self.secondary_text_boxes)
+                else ""
+            )
 
             # Find and update the corresponding period in the session data
             if period_type == "Active":
@@ -1055,12 +1064,16 @@ class CompletionFrame(ttk.Frame):
                                 {
                                     "name": project,
                                     "percentage": 50,
+                                    "comment": comment,
                                     "duration": total_duration // 2,
+                                    "project_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
+                                    "comment": comment_secondary,
                                     "duration": total_duration // 2,
+                                    "project_primary": False,
                                 },
                             ]
                             # Keep first project for backward compatibility
@@ -1076,6 +1089,8 @@ class CompletionFrame(ttk.Frame):
 
                         if comment:
                             active_period["comment"] = comment
+                        if comment_secondary:
+                            active_period["comment_secondary"] = comment_secondary
                         break
 
             elif period_type == "Break":
@@ -1101,11 +1116,15 @@ class CompletionFrame(ttk.Frame):
                                     "name": break_action,
                                     "percentage": 50,
                                     "duration": total_duration // 2,
+                                    "comment": comment,
+                                    "break_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
                                     "duration": total_duration // 2,
+                                    "comment": comment_secondary,
+                                    "break_primary": False,
                                 },
                             ]
                             # Keep first action for backward compatibility
@@ -1121,6 +1140,8 @@ class CompletionFrame(ttk.Frame):
 
                         if comment:
                             break_period["comment"] = comment
+                        if comment_secondary:
+                            break_period["comment_secondary"] = comment_secondary
                         break
 
             elif period_type == "Idle":
@@ -1146,11 +1167,15 @@ class CompletionFrame(ttk.Frame):
                                     "name": idle_action,
                                     "percentage": 50,
                                     "duration": total_duration // 2,
+                                    "comment": comment,
+                                    "idle_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
                                     "duration": total_duration // 2,
+                                    "comment": comment_secondary,
+                                    "idle_primary": False,
                                 },
                             ]
                             # Keep first action for backward compatibility
@@ -1166,6 +1191,8 @@ class CompletionFrame(ttk.Frame):
 
                         if comment:
                             idle_period["comment"] = comment
+                        if comment_secondary:
+                            idle_period["comment_secondary"] = comment_secondary
                         break
 
         # Save session-level notes
