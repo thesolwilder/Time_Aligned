@@ -36,6 +36,7 @@ class CompletionFrame(ttk.Frame):
         self.secondary_menus = []  # Store all secondary dropdown references (projects and breaks)
         self.plus_buttons = []  # Store + button references
         self.minus_buttons = []  # Store - button references
+        self.secondary_text_boxes =[]
 
         self.create_widgets()
 
@@ -577,27 +578,6 @@ class CompletionFrame(ttk.Frame):
 
                 # Store reference to update later when sphere changes
                 self.project_menus.append(project_menu)
-
-                col += 1
-                
-                # Secondary project dropdown (hidden initially)
-                secondary_project_menu = ttk.Combobox(
-                    periods_frame,
-                    values=project_options,
-                    state="readonly",
-                    width=15,
-                )
-                secondary_project_menu.set("")
-                secondary_project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
-                secondary_project_menu.grid_remove()  # Hide initially
-                
-                # Bind selection event
-                secondary_project_menu.bind(
-                    "<<ComboboxSelected>>",
-                    lambda e, menu=secondary_project_menu: self._on_project_selected(e, menu),
-                )
-                
-                self.secondary_menus.append(secondary_project_menu)
                 col += 1
                 
             else:
@@ -635,10 +615,47 @@ class CompletionFrame(ttk.Frame):
                     self.break_action_menus.append(break_action_menu)
                 else:  # Idle
                     self.idle_action_menus.append(break_action_menu)
-
                 col += 1
+
+            # First text box (always visible)
+            text_box = ttk.Entry(periods_frame, width=20)
+            text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            self.text_boxes.append(text_box)
+            col += 1
+            
+            # Add + button (visible initially, stays in same position)
+            plus_btn = ttk.Button(
+                periods_frame,
+                text="+",
+                width=3,
+                command=lambda i=idx: self._show_secondary(i)
+            )
+            plus_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            self.plus_buttons.append(plus_btn)
+            col += 1
+            
+            # Secondary dropdown (hidden initially, appears after + button)
+            if period["type"] == "Active":
+                # Secondary project dropdown
+                secondary_project_menu = ttk.Combobox(
+                    periods_frame,
+                    values=project_options,
+                    state="readonly",
+                    width=15,
+                )
+                secondary_project_menu.set("")
+                secondary_project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                secondary_project_menu.grid_remove()  # Hide initially
                 
-                # Secondary break/idle action dropdown (hidden initially)
+                # Bind selection event
+                secondary_project_menu.bind(
+                    "<<ComboboxSelected>>",
+                    lambda e, menu=secondary_project_menu: self._on_project_selected(e, menu),
+                )
+                
+                self.secondary_menus.append(secondary_project_menu)
+            else:
+                # Secondary break/idle action dropdown
                 secondary_action_menu = ttk.Combobox(
                     periods_frame,
                     values=break_action_options,
@@ -658,26 +675,16 @@ class CompletionFrame(ttk.Frame):
                 )
                 
                 self.secondary_menus.append(secondary_action_menu)
-                col += 1
-
-            # add text box associated with combobox
-            text_box = ttk.Entry(periods_frame, width=20)
-            text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
-            col += 1
-            self.text_boxes.append(text_box)
-            
-            # Add + button (visible initially)
-            plus_btn = ttk.Button(
-                periods_frame,
-                text="+",
-                width=3,
-                command=lambda i=idx: self._show_secondary(i)
-            )
-            plus_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
-            self.plus_buttons.append(plus_btn)
             col += 1
             
-            # Add - button (hidden initially)
+            # Secondary text box (hidden initially, appears after secondary dropdown)
+            text_box_secondary = ttk.Entry(periods_frame, width=20)
+            text_box_secondary.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            text_box_secondary.grid_remove()  # Hide initially
+            self.secondary_text_boxes.append(text_box_secondary)
+            col += 1
+            
+            # Add - button (hidden initially, appears after secondary text box)
             minus_btn = ttk.Button(
                 periods_frame,
                 text="−",
@@ -687,23 +694,25 @@ class CompletionFrame(ttk.Frame):
             minus_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
             minus_btn.grid_remove()  # Hide initially
             self.minus_buttons.append(minus_btn)
-
     def _show_secondary(self, idx):
-        """Show the secondary dropdown and - button, hide + button"""
+        """Show the secondary dropdown, text box, and - button"""
         if idx < len(self.secondary_menus):
             self.secondary_menus[idx].grid()  # Show secondary dropdown
-        if idx < len(self.plus_buttons):
-            self.plus_buttons[idx].grid_remove()  # Hide + button
+        if idx < len(self.secondary_text_boxes):
+            self.secondary_text_boxes[idx].grid()  # Show secondary text box
         if idx < len(self.minus_buttons):
             self.minus_buttons[idx].grid()  # Show - button
     
     def _hide_secondary(self, idx):
-        """Hide the secondary dropdown and - button, show + button, clear value"""
+        """Hide the secondary dropdown, text box, and - button, clear values"""
         if idx < len(self.secondary_menus):
             self.secondary_menus[idx].set("")  # Clear value
             self.secondary_menus[idx].grid_remove()  # Hide secondary dropdown
-        if idx < len(self.plus_buttons):
-            self.plus_buttons[idx].grid()  # Show + button
+        if idx < len(self.secondary_text_boxes):
+            self.secondary_text_boxes[idx].delete(0, tk.END)  # Clear text
+            self.secondary_text_boxes[idx].grid_remove()  # Hide secondary text box
+        if idx < len(self.minus_buttons):
+            self.minus_buttons[idx].grid_remove()  # Hide - button
         if idx < len(self.minus_buttons):
             self.minus_buttons[idx].grid_remove()  # Hide - button
 
