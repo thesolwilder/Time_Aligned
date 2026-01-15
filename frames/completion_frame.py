@@ -1076,21 +1076,21 @@ class CompletionFrame(ttk.Frame):
                                     "project_primary": False,
                                 },
                             ]
-                            # Keep first project for backward compatibility
-                            active_period["project"] = project
+                            # Remove old fields to avoid duplication
+                            active_period.pop("project", None)
+                            active_period.pop("comment", None)
+                            active_period.pop("comment_secondary", None)
                         elif project and project not in [
                             "Select Project",
                             "Add New Project...",
                         ]:
                             # Single project - save old way
                             active_period["project"] = project
+                            if comment:
+                                active_period["comment"] = comment
                             # Remove projects array if it exists
                             active_period.pop("projects", None)
-
-                        if comment:
-                            active_period["comment"] = comment
-                        if comment_secondary:
-                            active_period["comment_secondary"] = comment_secondary
+                            active_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Break":
@@ -1127,21 +1127,21 @@ class CompletionFrame(ttk.Frame):
                                     "break_primary": False,
                                 },
                             ]
-                            # Keep first action for backward compatibility
-                            break_period["action"] = break_action
+                            # Remove old fields to avoid duplication
+                            break_period.pop("action", None)
+                            break_period.pop("comment", None)
+                            break_period.pop("comment_secondary", None)
                         elif break_action and break_action not in [
                             "Select Break Action",
                             "Add New Break Action...",
                         ]:
                             # Single action - save old way
                             break_period["action"] = break_action
+                            if comment:
+                                break_period["comment"] = comment
                             # Remove actions array if it exists
                             break_period.pop("actions", None)
-
-                        if comment:
-                            break_period["comment"] = comment
-                        if comment_secondary:
-                            break_period["comment_secondary"] = comment_secondary
+                            break_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Idle":
@@ -1178,21 +1178,21 @@ class CompletionFrame(ttk.Frame):
                                     "idle_primary": False,
                                 },
                             ]
-                            # Keep first action for backward compatibility
-                            idle_period["action"] = idle_action
+                            # Remove old fields to avoid duplication
+                            idle_period.pop("action", None)
+                            idle_period.pop("comment", None)
+                            idle_period.pop("comment_secondary", None)
                         elif idle_action and idle_action not in [
                             "Select Break Action",
                             "Add New Break Action...",
                         ]:
                             # Single action - save old way
                             idle_period["action"] = idle_action
+                            if comment:
+                                idle_period["comment"] = comment
                             # Remove actions array if it exists
                             idle_period.pop("actions", None)
-
-                        if comment:
-                            idle_period["comment"] = comment
-                        if comment_secondary:
-                            idle_period["comment_secondary"] = comment_secondary
+                            idle_period.pop("comment_secondary", None)
                         break
 
         # Save session-level notes
