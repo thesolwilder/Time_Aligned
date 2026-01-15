@@ -339,9 +339,38 @@ class TimeTracker:
         if not self.session_active:
             return
 
+        end_on_break = False
+
         # End any active break
         if self.break_active:
             self.toggle_break()
+            end_on_break = True
+
+        current_time = time.time()
+        duration = current_time - self.active_period_start_time
+
+        # Save the final active period (if not on break)
+        if not end_on_break:
+
+            all_data = self.load_data()
+            if self.session_name in all_data:
+                all_data[self.session_name]["active"] = all_data[self.session_name].get(
+                    "active", []
+                )
+                all_data[self.session_name]["active"].append(
+                    {
+                        "start": datetime.fromtimestamp(
+                            self.active_period_start_time
+                        ).strftime("%H:%M:%S"),
+                        "start_timestamp": self.active_period_start_time,
+                        "end": datetime.fromtimestamp(current_time).strftime(
+                            "%H:%M:%S"
+                        ),
+                        "end_timestamp": current_time,
+                        "duration": duration,
+                    }
+                )
+                self.save_data(all_data)
 
         # Stop input monitoring
         self.stop_input_monitoring()

@@ -443,6 +443,7 @@ class CompletionFrame(ttk.Frame):
 
             # Add active periods
             for period in session.get("active", []):
+
                 self.all_periods.append(
                     {
                         "type": "Active",

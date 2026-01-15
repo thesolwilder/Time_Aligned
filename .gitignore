@@ -5,6 +5,7 @@
 __pycache__/
 .env
 .vscode/
+DEBUGGING_GUIDE.MD
 
 # Python virtual environment
 .venv/
