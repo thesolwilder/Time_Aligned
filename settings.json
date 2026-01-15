@@ -118,6 +118,11 @@
       "active": true,
       "sphere": "C",
       "is_default": false
+    },
+    "test": {
+      "active": true,
+      "sphere": "General",
+      "is_default": false
     }
   },
   "break_actions": {
@@ -150,6 +155,10 @@
       "is_default": false
     },
     "B": {
+      "active": true,
+      "is_default": false
+    },
+    "C": {
       "active": true,
       "is_default": false
     }

@@ -644,7 +644,7 @@ class CompletionFrame(ttk.Frame):
                     state="readonly",
                     width=15,
                 )
-                secondary_project_menu.set("")
+                secondary_project_menu.set("Select A Project")
                 secondary_project_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
@@ -667,7 +667,7 @@ class CompletionFrame(ttk.Frame):
                     state="readonly",
                     width=15,
                 )
-                secondary_action_menu.set("")
+                secondary_action_menu.set("Select An Action")
                 secondary_action_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
@@ -699,6 +699,11 @@ class CompletionFrame(ttk.Frame):
                 # Show secondary widgets and change to -
                 if idx < len(self.secondary_menus):
                     self.secondary_menus[idx].grid()
+                    # Set placeholder text based on period type
+                    if self.all_periods[idx]["type"] == "Active":
+                        self.secondary_menus[idx].set("Select A Project")
+                    else:
+                        self.secondary_menus[idx].set("Select An Action")
                 if idx < len(self.secondary_text_boxes):
                     self.secondary_text_boxes[idx].grid()
                 button.config(text="−")
@@ -1057,6 +1062,7 @@ class CompletionFrame(ttk.Frame):
                         if secondary_value and secondary_value not in [
                             "Select Project",
                             "Add New Project...",
+                            "Select A Project"
                         ]:
                             # Save as array with 50/50 split
                             total_duration = active_period.get("duration", 0)
@@ -1083,6 +1089,7 @@ class CompletionFrame(ttk.Frame):
                         elif project and project not in [
                             "Select Project",
                             "Add New Project...",
+                            "Select A Project"
                         ]:
                             # Single project - save old way
                             active_period["project"] = project
@@ -1108,6 +1115,7 @@ class CompletionFrame(ttk.Frame):
                         if secondary_value and secondary_value not in [
                             "Select Break Action",
                             "Add New Break Action...",
+                            "Select An Action"
                         ]:
                             # Save as array with 50/50 split
                             total_duration = break_period.get("duration", 0)
@@ -1134,6 +1142,7 @@ class CompletionFrame(ttk.Frame):
                         elif break_action and break_action not in [
                             "Select Break Action",
                             "Add New Break Action...",
+                            "Select An Action"
                         ]:
                             # Single action - save old way
                             break_period["action"] = break_action
@@ -1159,6 +1168,7 @@ class CompletionFrame(ttk.Frame):
                         if secondary_value and secondary_value not in [
                             "Select Break Action",
                             "Add New Break Action...",
+                            "Select An Action"
                         ]:
                             # Save as array with 50/50 split
                             total_duration = idle_period.get("duration", 0)
@@ -1185,6 +1195,7 @@ class CompletionFrame(ttk.Frame):
                         elif idle_action and idle_action not in [
                             "Select Break Action",
                             "Add New Break Action...",
+                            "Select An Action"
                         ]:
                             # Single action - save old way
                             idle_period["action"] = idle_action
