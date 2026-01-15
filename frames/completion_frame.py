@@ -31,12 +31,13 @@ class CompletionFrame(ttk.Frame):
         self.project_menus = []
         self.break_action_menus = []  # Store references to break action dropdowns
         self.idle_action_menus = []  # Store references to idle action dropdowns
-        
+
         # Secondary dropdowns and toggle buttons
-        self.secondary_menus = []  # Store all secondary dropdown references (projects and breaks)
-        self.plus_buttons = []  # Store + button references
-        self.minus_buttons = []  # Store - button references
-        self.secondary_text_boxes =[]
+        self.secondary_menus = (
+            []
+        )  # Store all secondary dropdown references (projects and breaks)
+        self.toggle_buttons = []  # Store toggle button references (+ / -)
+        self.secondary_text_boxes = []
 
         self.create_widgets()
 
@@ -579,7 +580,7 @@ class CompletionFrame(ttk.Frame):
                 # Store reference to update later when sphere changes
                 self.project_menus.append(project_menu)
                 col += 1
-                
+
             else:
                 # For non-active periods (break and idle), project dropdown with break actions
                 break_actions, default_break_action = self._get_break_actions()
@@ -622,19 +623,19 @@ class CompletionFrame(ttk.Frame):
             text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
             self.text_boxes.append(text_box)
             col += 1
-            
-            # Add + button (visible initially, stays in same position)
-            plus_btn = ttk.Button(
+
+            # Add toggle button (starts as +, stays in same position)
+            toggle_btn = ttk.Button(
                 periods_frame,
                 text="+",
                 width=3,
-                command=lambda i=idx: self._show_secondary(i)
+                command=lambda i=idx: self._toggle_secondary(i),
             )
-            plus_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
-            self.plus_buttons.append(plus_btn)
+            toggle_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            self.toggle_buttons.append(toggle_btn)
             col += 1
-            
-            # Secondary dropdown (hidden initially, appears after + button)
+
+            # Secondary dropdown (hidden initially, appears after toggle button)
             if period["type"] == "Active":
                 # Secondary project dropdown
                 secondary_project_menu = ttk.Combobox(
@@ -644,15 +645,19 @@ class CompletionFrame(ttk.Frame):
                     width=15,
                 )
                 secondary_project_menu.set("")
-                secondary_project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                secondary_project_menu.grid(
+                    row=idx, column=col, sticky=tk.W, padx=5, pady=2
+                )
                 secondary_project_menu.grid_remove()  # Hide initially
-                
+
                 # Bind selection event
                 secondary_project_menu.bind(
                     "<<ComboboxSelected>>",
-                    lambda e, menu=secondary_project_menu: self._on_project_selected(e, menu),
+                    lambda e, menu=secondary_project_menu: self._on_project_selected(
+                        e, menu
+                    ),
                 )
-                
+
                 self.secondary_menus.append(secondary_project_menu)
             else:
                 # Secondary break/idle action dropdown
@@ -663,9 +668,11 @@ class CompletionFrame(ttk.Frame):
                     width=15,
                 )
                 secondary_action_menu.set("")
-                secondary_action_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                secondary_action_menu.grid(
+                    row=idx, column=col, sticky=tk.W, padx=5, pady=2
+                )
                 secondary_action_menu.grid_remove()  # Hide initially
-                
+
                 # Bind selection event
                 secondary_action_menu.bind(
                     "<<ComboboxSelected>>",
@@ -673,48 +680,37 @@ class CompletionFrame(ttk.Frame):
                         e, menu
                     ),
                 )
-                
+
                 self.secondary_menus.append(secondary_action_menu)
             col += 1
-            
+
             # Secondary text box (hidden initially, appears after secondary dropdown)
             text_box_secondary = ttk.Entry(periods_frame, width=20)
             text_box_secondary.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
             text_box_secondary.grid_remove()  # Hide initially
             self.secondary_text_boxes.append(text_box_secondary)
-            col += 1
-            
-            # Add - button (hidden initially, appears after secondary text box)
-            minus_btn = ttk.Button(
-                periods_frame,
-                text="−",
-                width=3,
-                command=lambda i=idx: self._hide_secondary(i)
-            )
-            minus_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
-            minus_btn.grid_remove()  # Hide initially
-            self.minus_buttons.append(minus_btn)
-    def _show_secondary(self, idx):
-        """Show the secondary dropdown, text box, and - button"""
-        if idx < len(self.secondary_menus):
-            self.secondary_menus[idx].grid()  # Show secondary dropdown
-        if idx < len(self.secondary_text_boxes):
-            self.secondary_text_boxes[idx].grid()  # Show secondary text box
-        if idx < len(self.minus_buttons):
-            self.minus_buttons[idx].grid()  # Show - button
-    
-    def _hide_secondary(self, idx):
-        """Hide the secondary dropdown, text box, and - button, clear values"""
-        if idx < len(self.secondary_menus):
-            self.secondary_menus[idx].set("")  # Clear value
-            self.secondary_menus[idx].grid_remove()  # Hide secondary dropdown
-        if idx < len(self.secondary_text_boxes):
-            self.secondary_text_boxes[idx].delete(0, tk.END)  # Clear text
-            self.secondary_text_boxes[idx].grid_remove()  # Hide secondary text box
-        if idx < len(self.minus_buttons):
-            self.minus_buttons[idx].grid_remove()  # Hide - button
-        if idx < len(self.minus_buttons):
-            self.minus_buttons[idx].grid_remove()  # Hide - button
+
+    def _toggle_secondary(self, idx):
+        """Toggle between showing and hiding secondary dropdown and text box"""
+        if idx < len(self.toggle_buttons):
+            button = self.toggle_buttons[idx]
+
+            if button.cget("text") == "+":
+                # Show secondary widgets and change to -
+                if idx < len(self.secondary_menus):
+                    self.secondary_menus[idx].grid()
+                if idx < len(self.secondary_text_boxes):
+                    self.secondary_text_boxes[idx].grid()
+                button.config(text="−")
+            else:
+                # Hide secondary widgets, clear data, and change to +
+                if idx < len(self.secondary_menus):
+                    self.secondary_menus[idx].set("")
+                    self.secondary_menus[idx].grid_remove()
+                if idx < len(self.secondary_text_boxes):
+                    self.secondary_text_boxes[idx].delete(0, tk.END)
+                    self.secondary_text_boxes[idx].grid_remove()
+                button.config(text="+")
 
     def _on_project_selected(self, event, combobox):
         """Handle project selection - enable editing if 'Add New Project...' is selected"""
@@ -879,7 +875,7 @@ class CompletionFrame(ttk.Frame):
                 menu.set(default_project)
             else:
                 menu.set("Select Project")
-        
+
         # Update secondary project dropdowns' options (but not their selection)
         # Only update the ones that correspond to Active periods
         project_count = len(self.project_menus)
@@ -934,7 +930,7 @@ class CompletionFrame(ttk.Frame):
             self.default_action_menu.set(default_break_action)
         else:
             self.default_action_menu.set("Select Break Action")
-        
+
         # Update secondary break/idle action dropdowns' options (but not their selection)
         # Only update the ones that correspond to Break/Idle periods
         project_count = len(self.project_menus)
@@ -992,12 +988,12 @@ class CompletionFrame(ttk.Frame):
     def _create_buttons(self):
         """Create action buttons"""
         button_frame = ttk.Frame(self)
-        button_frame.grid(row=self.current_row, column=0, columnspan=2, pady=20)
+        button_frame.grid(row=self.current_row, column=0, columnspan=2, pady=20 , sticky=tk.W)
         self.current_row += 1
 
         ttk.Button(
             button_frame, text="Save & Complete", command=self.save_and_close
-        ).grid(row=0, column=0, padx=5)
+        ).grid(row=0, column=0, padx=5 )
 
         ttk.Button(button_frame, text="Skip", command=self.skip_and_close).grid(
             row=0, column=1, padx=5
@@ -1030,7 +1026,7 @@ class CompletionFrame(ttk.Frame):
             comment = (
                 self.text_boxes[idx].get().strip() if idx < len(self.text_boxes) else ""
             )
-            
+
             # Get secondary dropdown value if exists
             secondary_value = ""
             if idx < len(self.secondary_menus):
@@ -1049,29 +1045,35 @@ class CompletionFrame(ttk.Frame):
                 for active_period in session.get("active", []):
                     if active_period.get("start_timestamp") == start_ts:
                         # Check if secondary dropdown has value
-                        if secondary_value and secondary_value not in ["Select Project", "Add New Project..."]:
+                        if secondary_value and secondary_value not in [
+                            "Select Project",
+                            "Add New Project...",
+                        ]:
                             # Save as array with 50/50 split
                             total_duration = active_period.get("duration", 0)
                             active_period["projects"] = [
                                 {
                                     "name": project,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
+                                    "duration": total_duration // 2,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
-                                }
+                                    "duration": total_duration // 2,
+                                },
                             ]
                             # Keep first project for backward compatibility
                             active_period["project"] = project
-                        elif project and project not in ["Select Project", "Add New Project..."]:
+                        elif project and project not in [
+                            "Select Project",
+                            "Add New Project...",
+                        ]:
                             # Single project - save old way
                             active_period["project"] = project
                             # Remove projects array if it exists
                             active_period.pop("projects", None)
-                        
+
                         if comment:
                             active_period["comment"] = comment
                         break
@@ -1088,29 +1090,35 @@ class CompletionFrame(ttk.Frame):
                 for break_period in session.get("breaks", []):
                     if break_period.get("start_timestamp") == start_ts:
                         # Check if secondary dropdown has value
-                        if secondary_value and secondary_value not in ["Select Break Action", "Add New Break Action..."]:
+                        if secondary_value and secondary_value not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
                             # Save as array with 50/50 split
                             total_duration = break_period.get("duration", 0)
                             break_period["actions"] = [
                                 {
                                     "name": break_action,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
+                                    "duration": total_duration // 2,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
-                                }
+                                    "duration": total_duration // 2,
+                                },
                             ]
                             # Keep first action for backward compatibility
                             break_period["action"] = break_action
-                        elif break_action and break_action not in ["Select Break Action", "Add New Break Action..."]:
+                        elif break_action and break_action not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
                             # Single action - save old way
                             break_period["action"] = break_action
                             # Remove actions array if it exists
                             break_period.pop("actions", None)
-                        
+
                         if comment:
                             break_period["comment"] = comment
                         break
@@ -1127,29 +1135,35 @@ class CompletionFrame(ttk.Frame):
                 for idle_period in session.get("idle_periods", []):
                     if idle_period.get("start_timestamp") == start_ts:
                         # Check if secondary dropdown has value
-                        if secondary_value and secondary_value not in ["Select Break Action", "Add New Break Action..."]:
+                        if secondary_value and secondary_value not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
                             # Save as array with 50/50 split
                             total_duration = idle_period.get("duration", 0)
                             idle_period["actions"] = [
                                 {
                                     "name": idle_action,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
+                                    "duration": total_duration // 2,
                                 },
                                 {
                                     "name": secondary_value,
                                     "percentage": 50,
-                                    "duration": total_duration // 2
-                                }
+                                    "duration": total_duration // 2,
+                                },
                             ]
                             # Keep first action for backward compatibility
                             idle_period["action"] = idle_action
-                        elif idle_action and idle_action not in ["Select Break Action", "Add New Break Action..."]:
+                        elif idle_action and idle_action not in [
+                            "Select Break Action",
+                            "Add New Break Action...",
+                        ]:
                             # Single action - save old way
                             idle_period["action"] = idle_action
                             # Remove actions array if it exists
                             idle_period.pop("actions", None)
-                        
+
                         if comment:
                             idle_period["comment"] = comment
                         break
