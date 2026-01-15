@@ -38,6 +38,7 @@ class CompletionFrame(ttk.Frame):
         )  # Store all secondary dropdown references (projects and breaks)
         self.toggle_buttons = []  # Store toggle button references (+ / -)
         self.secondary_text_boxes = []
+        self.percentage_spinboxes = []  # Store percentage spinbox references
 
         self.create_widgets()
 
@@ -635,6 +636,19 @@ class CompletionFrame(ttk.Frame):
             self.toggle_buttons.append(toggle_btn)
             col += 1
 
+            # Percentage spinbox for secondary (hidden initially)
+            percentage_spinbox = ttk.Spinbox(
+                periods_frame,
+                values=(1, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99),
+                width=5,
+                state="readonly"
+            )
+            percentage_spinbox.set(50)  # Default 50%
+            percentage_spinbox.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            percentage_spinbox.grid_remove()  # Hide initially
+            self.percentage_spinboxes.append(percentage_spinbox)
+            col += 1
+
             # Secondary dropdown (hidden initially, appears after toggle button)
             if period["type"] == "Active":
                 # Secondary project dropdown
@@ -697,6 +711,8 @@ class CompletionFrame(ttk.Frame):
 
             if button.cget("text") == "+":
                 # Show secondary widgets and change to -
+                if idx < len(self.percentage_spinboxes):
+                    self.percentage_spinboxes[idx].grid()
                 if idx < len(self.secondary_menus):
                     self.secondary_menus[idx].grid()
                     # Set placeholder text based on period type
@@ -709,6 +725,9 @@ class CompletionFrame(ttk.Frame):
                 button.config(text="−")
             else:
                 # Hide secondary widgets, clear data, and change to +
+                if idx < len(self.percentage_spinboxes):
+                    self.percentage_spinboxes[idx].set(50)  # Reset to default
+                    self.percentage_spinboxes[idx].grid_remove()
                 if idx < len(self.secondary_menus):
                     self.secondary_menus[idx].set("")
                     self.secondary_menus[idx].grid_remove()
@@ -1039,6 +1058,14 @@ class CompletionFrame(ttk.Frame):
             if idx < len(self.secondary_menus):
                 secondary_value = self.secondary_menus[idx].get().strip()
 
+            # Get percentage value for secondary (default 50 if not set)
+            secondary_percentage = 50
+            if idx < len(self.percentage_spinboxes):
+                try:
+                    secondary_percentage = int(self.percentage_spinboxes[idx].get())
+                except (ValueError, tk.TclError):
+                    secondary_percentage = 50
+
             # get the secondary text box value for this period
             comment_secondary = (
                 self.secondary_text_boxes[idx].get().strip()
@@ -1064,21 +1091,22 @@ class CompletionFrame(ttk.Frame):
                             "Add New Project...",
                             "Select A Project"
                         ]:
-                            # Save as array with 50/50 split
+                            # Save as array with user-specified percentage split
                             total_duration = active_period.get("duration", 0)
+                            primary_percentage = 100 - secondary_percentage
                             active_period["projects"] = [
                                 {
                                     "name": project,
-                                    "percentage": 50,
+                                    "percentage": primary_percentage,
                                     "comment": comment,
-                                    "duration": total_duration // 2,
+                                    "duration": int(total_duration * primary_percentage / 100),
                                     "project_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
-                                    "percentage": 50,
+                                    "percentage": secondary_percentage,
                                     "comment": comment_secondary,
-                                    "duration": total_duration // 2,
+                                    "duration": int(total_duration * secondary_percentage / 100),
                                     "project_primary": False,
                                 },
                             ]
@@ -1117,20 +1145,21 @@ class CompletionFrame(ttk.Frame):
                             "Add New Break Action...",
                             "Select An Action"
                         ]:
-                            # Save as array with 50/50 split
+                            # Save as array with user-specified percentage split
                             total_duration = break_period.get("duration", 0)
+                            primary_percentage = 100 - secondary_percentage
                             break_period["actions"] = [
                                 {
                                     "name": break_action,
-                                    "percentage": 50,
-                                    "duration": total_duration // 2,
+                                    "percentage": primary_percentage,
+                                    "duration": int(total_duration * primary_percentage / 100),
                                     "comment": comment,
                                     "break_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
-                                    "percentage": 50,
-                                    "duration": total_duration // 2,
+                                    "percentage": secondary_percentage,
+                                    "duration": int(total_duration * secondary_percentage / 100),
                                     "comment": comment_secondary,
                                     "break_primary": False,
                                 },
@@ -1170,20 +1199,21 @@ class CompletionFrame(ttk.Frame):
                             "Add New Break Action...",
                             "Select An Action"
                         ]:
-                            # Save as array with 50/50 split
+                            # Save as array with user-specified percentage split
                             total_duration = idle_period.get("duration", 0)
+                            primary_percentage = 100 - secondary_percentage
                             idle_period["actions"] = [
                                 {
                                     "name": idle_action,
-                                    "percentage": 50,
-                                    "duration": total_duration // 2,
+                                    "percentage": primary_percentage,
+                                    "duration": int(total_duration * primary_percentage / 100),
                                     "comment": comment,
                                     "idle_primary": True,
                                 },
                                 {
                                     "name": secondary_value,
-                                    "percentage": 50,
-                                    "duration": total_duration // 2,
+                                    "percentage": secondary_percentage,
+                                    "duration": int(total_duration * secondary_percentage / 100),
                                     "comment": comment_secondary,
                                     "idle_primary": False,
                                 },
