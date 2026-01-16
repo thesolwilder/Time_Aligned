@@ -189,6 +189,73 @@ class CompletionFrame(ttk.Frame):
             # Update all project dropdowns with projects from the selected sphere
             self._update_project_dropdowns()
 
+    def _on_date_selected(self, _):
+        """Handle date selection - update session dropdown with sessions for that date"""
+        selected_date = self.date_selector.get()
+        
+        if selected_date:
+            # Load all sessions for the selected date
+            all_data = self.tracker.load_data()
+            self.sessions_for_date = [k for k in all_data.keys() if k.startswith(selected_date + "_")]
+            self.sessions_for_date.sort(reverse=True)
+            
+            # Update session dropdown
+            self.session_selector.config(values=self.sessions_for_date)
+            
+            # Auto-select the most recent session for this date
+            if self.sessions_for_date:
+                self.session_selector.set(self.sessions_for_date[0])
+                # Trigger session reload
+                self._on_session_selected(None)
+            else:
+                self.session_selector.set("")
+
+    def _on_session_selected(self, _):
+        """Handle session selection - reload the frame with the selected session"""
+        selected_session = self.session_selector.get()
+        
+        if selected_session and selected_session != self.session_name:
+            # Load the selected session's data
+            all_data = self.tracker.load_data()
+            if selected_session in all_data:
+                session_data = all_data[selected_session]
+                
+                # Create new session_data dict with required fields
+                new_session_data = {
+                    "session_name": selected_session,
+                    "total_elapsed": session_data.get("total_duration", 0),
+                    "active_time": session_data.get("active_duration", 0),
+                    "break_time": session_data.get("break_duration", 0),
+                    "session_start_timestamp": session_data.get("start_timestamp", 0),
+                    "session_end_timestamp": session_data.get("end_timestamp", 0),
+                    "total_duration": session_data.get("total_duration", 0),
+                }
+                
+                # Destroy current widgets and reload
+                for widget in self.winfo_children():
+                    widget.destroy()
+                
+                # Reset state
+                self.session_name = selected_session
+                self.session_data = new_session_data
+                self.session_start_timestamp = new_session_data["session_start_timestamp"]
+                self.session_end_timestamp = new_session_data["session_end_timestamp"]
+                self.session_duration = new_session_data["total_duration"]
+                
+                # Clear all widget lists
+                self.text_boxes = []
+                self.project_menus = []
+                self.break_action_menus = []
+                self.idle_action_menus = []
+                self.secondary_menus = []
+                self.toggle_buttons = []
+                self.secondary_text_boxes = []
+                self.percentage_spinboxes = []
+                self.secondary_percentage_labels = []
+                
+                # Recreate all widgets
+                self.create_widgets()
+
     def _save_new_sphere(self, event):
         """Save the new sphere to settings"""
         new_sphere = self.sphere_menu.get().strip()
@@ -265,10 +332,56 @@ class CompletionFrame(ttk.Frame):
         self.current_row += 1
 
         col = 0
-        ttk.Label(time_frame, text=f"{session_date}:", font=("Arial", 12, "bold")).grid(
+        # Create dropdown for selecting date first
+        all_data = self.tracker.load_data()
+        
+        # Extract unique dates from session names
+        dates_set = set()
+        for session_name in all_data.keys():
+            if "_" in session_name:
+                date_part = session_name.split("_")[0]
+                dates_set.add(date_part)
+        
+        date_options = sorted(list(dates_set), reverse=True)  # Most recent first
+        current_date = self.session_name.split("_")[0] if "_" in self.session_name else ""
+        
+        ttk.Label(time_frame, text="Date:", font=("Arial", 12, "bold")).grid(
             row=0, column=col, sticky=tk.W, padx=(0, 5)
         )
         col += 1
+        
+        self.date_selector = ttk.Combobox(
+            time_frame,
+            values=date_options,
+            state="readonly",
+            width=12
+        )
+        self.date_selector.set(current_date)
+        self.date_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.date_selector.bind("<<ComboboxSelected>>", self._on_date_selected)
+        col += 1
+        
+        # Create dropdown for selecting session within the date
+        self.sessions_for_date = [k for k in all_data.keys() if k.startswith(current_date + "_")]
+        self.sessions_for_date.sort(reverse=True)
+        
+        ttk.Label(time_frame, text="Session:", font=("Arial", 12, "bold")).grid(
+            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        )
+        col += 1
+        
+        self.session_selector = ttk.Combobox(
+            time_frame,
+            values=self.sessions_for_date,
+            state="readonly",
+            width=20
+        )
+        self.session_selector.set(self.session_name)
+        self.session_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.session_selector.bind("<<ComboboxSelected>>", self._on_session_selected)
+        col += 1
+
+        # Populate start and end time based on selected session
         ttk.Label(time_frame, text=f"{start_time}", font=("Arial", 12)).grid(
             row=0, column=col, sticky=tk.W
         )
