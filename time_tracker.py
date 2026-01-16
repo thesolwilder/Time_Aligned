@@ -501,16 +501,8 @@ class TimeTracker:
             completion_container, orient="vertical", command=canvas.yview
         )
 
-        # Create completion frame with session data
-        session_data = {
-            "session_name": self.session_name,
-            "total_elapsed": total_elapsed,
-            "active_time": active_time,
-            "break_time": break_time,
-            "session_start_timestamp": original_start,
-            "session_end_timestamp": end_time,
-        }
-        self.completion_frame = CompletionFrame(canvas, self, session_data)
+        # Create completion frame with session name
+        self.completion_frame = CompletionFrame(canvas, self, self.session_name)
 
         # Configure canvas
         self.completion_frame.bind(
