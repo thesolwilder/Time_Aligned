@@ -7,6 +7,7 @@ from datetime import datetime
 from pynput import mouse, keyboard
 
 from frames.completion_frame import CompletionFrame
+from settings_frame import SettingsFrame
 
 
 class TimeTracker:
@@ -58,6 +59,7 @@ class TimeTracker:
 
         # Frame references
         self.completion_frame = None
+        self.settings_frame = None
 
         # Create GUI
         self.create_widgets()
@@ -120,7 +122,7 @@ class TimeTracker:
 
     def save_data(self, session_data, merge=True):
         """Save session data to file
-        
+
         Args:
             session_data: Data to save
             merge: If True, merge with existing data. If False, replace entirely.
@@ -131,7 +133,7 @@ class TimeTracker:
                 all_data.update(session_data)
             else:
                 all_data = session_data
-                
+
             with open(self.data_file, "w") as f:
                 json.dump(all_data, f, indent=2)
         except Exception as e:
@@ -223,6 +225,12 @@ class TimeTracker:
             state=tk.DISABLED,
         )
         self.break_button.grid(row=0, column=1, padx=5)
+
+        # Settings button
+        settings_button = ttk.Button(
+            button_frame, text="Settings", command=self.open_settings
+        )
+        settings_button.grid(row=0, column=3, padx=5)
 
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -647,6 +655,36 @@ class TimeTracker:
 
         # Schedule next update
         self.root.after(self.update_timer_interval, self.update_timers)
+
+    def open_settings(self):
+        """Open the settings window"""
+        if self.settings_frame is not None:
+            # Settings window already open, bring to front
+            try:
+                self.settings_window.lift()
+                self.settings_window.focus_force()
+                return
+            except:
+                # Window was closed, create new one
+                pass
+
+        # Create new settings window
+        self.settings_window = tk.Toplevel(self.root)
+        self.settings_window.title("Settings")
+        self.settings_window.geometry("900x700")
+
+        # Create settings frame
+        self.settings_frame = SettingsFrame(self.settings_window, self)
+        self.settings_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Handle window close
+        def on_settings_close():
+            self.settings_frame = None
+            self.settings_window.destroy()
+            # Reload settings after closing settings window
+            self.settings = self.get_settings()
+
+        self.settings_window.protocol("WM_DELETE_WINDOW", on_settings_close)
 
     def on_closing(self):
         """Clean up before closing"""
