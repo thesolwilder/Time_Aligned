@@ -1,7 +1,8 @@
 {
   "idle_settings": {
     "idle_threshold": 60,
-    "idle_break_threshold": 300
+    "idle_break_threshold": 300,
+    "idle_tracking_enabled": true
   },
   "spheres": {
     "General": {
