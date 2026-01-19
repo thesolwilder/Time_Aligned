@@ -5,11 +5,11 @@
   },
   "spheres": {
     "General": {
-      "is_default": true,
+      "is_default": false,
       "active": true
     },
     "Coding": {
-      "is_default": false,
+      "is_default": true,
       "active": true
     },
     "Music": {
@@ -22,15 +22,15 @@
     },
     "A": {
       "is_default": false,
-      "active": true
+      "active": false
     },
     "B": {
       "is_default": false,
-      "active": true
+      "active": false
     },
     "C": {
       "is_default": false,
-      "active": true
+      "active": false
     }
   },
   "projects": {
@@ -51,13 +51,15 @@
     },
     "time_tracker": {
       "sphere": "Coding",
-      "is_default": true,
+      "is_default": false,
       "active": true
     },
     "learning_to_code": {
       "sphere": "Coding",
-      "is_default": false,
-      "active": true
+      "is_default": true,
+      "active": true,
+      "note": "",
+      "goal": "test"
     },
     "sequencer": {
       "sphere": "Coding",
@@ -67,7 +69,9 @@
     "recording": {
       "sphere": "Music",
       "is_default": true,
-      "active": true
+      "active": true,
+      "note": "",
+      "goal": "test"
     },
     "composing": {
       "sphere": "Music",
@@ -82,7 +86,9 @@
     "lifting": {
       "sphere": "Exercise",
       "is_default": true,
-      "active": true
+      "active": true,
+      "note": "test",
+      "goal": ""
     },
     "running": {
       "sphere": "Exercise",
@@ -95,17 +101,17 @@
       "active": true
     },
     "A1": {
-      "active": true,
+      "active": false,
       "sphere": "A",
       "is_default": false
     },
     "A2": {
-      "active": true,
+      "active": false,
       "sphere": "A",
       "is_default": false
     },
     "A3": {
-      "active": true,
+      "active": false,
       "sphere": "A",
       "is_default": false
     },
@@ -120,46 +126,58 @@
       "is_default": false
     },
     "test": {
-      "active": true,
+      "active": false,
       "sphere": "General",
       "is_default": false
+    },
+    "Jump": {
+      "sphere": "Exercise",
+      "is_default": false,
+      "active": true,
+      "note": "",
+      "goal": ""
+    },
+    "sprint": {
+      "sphere": "Exercise",
+      "is_default": false,
+      "active": true,
+      "note": "",
+      "goal": ""
     }
   },
   "break_actions": {
     "resting": {
-      "is_default": true,
+      "is_default": false,
       "active": true
     },
     "stretching": {
       "is_default": false,
       "active": true
     },
-    "walking": {
-      "is_default": false,
-      "active": true
-    },
     "chores": {
       "is_default": false,
-      "active": true
+      "active": true,
+      "notes": "test"
     },
     "snacking": {
       "is_default": false,
-      "active": true
+      "active": false
     },
     "bathroom": {
-      "is_default": false,
-      "active": true
+      "is_default": true,
+      "active": true,
+      "notes": "dfdfff"
     },
     "A": {
-      "active": true,
+      "active": false,
       "is_default": false
     },
     "B": {
-      "active": true,
+      "active": false,
       "is_default": false
     },
     "C": {
-      "active": true,
+      "active": false,
       "is_default": false
     }
   }
