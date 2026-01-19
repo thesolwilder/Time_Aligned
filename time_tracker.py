@@ -118,12 +118,20 @@ class TimeTracker:
             print(f"Failed to read data file: {e}")
             return {}
 
-    def save_data(self, session_data):
-        """Save session data to file"""
+    def save_data(self, session_data, merge=True):
+        """Save session data to file
+        
+        Args:
+            session_data: Data to save
+            merge: If True, merge with existing data. If False, replace entirely.
+        """
         try:
-            all_data = self.load_data()
-            all_data.update(session_data)
-
+            if merge:
+                all_data = self.load_data()
+                all_data.update(session_data)
+            else:
+                all_data = session_data
+                
             with open(self.data_file, "w") as f:
                 json.dump(all_data, f, indent=2)
         except Exception as e:

@@ -7,6 +7,7 @@ import json
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
+from tkinter import messagebox
 
 
 class CompletionFrame(ttk.Frame):
@@ -657,7 +658,7 @@ class CompletionFrame(ttk.Frame):
                 comment = ""
                 secondary_comment = ""
                 secondary_percentage = 50  # Default percentage
-                
+
                 if period.get("action"):
                     # Single action case - key is "action"
                     primary_action = period.get("action", "")
@@ -697,7 +698,7 @@ class CompletionFrame(ttk.Frame):
                 comment = ""
                 secondary_comment = ""
                 secondary_percentage = 50  # Default percentage
-                
+
                 if period.get("action"):
                     # Single action case - key is "action"
                     primary_action = period.get("action", "")
@@ -991,7 +992,9 @@ class CompletionFrame(ttk.Frame):
             )
             col += 1
 
-            percentage_spinbox.set(saved_secondary_percentage)  # Use saved percentage or default 50%
+            percentage_spinbox.set(
+                saved_secondary_percentage
+            )  # Use saved percentage or default 50%
 
             # Prevent text selection highlighting - clear selection after any change
             def clear_selection(event):
@@ -1343,6 +1346,10 @@ class CompletionFrame(ttk.Frame):
             row=0, column=1, padx=5
         )
 
+        ttk.Button(
+            button_frame, text="Delete Session", command=self._delete_session
+        ).grid(row=0, column=2, padx=5)
+
     def save_and_close(self):
         """Save action tags and return to main frame"""
         all_data = self.tracker.load_data()
@@ -1581,3 +1588,30 @@ class CompletionFrame(ttk.Frame):
     def skip_and_close(self):
         """Return to main frame without saving"""
         self.tracker.show_main_frame()
+
+    def _delete_session(self):
+        """Delete the current session after confirmation"""
+
+        # Show confirmation dialog
+        result = messagebox.askyesno(
+            "Delete Session",
+            f"Are you sure you want to delete session '{self.session_name}'?\n\nThis action cannot be undone.",
+            icon="warning",
+        )
+
+        if result:
+            all_data = self.tracker.load_data()
+
+            # Delete the session if it exists
+            if self.session_name in all_data:
+                del all_data[self.session_name]
+                self.tracker.save_data(all_data, merge=False)
+
+                # Show success message
+                messagebox.showinfo(
+                    "Session Deleted",
+                    f"Session '{self.session_name}' has been deleted successfully.",
+                )
+
+            # Return to main frame
+            self.tracker.show_main_frame()
