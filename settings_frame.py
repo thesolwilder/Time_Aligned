@@ -4,22 +4,27 @@ import json
 
 
 class SettingsFrame(ttk.Frame):
-    def __init__(self, parent, tracker):
+    def __init__(self, parent, tracker, root):
         """
         Initialize the settings frame
 
         Args:
             parent: Parent window/frame
             tracker: TimeTracker instance to access methods and settings
+            root: Main root window
         """
         super().__init__(parent)
         self.tracker = tracker
+        self.root = root
         self.current_sphere = None
         self.sphere_filter = tk.StringVar(value="active")
         self.project_filter = tk.StringVar(value="active")
 
         # Track editing states
         self.editing_projects = {}  # {project_name: {widgets}}
+
+        # Row counter as instance variable
+        self.row = 0
 
         self.create_widgets()
 
@@ -63,44 +68,53 @@ class SettingsFrame(ttk.Frame):
 
         content_frame.bind("<MouseWheel>", on_mousewheel)
 
-        row = 0
+        self.row = 0
 
         # Title
         ttk.Label(content_frame, text="Settings", font=("Arial", 16, "bold")).grid(
-            row=row, column=0, columnspan=3, pady=10, sticky=tk.W
+            row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W
         )
-        row += 1
+        self.row += 1
 
         # Sphere management section
-        self.create_sphere_section(content_frame, row)
-        row += 10  # Reserve space for sphere section
+        self.create_sphere_section(content_frame)
+        self.row += 10  # Reserve space for sphere section
 
         # Project details section
-        self.project_section_row = row
+        self.project_section_row = self.row
         self.project_content_frame = content_frame
-        self.create_project_section(content_frame, row)
-        row += 20  # Reserve space for project section
+        self.create_project_section(content_frame)
+        self.row += 20  # Reserve space for project section
 
         # Separator
         ttk.Separator(content_frame, orient="horizontal").grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
         )
-        row += 1
+        self.row += 1
 
         # Break actions and idle settings
-        self.create_break_idle_section(content_frame, row)
+        self.create_break_idle_section(content_frame)
+
+        # Back button
+        self.row += 1
+        ttk.Separator(content_frame, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
+
+        ttk.Button(
+            content_frame, text="Back to Tracker", command=self.tracker.close_settings
+        ).grid(row=self.row, column=0, columnspan=3, pady=10)
 
         # Store references
         self.content_frame = content_frame
         self.canvas = canvas
 
-    def create_sphere_section(self, parent, start_row):
+    def create_sphere_section(self, parent):
         """Create sphere management section"""
-        row = start_row
-
         # Sphere filter buttons
         filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
+        filter_frame.grid(row=self.row, column=0, columnspan=3, pady=5, sticky=tk.W)
 
         ttk.Radiobutton(
             filter_frame,
@@ -126,34 +140,24 @@ class SettingsFrame(ttk.Frame):
             command=self.refresh_sphere_dropdown,
         ).pack(side=tk.LEFT, padx=5)
 
-        row += 1
+        self.row += 1
 
-
-
+        # Dropdown and sphere management frame on the same row
         self.sphere_var = tk.StringVar()
         self.sphere_dropdown = ttk.Combobox(
             parent, textvariable=self.sphere_var, width=15, font=("Arial", 20)
         )
-        self.sphere_dropdown.grid(
-            row=row, column=0, columnspan=2, pady=5, sticky=(tk.W)
-        )
+        self.sphere_dropdown.grid(row=self.row, column=0, pady=5, sticky=(tk.W))
         self.sphere_dropdown.bind(
-            "<<ComboboxSelected>>", lambda e: self.load_selected_sphere()
+            "<<ComboboxSelected>>", lambda e: self.on_sphere_selected()
         )
-        row += 1
 
-         # Sphere management frame (shown when sphere is selected)
+        # Sphere management frame (shown when sphere is selected)
         self.sphere_mgmt_frame = ttk.Frame(parent)
         self.sphere_mgmt_frame.grid(
-            row=row, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
+            row=self.row, column=1, columnspan=2, pady=5, sticky=(tk.W)
         )
-        row += 1
-
-        # Create new sphere button
-        ttk.Button(
-            parent, text="Create New Sphere", command=self.create_new_sphere
-        ).grid(row=row, column=0, pady=5, sticky=tk.E)
-        row += 1
+        self.row += 1
 
         # Refresh dropdown
         self.refresh_sphere_dropdown()
@@ -172,7 +176,9 @@ class SettingsFrame(ttk.Frame):
             elif filter_val == "all":
                 filtered_spheres.append(name)
 
-        self.sphere_dropdown["values"] = filtered_spheres
+        # Add "Create New Sphere..." option
+        sphere_options = filtered_spheres + ["Create New Sphere..."]
+        self.sphere_dropdown["values"] = sphere_options
 
         # Set default sphere if available
         if filtered_spheres:
@@ -181,6 +187,17 @@ class SettingsFrame(ttk.Frame):
                 self.sphere_var.set(default_sphere)
             else:
                 self.sphere_var.set(filtered_spheres[0])
+            self.load_selected_sphere()
+
+    def on_sphere_selected(self):
+        """Handle sphere selection or create new sphere"""
+        selected = self.sphere_var.get()
+
+        if selected == "Create New Sphere...":
+            # Call create new sphere method
+            self.create_new_sphere()
+        else:
+            # Load the selected sphere
             self.load_selected_sphere()
 
     def create_new_sphere(self):
@@ -343,19 +360,17 @@ class SettingsFrame(ttk.Frame):
         self.refresh_sphere_dropdown()
         self.refresh_project_section()
 
-    def create_project_section(self, parent, start_row):
+    def create_project_section(self, parent):
         """Create project management section"""
-        row = start_row
-
         # Section title
         ttk.Label(parent, text="Projects", font=("Arial", 14, "bold")).grid(
-            row=row, column=0, columnspan=3, pady=10, sticky=tk.W
+            row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W
         )
-        row += 1
+        self.row += 1
 
         # Project filter buttons
         filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
+        filter_frame.grid(row=self.row, column=0, columnspan=3, pady=5, sticky=tk.W)
 
         ttk.Radiobutton(
             filter_frame,
@@ -381,18 +396,18 @@ class SettingsFrame(ttk.Frame):
             command=self.refresh_project_section,
         ).pack(side=tk.LEFT, padx=5)
 
-        row += 1
+        self.row += 1
 
         # Create new project button
         ttk.Button(
             parent, text="Create New Project", command=self.create_new_project
-        ).grid(row=row, column=0, pady=5, sticky=tk.W)
-        row += 1
+        ).grid(row=self.row, column=0, pady=5, sticky=tk.W)
+        self.row += 1
 
         # Projects list frame
         self.projects_list_frame = ttk.Frame(parent)
         self.projects_list_frame.grid(
-            row=row, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
+            row=self.row, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
         )
 
         self.refresh_project_section()
@@ -659,23 +674,28 @@ class SettingsFrame(ttk.Frame):
         self.save_settings()
         self.refresh_project_section()
 
-    def create_break_idle_section(self, parent, start_row):
+    def create_break_idle_section(self, parent):
         """Create break actions and idle settings section"""
-        row = start_row
-
         # Section title
         ttk.Label(
             parent, text="Break Actions & Idle Settings", font=("Arial", 14, "bold")
-        ).grid(row=row, column=0, columnspan=3, pady=10, sticky=tk.W)
-        row += 1
+        ).grid(row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W)
+        self.row += 1
 
         # Create two-column layout
         left_frame = ttk.LabelFrame(parent, text="Idle Settings", padding=10)
-        left_frame.grid(row=row, column=0, padx=5, pady=5, sticky=(tk.N, tk.W, tk.E))
+        left_frame.grid(
+            row=self.row, column=0, padx=5, pady=5, sticky=(tk.N, tk.W, tk.E)
+        )
 
         right_frame = ttk.LabelFrame(parent, text="Break Actions", padding=10)
         right_frame.grid(
-            row=row, column=1, columnspan=2, padx=5, pady=5, sticky=(tk.N, tk.W, tk.E)
+            row=self.row,
+            column=1,
+            columnspan=2,
+            padx=5,
+            pady=5,
+            sticky=(tk.N, tk.W, tk.E),
         )
 
         # IDLE SETTINGS (Left column)

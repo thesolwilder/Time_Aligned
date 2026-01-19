@@ -9,11 +9,11 @@
       "active": true
     },
     "Coding": {
-      "is_default": false,
+      "is_default": true,
       "active": true
     },
     "Music": {
-      "is_default": true,
+      "is_default": false,
       "active": true
     },
     "Exercise": {
@@ -30,7 +30,7 @@
     },
     "C": {
       "is_default": false,
-      "active": true
+      "active": false
     }
   },
   "projects": {
@@ -102,12 +102,12 @@
       "is_default": false
     },
     "A2": {
-      "active": true,
+      "active": false,
       "sphere": "A",
       "is_default": false
     },
     "A3": {
-      "active": true,
+      "active": false,
       "sphere": "A",
       "is_default": false
     },

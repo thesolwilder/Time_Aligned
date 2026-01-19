@@ -658,33 +658,45 @@ class TimeTracker:
 
     def open_settings(self):
         """Open the settings window"""
+        # Don't allow opening settings while tracking time
+        if self.session_active:
+            messagebox.showwarning(
+                "Session Active",
+                "Cannot open settings while tracking time. Please end the session first.",
+            )
+            return
+
         if self.settings_frame is not None:
-            # Settings window already open, bring to front
-            try:
-                self.settings_window.lift()
-                self.settings_window.focus_force()
-                return
-            except:
-                # Window was closed, create new one
-                pass
+            # Settings already open, do nothing
+            return
 
-        # Create new settings window
-        self.settings_window = tk.Toplevel(self.root)
-        self.settings_window.title("Settings")
-        self.settings_window.geometry("900x700")
+        # Hide main frame
+        self.main_frame_container.grid_forget()
 
-        # Create settings frame
-        self.settings_frame = SettingsFrame(self.settings_window, self)
-        self.settings_frame.pack(fill=tk.BOTH, expand=True)
+        # Create settings frame in main window
+        self.settings_frame = SettingsFrame(self.root, self, self.root)
+        self.settings_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Handle window close
-        def on_settings_close():
+        # Update window title
+        self.root.title("Time Aligned - Settings")
+
+    def close_settings(self):
+        """Close settings and return to main view"""
+        if self.settings_frame is not None:
+            # Destroy settings frame
+            self.settings_frame.destroy()
             self.settings_frame = None
-            self.settings_window.destroy()
+
+            # Show main frame again
+            self.main_frame_container.grid(
+                row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+            )
+
+            # Restore window title
+            self.root.title("Time Aligned - Time Tracker")
+
             # Reload settings after closing settings window
             self.settings = self.get_settings()
-
-        self.settings_window.protocol("WM_DELETE_WINDOW", on_settings_close)
 
     def on_closing(self):
         """Clean up before closing"""
