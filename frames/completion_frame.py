@@ -611,6 +611,27 @@ class CompletionFrame(ttk.Frame):
 
             # Add active periods
             for period in session.get("active", []):
+                # Determine primary and secondary projects
+                primary_project = ""
+                secondary_project = ""
+                comment = ""
+                secondary_comment = ""
+                secondary_percentage = 50  # Default percentage
+
+                if period.get("project"):
+                    # Single project case - key is "project"
+                    primary_project = period.get("project", "")
+                    comment = period.get("comment", "")
+                else:
+                    # Multiple projects case - key is "projects" (list)
+                    for project_item in period.get("projects", []):
+                        if project_item.get("project_primary", True):
+                            primary_project = project_item.get("name", "")
+                            comment = project_item.get("comment", "")
+                        else:
+                            secondary_project = project_item.get("name", "")
+                            secondary_comment = project_item.get("comment", "")
+                            secondary_percentage = project_item.get("percentage", 50)
 
                 self.all_periods.append(
                     {
@@ -620,11 +641,38 @@ class CompletionFrame(ttk.Frame):
                         "end": period.get("end", ""),
                         "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
+                        "project": primary_project,
+                        "comment": comment,
+                        "secondary_project": secondary_project,
+                        "secondary_comment": secondary_comment,
+                        "secondary_percentage": secondary_percentage,
                     }
                 )
 
             # Add breaks
             for period in session.get("breaks", []):
+                # Determine primary and secondary actions
+                primary_action = ""
+                secondary_action = ""
+                comment = ""
+                secondary_comment = ""
+                secondary_percentage = 50  # Default percentage
+                
+                if period.get("action"):
+                    # Single action case - key is "action"
+                    primary_action = period.get("action", "")
+                    comment = period.get("comment", "")
+                else:
+                    # Multiple actions case - key is "actions" (list)
+                    for action_item in period.get("actions", []):
+                        if action_item.get("break_primary", True):
+                            primary_action = action_item.get("name", "")
+                            comment = action_item.get("comment", "")
+                        else:
+                            secondary_action = action_item.get("name", "")
+                            secondary_comment = action_item.get("comment", "")
+                            secondary_percentage = action_item.get("percentage", 50)
+
                 self.all_periods.append(
                     {
                         "type": "Break",
@@ -633,11 +681,38 @@ class CompletionFrame(ttk.Frame):
                         "end": period.get("end", ""),
                         "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
+                        "action": primary_action,
+                        "comment": comment,
+                        "secondary_action": secondary_action,
+                        "secondary_comment": secondary_comment,
+                        "secondary_percentage": secondary_percentage,
                     }
                 )
 
             # Add idle periods
             for period in session.get("idle_periods", []):
+                # Determine primary and secondary actions
+                primary_action = ""
+                secondary_action = ""
+                comment = ""
+                secondary_comment = ""
+                secondary_percentage = 50  # Default percentage
+                
+                if period.get("action"):
+                    # Single action case - key is "action"
+                    primary_action = period.get("action", "")
+                    comment = period.get("comment", "")
+                else:
+                    # Multiple actions case - key is "actions" (list)
+                    for action_item in period.get("actions", []):
+                        if action_item.get("idle_primary", True):
+                            primary_action = action_item.get("name", "")
+                            comment = action_item.get("comment", "")
+                        else:
+                            secondary_action = action_item.get("name", "")
+                            secondary_comment = action_item.get("comment", "")
+                            secondary_percentage = action_item.get("percentage", 50)
+
                 self.all_periods.append(
                     {
                         "type": "Idle",
@@ -646,6 +721,11 @@ class CompletionFrame(ttk.Frame):
                         "end": period.get("end", ""),
                         "end_timestamp": period.get("end_timestamp", 0),
                         "duration": period.get("duration", 0),
+                        "action": primary_action,
+                        "comment": comment,
+                        "secondary_action": secondary_action,
+                        "secondary_comment": secondary_comment,
+                        "secondary_percentage": secondary_percentage,
                     }
                 )
 
@@ -658,6 +738,24 @@ class CompletionFrame(ttk.Frame):
 
         for idx, period in enumerate(self.all_periods):
             col = 0
+
+            # Extract saved values at the start for use throughout the loop
+            saved_comment = period.get("comment", "")
+            saved_secondary_comment = period.get("secondary_comment", "")
+            saved_secondary_project = period.get("secondary_project", "")
+            saved_secondary_action = period.get("secondary_action", "")
+            saved_secondary_percentage = period.get("secondary_percentage", 50)
+
+            # Determine if secondary fields should be visible
+            has_secondary_data = False
+            if period["type"] == "Active":
+                has_secondary_data = bool(
+                    saved_secondary_project or saved_secondary_comment
+                )
+            else:
+                has_secondary_data = bool(
+                    saved_secondary_action or saved_secondary_comment
+                )
 
             # Period type with color coding
             type_label = ttk.Label(
@@ -717,11 +815,16 @@ class CompletionFrame(ttk.Frame):
                 # Add "Add New Project..." option
                 project_options = list(active_projects) + ["Add New Project..."]
 
-                # Set initial value for project dropdown
+                # Set initial value for project dropdown - use saved value if available
+                saved_project = period.get("project", "")
                 initial_value = (
-                    default_project
-                    if default_project and default_project in active_projects
-                    else "Select Project"
+                    saved_project
+                    if saved_project and saved_project in active_projects
+                    else (
+                        default_project
+                        if default_project and default_project in active_projects
+                        else "Select Project"
+                    )
                 )
 
                 project_menu = ttk.Combobox(
@@ -750,10 +853,16 @@ class CompletionFrame(ttk.Frame):
                 # Add "Add New Break Action..." option
                 break_action_options = list(break_actions) + ["Add New Break Action..."]
 
+                # Set initial value - use saved action if available
+                saved_action = period.get("action", "")
                 initial_value = (
-                    default_break_action
-                    if default_break_action in break_actions
-                    else "Select Break Action"
+                    saved_action
+                    if saved_action and saved_action in break_actions
+                    else (
+                        default_break_action
+                        if default_break_action in break_actions
+                        else "Select Break Action"
+                    )
                 )
 
                 break_action_menu = ttk.Combobox(
@@ -780,16 +889,19 @@ class CompletionFrame(ttk.Frame):
                     self.idle_action_menus.append(break_action_menu)
                 col += 1
 
-            # First text box (always visible)
+            # First text box (always visible) - populate with saved comment
             text_box = ttk.Entry(periods_frame, width=20)
             text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            if saved_comment:
+                text_box.insert(0, saved_comment)
             self.text_boxes.append(text_box)
             col += 1
 
             # Add toggle button (starts as +, stays in same position)
+            toggle_btn_text = "-" if has_secondary_data else "+"
             toggle_btn = ttk.Button(
                 periods_frame,
-                text="+",
+                text=toggle_btn_text,
                 width=3,
                 command=lambda i=idx: self._toggle_secondary(i),
             )
@@ -806,11 +918,19 @@ class CompletionFrame(ttk.Frame):
                     state="readonly",
                     width=15,
                 )
-                secondary_project_menu.set("Select A Project")
+                # Set initial value - use saved secondary project if available
+                if (
+                    saved_secondary_project
+                    and saved_secondary_project in active_projects
+                ):
+                    secondary_project_menu.set(saved_secondary_project)
+                else:
+                    secondary_project_menu.set("Select A Project")
                 secondary_project_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
-                secondary_project_menu.grid_remove()  # Hide initially
+                if not has_secondary_data:
+                    secondary_project_menu.grid_remove()  # Hide initially if no data
 
                 # Bind selection event
                 secondary_project_menu.bind(
@@ -829,11 +949,16 @@ class CompletionFrame(ttk.Frame):
                     state="readonly",
                     width=15,
                 )
-                secondary_action_menu.set("Select An Action")
+                # Set initial value - use saved secondary action if available
+                if saved_secondary_action and saved_secondary_action in break_actions:
+                    secondary_action_menu.set(saved_secondary_action)
+                else:
+                    secondary_action_menu.set("Select An Action")
                 secondary_action_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
-                secondary_action_menu.grid_remove()  # Hide initially
+                if not has_secondary_data:
+                    secondary_action_menu.grid_remove()  # Hide initially if no data
 
                 # Bind selection event
                 secondary_action_menu.bind(
@@ -849,7 +974,11 @@ class CompletionFrame(ttk.Frame):
             # Secondary text box (hidden initially, appears after secondary dropdown)
             text_box_secondary = ttk.Entry(periods_frame, width=20)
             text_box_secondary.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
-            text_box_secondary.grid_remove()  # Hide initially
+            # Populate with saved secondary comment if available
+            if saved_secondary_comment:
+                text_box_secondary.insert(0, saved_secondary_comment)
+            if not has_secondary_data:
+                text_box_secondary.grid_remove()  # Hide initially if no data
             self.secondary_text_boxes.append(text_box_secondary)
 
             # Percentage spinbox for secondary (hidden initially)
@@ -862,7 +991,7 @@ class CompletionFrame(ttk.Frame):
             )
             col += 1
 
-            percentage_spinbox.set(50)  # Default 50%
+            percentage_spinbox.set(saved_secondary_percentage)  # Use saved percentage or default 50%
 
             # Prevent text selection highlighting - clear selection after any change
             def clear_selection(event):
@@ -872,7 +1001,8 @@ class CompletionFrame(ttk.Frame):
             percentage_spinbox.bind("<<Decrement>>", clear_selection)
             percentage_spinbox.bind("<FocusIn>", clear_selection)
             percentage_spinbox.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
-            percentage_spinbox.grid_remove()  # Hide initially
+            if not has_secondary_data:
+                percentage_spinbox.grid_remove()  # Hide initially if no data
             self.percentage_spinboxes.append(percentage_spinbox)
 
             col += 1
@@ -882,7 +1012,8 @@ class CompletionFrame(ttk.Frame):
                 periods_frame, text="% of this period"
             )
             label_secondary_percentage.grid(row=idx, column=col, sticky=tk.W, pady=2)
-            label_secondary_percentage.grid_remove()  # Hide initially
+            if not has_secondary_data:
+                label_secondary_percentage.grid_remove()  # Hide initially if no data
             self.secondary_percentage_labels.append(label_secondary_percentage)
 
     def _toggle_secondary(self, idx):
