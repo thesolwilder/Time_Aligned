@@ -75,12 +75,6 @@ class SettingsFrame(ttk.Frame):
         self.create_sphere_section(content_frame, row)
         row += 10  # Reserve space for sphere section
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        row += 1
-
         # Project details section
         self.project_section_row = row
         self.project_content_frame = content_frame
@@ -103,12 +97,6 @@ class SettingsFrame(ttk.Frame):
     def create_sphere_section(self, parent, start_row):
         """Create sphere management section"""
         row = start_row
-
-        # Section title
-        ttk.Label(parent, text="Spheres", font=("Arial", 14, "bold")).grid(
-            row=row, column=0, columnspan=3, pady=10, sticky=tk.W
-        )
-        row += 1
 
         # Sphere filter buttons
         filter_frame = ttk.Frame(parent)
@@ -140,33 +128,31 @@ class SettingsFrame(ttk.Frame):
 
         row += 1
 
-        # Create new sphere button
-        ttk.Button(
-            parent, text="Create New Sphere", command=self.create_new_sphere
-        ).grid(row=row, column=0, pady=5, sticky=tk.W)
-        row += 1
 
-        # Sphere dropdown
-        ttk.Label(parent, text="Select Sphere:").grid(
-            row=row, column=0, sticky=tk.W, pady=5
-        )
+
         self.sphere_var = tk.StringVar()
         self.sphere_dropdown = ttk.Combobox(
-            parent, textvariable=self.sphere_var, width=30, font=("Arial", 12)
+            parent, textvariable=self.sphere_var, width=15, font=("Arial", 20)
         )
         self.sphere_dropdown.grid(
-            row=row, column=1, columnspan=2, pady=5, sticky=(tk.W, tk.E)
+            row=row, column=0, columnspan=2, pady=5, sticky=(tk.W)
         )
         self.sphere_dropdown.bind(
             "<<ComboboxSelected>>", lambda e: self.load_selected_sphere()
         )
         row += 1
 
-        # Sphere management frame (shown when sphere is selected)
+         # Sphere management frame (shown when sphere is selected)
         self.sphere_mgmt_frame = ttk.Frame(parent)
         self.sphere_mgmt_frame.grid(
             row=row, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
         )
+        row += 1
+
+        # Create new sphere button
+        ttk.Button(
+            parent, text="Create New Sphere", command=self.create_new_sphere
+        ).grid(row=row, column=0, pady=5, sticky=tk.E)
         row += 1
 
         # Refresh dropdown

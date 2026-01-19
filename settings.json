@@ -82,7 +82,9 @@
     "lifting": {
       "sphere": "Exercise",
       "is_default": true,
-      "active": true
+      "active": true,
+      "note": "test",
+      "goal": ""
     },
     "running": {
       "sphere": "Exercise",

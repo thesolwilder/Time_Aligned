@@ -1,6 +1,7 @@
 # setting frame class
 
 #create widget method
+
 #create frame with row/col incremented so that it automatically shows each method frame when reorder calls in method
 
     #show buttons called
