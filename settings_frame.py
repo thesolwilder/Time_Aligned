@@ -903,6 +903,17 @@ class SettingsFrame(ttk.Frame):
 
         idle_row = header_row
 
+        # Idle tracking enabled toggle
+        idle_enabled_var = tk.BooleanVar(
+            value=idle_settings.get("idle_tracking_enabled", True)
+        )
+        ttk.Checkbutton(
+            idle_frame,
+            text="Enable Idle Tracking",
+            variable=idle_enabled_var,
+        ).grid(row=idle_row, column=0, columnspan=2, sticky=tk.W, pady=5)
+        idle_row += 1
+
         # Idle threshold
         ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
@@ -943,6 +954,9 @@ class SettingsFrame(ttk.Frame):
 
         # Save idle settings button
         def save_idle_settings():
+            self.tracker.settings["idle_settings"][
+                "idle_tracking_enabled"
+            ] = idle_enabled_var.get()
             self.tracker.settings["idle_settings"][
                 "idle_threshold"
             ] = idle_threshold_var.get()

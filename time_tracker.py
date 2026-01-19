@@ -71,6 +71,7 @@ class TimeTracker:
         """Load or create settings file"""
         default_settings = {
             "idle_settings": {
+                "idle_tracking_enabled": True,  # enable/disable idle tracking
                 "idle_threshold": 60,  # seconds before considering idle
                 "idle_break_threshold": 300,  # seconds of idle before auto-break
             },
@@ -575,6 +576,10 @@ class TimeTracker:
     def check_idle(self):
         """Check if user is idle and update status"""
         if not self.session_active or self.break_active:
+            return
+
+        # Skip idle tracking if disabled in settings
+        if not self.settings.get("idle_settings", {}).get("idle_tracking_enabled", True):
             return
 
         idle_time = time.time() - self.last_user_input
