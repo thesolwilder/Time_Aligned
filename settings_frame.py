@@ -19,6 +19,7 @@ class SettingsFrame(ttk.Frame):
         self.current_sphere = None
         self.sphere_filter = tk.StringVar(value="active")
         self.project_filter = tk.StringVar(value="active")
+        self.break_action_filter = tk.StringVar(value="active")
 
         # Track editing states
         self.editing_projects = {}  # {project_name: {widgets}}
@@ -45,10 +46,12 @@ class SettingsFrame(ttk.Frame):
         # Main content frame
         content_frame = ttk.Frame(canvas, padding="10")
 
-        # Configure canvas
-        content_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
+        # Configure canvas scroll region with better update
+        def update_scrollregion(event=None):
+            canvas.update_idletasks()
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        content_frame.bind("<Configure>", update_scrollregion)
         canvas_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -66,13 +69,35 @@ class SettingsFrame(ttk.Frame):
         def on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
-        content_frame.bind("<MouseWheel>", on_mousewheel)
+        def bind_mousewheel(widget):
+            """Recursively bind mousewheel to widget and all children"""
+            widget.bind("<MouseWheel>", on_mousewheel)
+            for child in widget.winfo_children():
+                bind_mousewheel(child)
+
+        # Initial binding
+        bind_mousewheel(content_frame)
+        canvas.bind("<MouseWheel>", on_mousewheel)
+
+        # Re-bind after any updates and update scroll region
+        self.bind_mousewheel_func = lambda: (
+            bind_mousewheel(content_frame),
+            update_scrollregion(),
+        )
+
+        # Store update function for manual calls
+        self.update_scrollregion = update_scrollregion
 
         self.row = 0
 
-        # Title
-        ttk.Label(content_frame, text="Settings", font=("Arial", 16, "bold")).grid(
-            row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W
+        # Back button at top
+        ttk.Button(
+            content_frame, text="Back to Tracker", command=self.tracker.close_settings
+        ).grid(row=self.row, column=0, columnspan=3, pady=10)
+        self.row += 1
+
+        ttk.Separator(content_frame, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10
         )
         self.row += 1
 
@@ -110,11 +135,24 @@ class SettingsFrame(ttk.Frame):
         self.content_frame = content_frame
         self.canvas = canvas
 
+        # Force final scroll region update after all widgets are created
+        content_frame.update_idletasks()
+        canvas.configure(scrollregion=canvas.bbox("all"))
+
     def create_sphere_section(self, parent):
         """Create sphere management section"""
+
+        # Spheres label and filter buttons on same row
+        header_frame = ttk.Frame(parent)
+        header_frame.grid(row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W)
+
+        ttk.Label(header_frame, text="Spheres", font=("Arial", 16, "bold")).pack(
+            side=tk.LEFT, padx=(0, 10)
+        )
+
         # Sphere filter buttons
-        filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=self.row, column=0, columnspan=3, pady=5, sticky=tk.W)
+        filter_frame = ttk.Frame(header_frame)
+        filter_frame.pack(side=tk.LEFT)
 
         ttk.Radiobutton(
             filter_frame,
@@ -145,11 +183,20 @@ class SettingsFrame(ttk.Frame):
         # Dropdown and sphere management frame on the same row
         self.sphere_var = tk.StringVar()
         self.sphere_dropdown = ttk.Combobox(
-            parent, textvariable=self.sphere_var, width=15, font=("Arial", 20)
+            parent,
+            textvariable=self.sphere_var,
+            width=15,
+            font=("Arial", 20),
+            state="readonly",
+            exportselection=False,
         )
         self.sphere_dropdown.grid(row=self.row, column=0, pady=5, sticky=(tk.W))
         self.sphere_dropdown.bind(
             "<<ComboboxSelected>>", lambda e: self.on_sphere_selected()
+        )
+        # Remove selection highlight
+        self.sphere_dropdown.bind(
+            "<FocusIn>", lambda e: self.sphere_dropdown.selection_clear()
         )
 
         # Sphere management frame (shown when sphere is selected)
@@ -199,6 +246,8 @@ class SettingsFrame(ttk.Frame):
         else:
             # Load the selected sphere
             self.load_selected_sphere()
+            # Refresh project list to show only projects for selected sphere
+            self.refresh_project_section()
 
     def create_new_sphere(self):
         """Create a new sphere"""
@@ -222,6 +271,7 @@ class SettingsFrame(ttk.Frame):
             self.refresh_sphere_dropdown()
             self.sphere_var.set(name)
             self.load_selected_sphere()
+            self.refresh_project_section()
 
     def load_selected_sphere(self):
         """Load and display selected sphere details"""
@@ -362,15 +412,30 @@ class SettingsFrame(ttk.Frame):
 
     def create_project_section(self, parent):
         """Create project management section"""
-        # Section title
-        ttk.Label(parent, text="Projects", font=("Arial", 14, "bold")).grid(
-            row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W
+
+        # Projects frame with border
+        projects_frame = ttk.LabelFrame(parent, padding=10)
+        projects_frame.grid(
+            row=self.row,
+            column=0,
+            columnspan=3,
+            padx=5,
+            pady=5,
+            sticky=(tk.W, tk.E),
         )
         self.row += 1
 
+        # Section title and filter buttons on same row (inside the frame)
+        header_frame = ttk.Frame(projects_frame)
+        header_frame.grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
+
+        ttk.Label(header_frame, text="Projects", font=("Arial", 14, "bold")).pack(
+            side=tk.LEFT, padx=(0, 10)
+        )
+
         # Project filter buttons
-        filter_frame = ttk.Frame(parent)
-        filter_frame.grid(row=self.row, column=0, columnspan=3, pady=5, sticky=tk.W)
+        filter_frame = ttk.Frame(header_frame)
+        filter_frame.pack(side=tk.LEFT)
 
         ttk.Radiobutton(
             filter_frame,
@@ -396,18 +461,15 @@ class SettingsFrame(ttk.Frame):
             command=self.refresh_project_section,
         ).pack(side=tk.LEFT, padx=5)
 
-        self.row += 1
-
-        # Create new project button
+        # Create new project button inside frame
         ttk.Button(
-            parent, text="Create New Project", command=self.create_new_project
-        ).grid(row=self.row, column=0, pady=5, sticky=tk.W)
-        self.row += 1
+            projects_frame, text="Create New Project", command=self.create_new_project
+        ).grid(row=1, column=0, pady=5, sticky=tk.W)
 
         # Projects list frame
-        self.projects_list_frame = ttk.Frame(parent)
+        self.projects_list_frame = ttk.Frame(projects_frame)
         self.projects_list_frame.grid(
-            row=self.row, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
+            row=2, column=0, columnspan=3, pady=10, sticky=(tk.W, tk.E)
         )
 
         self.refresh_project_section()
@@ -429,12 +491,16 @@ class SettingsFrame(ttk.Frame):
 
         for name, data in projects.items():
             include = False
-            if filter_val == "active" and data.get("active", True):
-                include = True
-            elif filter_val == "inactive" and not data.get("active", True):
-                include = True
-            elif filter_val == "all":
-                include = True
+            current_sphere = self.sphere_var.get()
+
+            # Only show projects that belong to the currently selected sphere
+            if data.get("sphere") == current_sphere:
+                if filter_val == "active" and data.get("active", True):
+                    include = True
+                elif filter_val == "inactive" and not data.get("active", True):
+                    include = True
+                elif filter_val == "all":
+                    include = True
 
             if include:
                 if data.get("is_default", False):
@@ -455,6 +521,14 @@ class SettingsFrame(ttk.Frame):
                 self.projects_list_frame, idx, project_name, project_data
             )
 
+        # Rebind mousewheel to new widgets
+        if hasattr(self, "bind_mousewheel_func"):
+            self.bind_mousewheel_func()
+
+        # Force scroll region update
+        if hasattr(self, "update_scrollregion"):
+            self.update_scrollregion()
+
     def create_project_row(self, parent, row, project_name, project_data):
         """Create a row for a project"""
         frame = ttk.Frame(parent, relief=tk.RIDGE, borderwidth=1, padding=5)
@@ -470,11 +544,20 @@ class SettingsFrame(ttk.Frame):
 
         # Sphere
         ttk.Label(frame, text="Sphere:").grid(row=0, column=2, sticky=tk.W, padx=5)
-        sphere_var = tk.StringVar(value=project_data.get("sphere", "General"))
+        sphere_var = tk.StringVar(value=project_data.get("sphere", ""))
+        # Get all active spheres
+        active_spheres = [
+            name
+            for name, data in self.tracker.settings.get("spheres", {}).items()
+            if data.get("active", True)
+        ]
         sphere_combo = ttk.Combobox(
-            frame, textvariable=sphere_var, state="disabled", width=15
+            frame,
+            textvariable=sphere_var,
+            values=active_spheres,
+            state="disabled",
+            width=15,
         )
-        sphere_combo["values"] = list(self.tracker.settings.get("spheres", {}).keys())
         sphere_combo.grid(row=0, column=3, sticky=(tk.W, tk.E), padx=5)
 
         # Note
@@ -613,26 +696,118 @@ class SettingsFrame(ttk.Frame):
 
     def create_new_project(self):
         """Create a new project"""
-        name = simpledialog.askstring("New Project", "Enter project name:")
-        if name and name.strip():
-            name = name.strip()
-            if name in self.tracker.settings.get("projects", {}):
-                messagebox.showerror("Error", "A project with this name already exists")
+        # Create custom dialog
+        dialog = tk.Toplevel(self.root)
+        dialog.title("New Project")
+        dialog.geometry("500x300")
+        dialog.transient(self.root)
+        dialog.grab_set()
+
+        # Center the dialog
+        dialog.update_idletasks()
+        x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+        y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+        dialog.geometry(f"+{x}+{y}")
+
+        # Variables
+        name_var = tk.StringVar()
+        sphere_var = tk.StringVar()
+        note_var = tk.StringVar()
+        goal_var = tk.StringVar()
+        result = {"confirmed": False}
+
+        # Get selected sphere (or default if none selected)
+        selected_sphere = self.sphere_var.get()
+        if not selected_sphere or selected_sphere == "Create New Sphere...":
+            selected_sphere = self.tracker._get_default_sphere()
+        sphere_var.set(selected_sphere)
+
+        # Get all active spheres for dropdown
+        active_spheres = [
+            name
+            for name, data in self.tracker.settings.get("spheres", {}).items()
+            if data.get("active", True)
+        ]
+
+        # Form fields
+        ttk.Label(dialog, text="Project Name:").grid(
+            row=0, column=0, sticky=tk.W, padx=10, pady=5
+        )
+        name_entry = ttk.Entry(dialog, textvariable=name_var, width=40)
+        name_entry.grid(row=0, column=1, padx=10, pady=5)
+        name_entry.focus()
+
+        ttk.Label(dialog, text="Sphere:").grid(
+            row=1, column=0, sticky=tk.W, padx=10, pady=5
+        )
+        sphere_combo = ttk.Combobox(
+            dialog,
+            textvariable=sphere_var,
+            values=active_spheres,
+            state="readonly",
+            width=37,
+        )
+        sphere_combo.grid(row=1, column=1, padx=10, pady=5)
+
+        ttk.Label(dialog, text="Note:").grid(
+            row=2, column=0, sticky=tk.W, padx=10, pady=5
+        )
+        note_entry = ttk.Entry(dialog, textvariable=note_var, width=40)
+        note_entry.grid(row=2, column=1, padx=10, pady=5)
+
+        ttk.Label(dialog, text="Goal:").grid(
+            row=3, column=0, sticky=tk.W, padx=10, pady=5
+        )
+        goal_entry = ttk.Entry(dialog, textvariable=goal_var, width=40)
+        goal_entry.grid(row=3, column=1, padx=10, pady=5)
+
+        def on_ok():
+            name = name_var.get().strip()
+            if not name:
+                messagebox.showerror(
+                    "Error", "Project name cannot be empty", parent=dialog
+                )
                 return
+            if name in self.tracker.settings.get("projects", {}):
+                messagebox.showerror(
+                    "Error", "A project with this name already exists", parent=dialog
+                )
+                return
+            result["confirmed"] = True
+            dialog.destroy()
 
-            # Get default sphere
-            default_sphere = self.tracker._get_default_sphere()
+        def on_cancel():
+            dialog.destroy()
 
+        # Buttons
+        button_frame = ttk.Frame(dialog)
+        button_frame.grid(row=4, column=0, columnspan=2, pady=20)
+
+        ttk.Button(button_frame, text="OK", command=on_ok, width=10).pack(
+            side=tk.LEFT, padx=5
+        )
+        ttk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(
+            side=tk.LEFT, padx=5
+        )
+
+        # Bind Enter key to OK
+        dialog.bind("<Return>", lambda e: on_ok())
+        dialog.bind("<Escape>", lambda e: on_cancel())
+
+        # Wait for dialog to close
+        dialog.wait_window()
+
+        if result["confirmed"]:
             # Add new project
             if "projects" not in self.tracker.settings:
                 self.tracker.settings["projects"] = {}
 
-            self.tracker.settings["projects"][name] = {
-                "sphere": default_sphere,
+            self.tracker.settings["projects"][name_var.get().strip()] = {
+                "sphere": sphere_var.get(),
                 "is_default": False,
                 "active": True,
-                "note": "",
-                "goal": "",
+                "note": note_var.get(),
+                "goal": goal_var.get(),
             }
 
             self.save_settings()
@@ -640,9 +815,13 @@ class SettingsFrame(ttk.Frame):
 
     def set_default_project(self, project_name):
         """Set a project as default"""
-        # Remove default from all projects
-        for name in self.tracker.settings.get("projects", {}):
-            self.tracker.settings["projects"][name]["is_default"] = False
+        # Get the sphere of the project being set as default
+        project_sphere = self.tracker.settings["projects"][project_name].get("sphere")
+
+        # Remove default from all projects in the SAME sphere only
+        for name, data in self.tracker.settings.get("projects", {}).items():
+            if data.get("sphere") == project_sphere:
+                self.tracker.settings["projects"][name]["is_default"] = False
 
         # Set new default
         self.tracker.settings["projects"][project_name]["is_default"] = True
@@ -676,50 +855,71 @@ class SettingsFrame(ttk.Frame):
 
     def create_break_idle_section(self, parent):
         """Create break actions and idle settings section"""
-        # Section title
-        ttk.Label(
-            parent, text="Break Actions & Idle Settings", font=("Arial", 14, "bold")
-        ).grid(row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W)
-        self.row += 1
+        # BREAK ACTIONS SECTION (First)
 
-        # Create two-column layout
-        left_frame = ttk.LabelFrame(parent, text="Idle Settings", padding=10)
-        left_frame.grid(
-            row=self.row, column=0, padx=5, pady=5, sticky=(tk.N, tk.W, tk.E)
-        )
-
-        right_frame = ttk.LabelFrame(parent, text="Break Actions", padding=10)
-        right_frame.grid(
+        break_frame = ttk.LabelFrame(parent, padding=10)
+        break_frame.grid(
             row=self.row,
-            column=1,
-            columnspan=2,
+            column=0,
+            columnspan=3,
             padx=5,
             pady=5,
-            sticky=(tk.N, tk.W, tk.E),
+            sticky=(tk.W, tk.E),
         )
+        self.row += 1
 
-        # IDLE SETTINGS (Left column)
+        # Store reference for refresh operations
+        self.break_actions_frame = break_frame
+
+        self.create_break_actions_list(break_frame)
+
+        # SEPARATOR
+        ttk.Separator(parent, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
+
+        # IDLE SETTINGS SECTION (Second)
+        idle_frame = ttk.LabelFrame(parent, padding=10)
+        idle_frame.grid(
+            row=self.row,
+            column=0,
+            columnspan=3,
+            padx=5,
+            pady=5,
+            sticky=(tk.W, tk.E),
+        )
+        self.row += 1
+
+        # Header inside the frame
+        header_row = 0
+        ttk.Label(idle_frame, text="Idle Settings", font=("Arial", 14, "bold")).grid(
+            row=header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
+        )
+        header_row += 1
+
+        # IDLE SETTINGS
         idle_settings = self.tracker.settings.get("idle_settings", {})
 
-        idle_row = 0
+        idle_row = header_row
 
         # Idle threshold
-        ttk.Label(left_frame, text="Idle Threshold (seconds):").grid(
+        ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
         idle_threshold_var = tk.IntVar(value=idle_settings.get("idle_threshold", 60))
         idle_threshold_spin = ttk.Spinbox(
-            left_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
+            idle_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
         )
         idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
         idle_row += 1
 
         # Idle break threshold
-        ttk.Label(left_frame, text="Auto-break after idle (seconds):").grid(
+        ttk.Label(idle_frame, text="Auto-break after idle (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
 
-        idle_break_frame = ttk.Frame(left_frame)
+        idle_break_frame = ttk.Frame(idle_frame)
         idle_break_frame.grid(row=idle_row, column=1, pady=5, padx=5)
 
         idle_break_var = tk.StringVar()
@@ -759,40 +959,131 @@ class SettingsFrame(ttk.Frame):
             messagebox.showinfo("Success", "Idle settings saved")
 
         ttk.Button(
-            left_frame, text="Save Idle Settings", command=save_idle_settings
+            idle_frame, text="Save Idle Settings", command=save_idle_settings
         ).grid(row=idle_row, column=0, columnspan=2, pady=10)
 
-        # BREAK ACTIONS (Right column)
-        self.create_break_actions_list(right_frame)
+        # Rebind mousewheel to new widgets
+        if hasattr(self, "bind_mousewheel_func"):
+            self.bind_mousewheel_func()
+
+        # Force scroll region update
+        if hasattr(self, "update_scrollregion"):
+            self.update_scrollregion()
 
     def create_break_actions_list(self, parent):
         """Create break actions management list"""
+        row = 0
+
+        # Header with label and filter buttons on same row
+        header_frame = ttk.Frame(parent)
+        header_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
+
+        ttk.Label(header_frame, text="Break Actions", font=("Arial", 14, "bold")).pack(
+            side=tk.LEFT, padx=(0, 10)
+        )
+
+        # Filter buttons
+        filter_frame = ttk.Frame(header_frame)
+        filter_frame.pack(side=tk.LEFT)
+
+        ttk.Radiobutton(
+            filter_frame,
+            text="Active",
+            variable=self.break_action_filter,
+            value="active",
+            command=self.refresh_break_actions,
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Radiobutton(
+            filter_frame,
+            text="All",
+            variable=self.break_action_filter,
+            value="all",
+            command=self.refresh_break_actions,
+        ).pack(side=tk.LEFT, padx=5)
+
+        ttk.Radiobutton(
+            filter_frame,
+            text="Archived",
+            variable=self.break_action_filter,
+            value="inactive",
+            command=self.refresh_break_actions,
+        ).pack(side=tk.LEFT, padx=5)
+        row += 1
+
         # Create new break action button
         ttk.Button(
             parent, text="Create New Break Action", command=self.create_new_break_action
-        ).grid(row=0, column=0, columnspan=3, pady=5, sticky=tk.W)
+        ).grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
+        row += 1
+
+        # Store the starting row for break actions list
+        self.break_actions_list_row = row
 
         # Break actions list
         break_actions = self.tracker.settings.get("break_actions", {})
+        filter_val = self.break_action_filter.get()
 
-        # Sort: default first, then alphabetically
-        sorted_actions = []
+        # Filter and sort: default first, then alphabetically
+        filtered_actions = []
         default_action = None
 
         for name, data in break_actions.items():
-            if data.get("is_default", False):
-                default_action = (name, data)
-            else:
-                sorted_actions.append((name, data))
+            include = False
+            if filter_val == "active" and data.get("active", True):
+                include = True
+            elif filter_val == "inactive" and not data.get("active", True):
+                include = True
+            elif filter_val == "all":
+                include = True
 
-        sorted_actions.sort(key=lambda x: x[0])
+            if include:
+                if data.get("is_default", False):
+                    default_action = (name, data)
+                else:
+                    filtered_actions.append((name, data))
+
+        filtered_actions.sort(key=lambda x: x[0])
 
         if default_action:
-            sorted_actions.insert(0, default_action)
+            filtered_actions.insert(0, default_action)
 
         # Display break actions
-        for idx, (action_name, action_data) in enumerate(sorted_actions):
-            self.create_break_action_row(parent, idx + 1, action_name, action_data)
+        for idx, (action_name, action_data) in enumerate(filtered_actions):
+            self.create_break_action_row(
+                parent, self.break_actions_list_row + idx, action_name, action_data
+            )
+
+        # Rebind mousewheel to new widgets
+        if hasattr(self, "bind_mousewheel_func"):
+            self.bind_mousewheel_func()
+
+        # Force scroll region update
+        if hasattr(self, "update_scrollregion"):
+            self.update_scrollregion()
+
+    def toggle_break_action_edit(self, action_name, notes_text, edit_btn):
+        """Toggle break action edit mode"""
+        if edit_btn["text"] == "Edit":
+            # Enable editing
+            notes_text.config(state="normal")
+            edit_btn.config(text="Save")
+        else:
+            # Save changes (use .get() for Entry widget, not .get("1.0", "end-1c"))
+            notes_content = notes_text.get()
+            self.tracker.settings["break_actions"][action_name]["notes"] = notes_content
+            self.save_settings()
+
+            # Disable editing
+            notes_text.config(state="disabled")
+            edit_btn.config(text="Edit")
+
+    def refresh_break_actions(self):
+        """Refresh break actions display"""
+        if hasattr(self, "break_actions_frame"):
+            for child in self.break_actions_frame.winfo_children():
+                child.destroy()
+            self.create_break_actions_list(self.break_actions_frame)
 
     def create_break_action_row(self, parent, row, action_name, action_data):
         """Create a row for a break action"""
@@ -803,6 +1094,27 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(frame, text=action_name, font=("Arial", 10, "bold")).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
+
+        # Notes text box
+        ttk.Label(frame, text="Notes:").grid(row=1, column=0, sticky=tk.W, pady=5)
+        notes_text = tk.Entry(frame, width=20, state="disabled")
+        notes_text.grid(row=1, column=1, columnspan=2, pady=5, sticky=(tk.W, tk.E))
+
+        # Load existing notes
+        existing_notes = action_data.get("notes", "")
+        notes_text.config(state="normal")
+        notes_text.insert(0, existing_notes)
+        notes_text.config(state="disabled")
+
+        # Edit/Save button for notes
+        edit_btn = ttk.Button(
+            frame,
+            text="Edit",
+            command=lambda: self.toggle_break_action_edit(
+                action_name, notes_text, edit_btn
+            ),
+        )
+        edit_btn.grid(row=1, column=3, padx=5, pady=5)
 
         # Buttons
         is_default = action_data.get("is_default", False)
@@ -858,17 +1170,7 @@ class SettingsFrame(ttk.Frame):
             }
 
             self.save_settings()
-
-            # Refresh break actions display
-            for widget in self.content_frame.winfo_children():
-                if (
-                    isinstance(widget, ttk.LabelFrame)
-                    and widget.cget("text") == "Break Actions"
-                ):
-                    for child in widget.winfo_children():
-                        child.destroy()
-                    self.create_break_actions_list(widget)
-                    break
+            self.refresh_break_actions()
 
     def set_default_break_action(self, action_name):
         """Set a break action as default"""
@@ -879,17 +1181,7 @@ class SettingsFrame(ttk.Frame):
         # Set new default
         self.tracker.settings["break_actions"][action_name]["is_default"] = True
         self.save_settings()
-
-        # Refresh display
-        for widget in self.content_frame.winfo_children():
-            if (
-                isinstance(widget, ttk.LabelFrame)
-                and widget.cget("text") == "Break Actions"
-            ):
-                for child in widget.winfo_children():
-                    child.destroy()
-                self.create_break_actions_list(widget)
-                break
+        self.refresh_break_actions()
 
     def toggle_break_action_active(self, action_name):
         """Toggle break action active/inactive status"""
@@ -900,17 +1192,7 @@ class SettingsFrame(ttk.Frame):
             "active"
         ] = not current_status
         self.save_settings()
-
-        # Refresh display
-        for widget in self.content_frame.winfo_children():
-            if (
-                isinstance(widget, ttk.LabelFrame)
-                and widget.cget("text") == "Break Actions"
-            ):
-                for child in widget.winfo_children():
-                    child.destroy()
-                self.create_break_actions_list(widget)
-                break
+        self.refresh_break_actions()
 
     def delete_break_action(self, action_name):
         """Delete a break action"""
@@ -926,14 +1208,4 @@ class SettingsFrame(ttk.Frame):
             del self.tracker.settings["break_actions"][action_name]
 
         self.save_settings()
-
-        # Refresh display
-        for widget in self.content_frame.winfo_children():
-            if (
-                isinstance(widget, ttk.LabelFrame)
-                and widget.cget("text") == "Break Actions"
-            ):
-                for child in widget.winfo_children():
-                    child.destroy()
-                self.create_break_actions_list(widget)
-                break
+        self.refresh_break_actions()
