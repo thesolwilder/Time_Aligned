@@ -240,7 +240,9 @@ class TimeTracker:
 
         # Bind mousewheel recursively to all widgets
         def bind_mousewheel(widget):
-            widget.bind("<MouseWheel>", on_mousewheel)
+            # Skip Combobox widgets - they have their own mousewheel handling
+            if not isinstance(widget, ttk.Combobox):
+                widget.bind("<MouseWheel>", on_mousewheel)
             for child in widget.winfo_children():
                 bind_mousewheel(child)
 
@@ -549,12 +551,20 @@ class TimeTracker:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         def bind_mousewheel(widget):
-            widget.bind("<MouseWheel>", on_mousewheel)
+            # Skip Combobox widgets - they have their own mousewheel handling
+            if not isinstance(widget, ttk.Combobox):
+                widget.bind("<MouseWheel>", on_mousewheel)
             for child in widget.winfo_children():
                 bind_mousewheel(child)
 
         bind_mousewheel(completion_container)
         bind_mousewheel(self.completion_frame)
+
+        # Store canvas reference and binding function in completion frame
+        self.completion_frame.canvas = canvas
+        self.completion_frame.bind_mousewheel_func = lambda: bind_mousewheel(
+            self.completion_frame
+        )
 
     def show_main_frame(self):
         """Show main timer frame (called from other frames to navigate back)"""
@@ -579,7 +589,9 @@ class TimeTracker:
             return
 
         # Skip idle tracking if disabled in settings
-        if not self.settings.get("idle_settings", {}).get("idle_tracking_enabled", True):
+        if not self.settings.get("idle_settings", {}).get(
+            "idle_tracking_enabled", True
+        ):
             return
 
         idle_time = time.time() - self.last_user_input
