@@ -17,52 +17,48 @@ from test_helpers import TestDataGenerator, TestFileManager
 
 class TestAnalysisFiltering(unittest.TestCase):
     """Test analysis frame filtering"""
-    
+
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
         self.test_data_file = "test_analysis_data.json"
         self.test_settings_file = "test_analysis_settings.json"
-        
+
         # Create test settings
         self.file_manager.create_test_file(
-            self.test_settings_file,
-            TestDataGenerator.create_settings_data()
+            self.test_settings_file, TestDataGenerator.create_settings_data()
         )
-        
+
         # Create test data with sessions
         test_data = TestDataGenerator.create_session_data()
         self.file_manager.create_test_file(self.test_data_file, test_data)
-    
+
     def tearDown(self):
         """Clean up test files"""
         self.file_manager.cleanup()
-    
+
     def test_session_data_structure(self):
         """Test that test data has correct structure"""
         with open(self.test_data_file, "r") as f:
             data = json.load(f)
-        
+
         self.assertGreater(len(data), 0)
-        
+
         session = list(data.values())[0]
         self.assertIn("sphere", session)
         self.assertIn("active", session)
         self.assertIn("breaks", session)
         self.assertIn("active_duration", session)
-    
+
     def test_filter_by_sphere(self):
         """Test filtering sessions by sphere"""
         with open(self.test_data_file, "r") as f:
             data = json.load(f)
-        
+
         # Filter by sphere
         test_sphere = "TestSphere"
-        filtered = {
-            k: v for k, v in data.items()
-            if v.get("sphere") == test_sphere
-        }
-        
+        filtered = {k: v for k, v in data.items() if v.get("sphere") == test_sphere}
+
         # All filtered sessions should have the correct sphere
         for session in filtered.values():
             self.assertEqual(session["sphere"], test_sphere)

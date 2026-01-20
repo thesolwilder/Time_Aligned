@@ -3,17 +3,20 @@
 This guide will help you set up Google Sheets API integration to automatically upload your session data to a Google Spreadsheet.
 
 ## Prerequisites
+
 - A Google account
 - Access to Google Cloud Console
 
 ## Step 1: Install Required Dependencies
 
 Run the following command to install the Google API libraries:
+
 ```bash
 pip install -r requirements.txt
 ```
 
 Or install individually:
+
 ```bash
 pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client
 ```
@@ -72,6 +75,7 @@ pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-pyt
 ## Step 7: First-Time Authentication
 
 The first time a session is uploaded:
+
 1. A browser window will open asking you to sign in to your Google account
 2. Grant the requested permissions (read/write access to Google Sheets)
 3. The app will save your authentication token in `token.pickle`
@@ -80,6 +84,7 @@ The first time a session is uploaded:
 ## What Gets Uploaded
 
 For each session, the following data is uploaded to your spreadsheet:
+
 - Session ID
 - Date
 - Start Time
@@ -96,18 +101,22 @@ For each session, the following data is uploaded to your spreadsheet:
 ## Troubleshooting
 
 ### "Credentials file not found"
+
 - Make sure `credentials.json` is in the project folder
 - Check that the path in settings is correct
 
 ### "Authentication failed"
+
 - Delete `token.pickle` and try again
 - Make sure you've added yourself as a test user in the OAuth consent screen
 
 ### "Spreadsheet not found"
+
 - Verify the Spreadsheet ID is correct
 - Make sure the Google account you authenticated with has access to the spreadsheet
 
 ### "Permission denied"
+
 - The authenticated account doesn't have edit access to the spreadsheet
 - Share the spreadsheet with your Google account with Editor permissions
 

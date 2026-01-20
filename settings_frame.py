@@ -1120,7 +1120,7 @@ class SettingsFrame(ttk.Frame):
     def create_google_sheets_section(self, parent):
         """Create Google Sheets integration settings section"""
         from tkinter import filedialog
-        
+
         google_frame = ttk.LabelFrame(parent, padding=10)
         google_frame.grid(
             row=self.row,
@@ -1136,9 +1136,7 @@ class SettingsFrame(ttk.Frame):
         google_header_row = 0
         ttk.Label(
             google_frame, text="Google Sheets Integration", font=("Arial", 14, "bold")
-        ).grid(
-            row=google_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
-        )
+        ).grid(row=google_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
         google_header_row += 1
 
         # Get current settings
@@ -1159,11 +1157,15 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(google_frame, text="Spreadsheet ID:").grid(
             row=google_row, column=0, sticky=tk.W, pady=5
         )
-        spreadsheet_id_var = tk.StringVar(value=google_settings.get("spreadsheet_id", ""))
+        spreadsheet_id_var = tk.StringVar(
+            value=google_settings.get("spreadsheet_id", "")
+        )
         spreadsheet_id_entry = ttk.Entry(
             google_frame, textvariable=spreadsheet_id_var, width=50
         )
-        spreadsheet_id_entry.grid(row=google_row, column=1, columnspan=2, pady=5, padx=5, sticky=(tk.W, tk.E))
+        spreadsheet_id_entry.grid(
+            row=google_row, column=1, columnspan=2, pady=5, padx=5, sticky=(tk.W, tk.E)
+        )
         google_row += 1
 
         # Help text for spreadsheet ID
@@ -1171,7 +1173,7 @@ class SettingsFrame(ttk.Frame):
             google_frame,
             text="Get ID from URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit",
             font=("Arial", 8),
-            foreground="gray"
+            foreground="gray",
         )
         help_text.grid(row=google_row, column=1, columnspan=2, sticky=tk.W, padx=5)
         google_row += 1
@@ -1180,8 +1182,12 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(google_frame, text="Sheet Name (Tab):").grid(
             row=google_row, column=0, sticky=tk.W, pady=5
         )
-        sheet_name_var = tk.StringVar(value=google_settings.get("sheet_name", "Sessions"))
-        sheet_name_entry = ttk.Entry(google_frame, textvariable=sheet_name_var, width=30)
+        sheet_name_var = tk.StringVar(
+            value=google_settings.get("sheet_name", "Sessions")
+        )
+        sheet_name_entry = ttk.Entry(
+            google_frame, textvariable=sheet_name_var, width=30
+        )
         sheet_name_entry.grid(row=google_row, column=1, pady=5, padx=5, sticky=tk.W)
         google_row += 1
 
@@ -1189,18 +1195,22 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(google_frame, text="Credentials File:").grid(
             row=google_row, column=0, sticky=tk.W, pady=5
         )
-        credentials_var = tk.StringVar(value=google_settings.get("credentials_file", "credentials.json"))
-        credentials_entry = ttk.Entry(google_frame, textvariable=credentials_var, width=30)
+        credentials_var = tk.StringVar(
+            value=google_settings.get("credentials_file", "credentials.json")
+        )
+        credentials_entry = ttk.Entry(
+            google_frame, textvariable=credentials_var, width=30
+        )
         credentials_entry.grid(row=google_row, column=1, pady=5, padx=5, sticky=tk.W)
-        
+
         def browse_credentials():
             filename = filedialog.askopenfilename(
                 title="Select Google API Credentials File",
-                filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
             )
             if filename:
                 credentials_var.set(filename)
-        
+
         ttk.Button(google_frame, text="Browse", command=browse_credentials).grid(
             row=google_row, column=2, pady=5, padx=5, sticky=tk.W
         )
@@ -1210,60 +1220,63 @@ class SettingsFrame(ttk.Frame):
         instructions_label = ttk.Label(
             google_frame,
             text="Setup Guide: Download credentials.json from Google Cloud Console\n"
-                 "1. Go to console.cloud.google.com\n"
-                 "2. Create/select a project\n"
-                 "3. Enable Google Sheets API\n"
-                 "4. Create OAuth 2.0 credentials (Desktop app)\n"
-                 "5. Download as credentials.json",
+            "1. Go to console.cloud.google.com\n"
+            "2. Create/select a project\n"
+            "3. Enable Google Sheets API\n"
+            "4. Create OAuth 2.0 credentials (Desktop app)\n"
+            "5. Download as credentials.json",
             font=("Arial", 8),
             foreground="blue",
-            justify=tk.LEFT
+            justify=tk.LEFT,
         )
-        instructions_label.grid(row=google_row, column=0, columnspan=3, sticky=tk.W, pady=10)
+        instructions_label.grid(
+            row=google_row, column=0, columnspan=3, sticky=tk.W, pady=10
+        )
         google_row += 1
 
         # Test connection button
         status_label = ttk.Label(google_frame, text="", foreground="blue")
-        status_label.grid(row=google_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5)
-        
+        status_label.grid(
+            row=google_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
+        )
+
         def test_connection():
             """Test the Google Sheets connection"""
             status_label.config(text="Testing connection...", foreground="blue")
             google_frame.update()
-            
+
             # Save current settings temporarily
             temp_settings = {
                 "enabled": True,
                 "spreadsheet_id": spreadsheet_id_var.get(),
                 "sheet_name": sheet_name_var.get(),
-                "credentials_file": credentials_var.get()
+                "credentials_file": credentials_var.get(),
             }
             old_settings = self.tracker.settings.get("google_sheets", {})
             self.tracker.settings["google_sheets"] = temp_settings
             self.save_settings()
-            
+
             # Test connection
             try:
                 from google_sheets_integration import GoogleSheetsUploader
+
                 uploader = GoogleSheetsUploader(self.tracker.settings_file)
                 success, message = uploader.test_connection()
-                
+
                 if success:
                     status_label.config(text=f"✓ {message}", foreground="green")
                 else:
                     status_label.config(text=f"✗ {message}", foreground="red")
             except Exception as e:
                 status_label.config(text=f"✗ Error: {str(e)}", foreground="red")
-            
+
             # Restore original settings
             self.tracker.settings["google_sheets"] = old_settings
             self.save_settings()
-        
-        ttk.Button(
-            google_frame,
-            text="Test Connection",
-            command=test_connection
-        ).grid(row=google_row, column=0, pady=5)
+
+        ttk.Button(google_frame, text="Test Connection", command=test_connection).grid(
+            row=google_row, column=0, pady=5
+        )
         google_row += 1
         google_row += 1  # Space for status label
 
@@ -1273,7 +1286,7 @@ class SettingsFrame(ttk.Frame):
                 "enabled": enabled_var.get(),
                 "spreadsheet_id": spreadsheet_id_var.get().strip(),
                 "sheet_name": sheet_name_var.get().strip(),
-                "credentials_file": credentials_var.get().strip()
+                "credentials_file": credentials_var.get().strip(),
             }
             self.save_settings()
             messagebox.showinfo("Success", "Google Sheets settings saved")
