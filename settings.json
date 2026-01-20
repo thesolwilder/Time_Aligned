@@ -181,5 +181,12 @@
       "active": false,
       "is_default": false
     }
+  },
+  "analysis_settings": {
+    "card_ranges": [
+      "Last 7 Days",
+      "Last 14 Days",
+      "All Time"
+    ]
   }
 }

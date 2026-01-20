@@ -8,6 +8,7 @@ from pynput import mouse, keyboard
 
 from frames.completion_frame import CompletionFrame
 from settings_frame import SettingsFrame
+from analysis_frame import AnalysisFrame
 
 
 class TimeTracker:
@@ -232,6 +233,12 @@ class TimeTracker:
             button_frame, text="Settings", command=self.open_settings
         )
         settings_button.grid(row=0, column=3, padx=5)
+
+        # Analysis button
+        analysis_button = ttk.Button(
+            button_frame, text="Analysis", command=self.open_analysis
+        )
+        analysis_button.grid(row=0, column=4, padx=5)
 
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -703,6 +710,45 @@ class TimeTracker:
             # Destroy settings frame
             self.settings_frame.destroy()
             self.settings_frame = None
+
+            # Show main frame again
+            self.main_frame_container.grid(
+                row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+            )
+
+            # Restore window title
+            self.root.title("Time Aligned - Time Tracker")
+
+    def open_analysis(self):
+        """Open the analysis window"""
+        # Don't allow opening analysis while tracking time
+        if self.session_active:
+            messagebox.showwarning(
+                "Session Active",
+                "Cannot open analysis while tracking time. Please end the session first.",
+            )
+            return
+
+        if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
+            # Analysis already open, do nothing
+            return
+
+        # Hide main frame
+        self.main_frame_container.grid_forget()
+
+        # Create analysis frame in main window
+        self.analysis_frame = AnalysisFrame(self.root, self, self.root)
+        self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Update window title
+        self.root.title("Time Aligned - Analysis")
+
+    def close_analysis(self):
+        """Close analysis and return to main view"""
+        if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
+            # Destroy analysis frame
+            self.analysis_frame.destroy()
+            self.analysis_frame = None
 
             # Show main frame again
             self.main_frame_container.grid(
