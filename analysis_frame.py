@@ -5,6 +5,8 @@ import csv
 from datetime import datetime, timedelta
 import random
 
+from ui_helpers import ScrollableFrame
+
 
 class AnalysisFrame(ttk.Frame):
     def __init__(self, parent, tracker, root):
@@ -49,18 +51,8 @@ class AnalysisFrame(ttk.Frame):
 
     def get_default_project(self, sphere):
         """Get the default project for a given sphere"""
-        for project, data in self.tracker.settings.get("projects", {}).items():
-            if (
-                data.get("sphere") == sphere
-                and data.get("is_default", False)
-                and data.get("active", True)
-            ):
-                return project
-        # Fallback to first active project in the sphere
-        for project, data in self.tracker.settings.get("projects", {}).items():
-            if data.get("sphere") == sphere and data.get("active", True):
-                return project
-        return "All Projects"
+        result = self.tracker.get_default_project(sphere)
+        return result if result else "All Projects"
 
     def save_card_ranges(self):
         """Save card range preferences to settings"""
@@ -78,46 +70,13 @@ class AnalysisFrame(ttk.Frame):
     def create_widgets(self):
         """Create all UI elements for the analysis frame"""
         # Create scrollable container for entire frame
-        main_canvas = tk.Canvas(self)
-        main_scrollbar = ttk.Scrollbar(
-            self, orient="vertical", command=main_canvas.yview
-        )
+        scrollable_container = ScrollableFrame(self)
+        scrollable_container.pack(fill="both", expand=True)
 
-        # Main content frame inside canvas
-        content_frame = ttk.Frame(main_canvas)
-
-        # Configure canvas
-        main_canvas.configure(yscrollcommand=main_scrollbar.set)
-        main_canvas_window = main_canvas.create_window(
-            (0, 0), window=content_frame, anchor="nw"
-        )
-
-        def on_content_configure(event):
-            main_canvas.configure(scrollregion=main_canvas.bbox("all"))
-            main_canvas.itemconfig(main_canvas_window, width=event.width)
-
-        content_frame.bind("<Configure>", on_content_configure)
-        main_canvas.bind("<Configure>", on_content_configure)
-
-        # Mousewheel scrolling for main canvas
-        def on_main_mousewheel(event):
-            main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def bind_mousewheel_recursive(widget):
-            """Recursively bind mcontent_framewheel to widget and children, skip Combobox and nested canvas"""
-            if not isinstance(widget, ttk.Combobox) and not isinstance(
-                widget, tk.Canvas
-            ):
-                widget.bind("<MouseWheel>", on_main_mousewheel)
-            for child in widget.winfo_children():
-                bind_mousewheel_recursive(child)
-
-        # Pack canvas and scrollbar
-        main_canvas.pack(side="left", fill="both", expand=True)
-        main_scrollbar.pack(side="right", fill="y")
+        content_frame = scrollable_container.get_content_frame()
 
         # Store references
-        self.main_canvas = main_canvas
+        self.main_canvas = scrollable_container.canvas
         self.content_frame = content_frame
 
         # Back button and CSV export
@@ -265,17 +224,11 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_frame = ttk.Frame(timeline_container)
         self.timeline_frame.pack(fill="both", expand=True)
 
-        # Bind mousewheel to scroll the main canvas
-        self.timeline_frame.bind("<MouseWheel>", on_main_mousewheel)
-
         # Configure grid weights for content_frame
         content_frame.columnconfigure(0, weight=1)
         content_frame.columnconfigure(1, weight=1)
         content_frame.columnconfigure(2, weight=1)
         content_frame.rowconfigure(5, weight=1)
-
-        # Bind mousewheel to all widgets after creation
-        bind_mousewheel_recursive(content_frame)
 
         # Load initial data
         self.refresh_all()

@@ -96,22 +96,18 @@ class TestTimeTrackingAccuracy(unittest.TestCase):
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
 
-        start_time = time.time()
         tracker.start_session()
         time.sleep(0.3)  # Work for 0.3 seconds
         tracker.end_session()
-        end_time = time.time()
 
         with open(self.test_data_file, "r") as f:
             data = json.load(f)
 
         session = list(data.values())[0]
-        expected_duration = end_time - start_time
 
-        # Duration should be approximately the elapsed time
-        assert_duration_accurate(
-            self, expected_duration, session["active_duration"], tolerance=1.0
-        )
+        # Active duration should be close to sleep time (0.3s)
+        # We allow a tolerance for system overhead
+        assert_duration_accurate(self, 0.3, session["active_duration"], tolerance=1.0)
 
         root.destroy()
 

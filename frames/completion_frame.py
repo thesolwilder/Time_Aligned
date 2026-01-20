@@ -566,60 +566,17 @@ class CompletionFrame(ttk.Frame):
 
     def _get_active_spheres(self):
         """Get active spheres and default sphere"""
-        active_spheres = [
-            sphere
-            for sphere, data in self.tracker.settings["spheres"].items()
-            if data.get("active", True)
-        ]
-
-        default_sphere = next(
-            (
-                sphere
-                for sphere, data in self.tracker.settings["spheres"].items()
-                if data.get("is_default", False)
-            ),
-            None,
-        )
-
-        return active_spheres, default_sphere
+        return self.tracker.get_active_spheres()
 
     def _get_sphere_projects(self):
         """Get active projects and default project for the currently selected sphere"""
-        active_projects = [
-            proj
-            for proj, data in self.tracker.settings["projects"].items()
-            if data.get("active", True) and data.get("sphere") == self.selected_sphere
-        ]
-
-        default_project = next(
-            (
-                proj
-                for proj, data in self.tracker.settings["projects"].items()
-                if data.get("is_default", True)
-                and data.get("sphere") == self.selected_sphere
-            ),
-            None,
-        )
-
+        active_projects = self.tracker.get_active_projects(self.selected_sphere)
+        default_project = self.tracker.get_default_project(self.selected_sphere)
         return active_projects, default_project
 
     def _get_break_actions(self):
         """Get break actions for the currently selected sphere"""
-        break_actions = [
-            action
-            for action, data in self.tracker.settings["break_actions"].items()
-            if data.get("active", True)
-        ]
-
-        default_action = next(
-            (
-                action
-                for action, data in self.tracker.settings["break_actions"].items()
-                if data.get("is_default", True)
-            ),
-            None,
-        )
-        return break_actions, default_action
+        return self.tracker.get_active_break_actions()
 
     def _create_timeline(self):
         """Create chronological timeline of all active/break/idle periods"""

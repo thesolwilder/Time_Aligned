@@ -8,6 +8,7 @@ It appends new session data to the configured spreadsheet.
 import os
 import json
 import pickle
+import re
 from datetime import datetime
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -15,24 +16,29 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# Scopes required for Google Sheets API
-SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
+# Scopes for Google Sheets API
+# Use read-only scope for viewing, full scope for editing
+SCOPES_FULL = ["https://www.googleapis.com/auth/spreadsheets"]
+SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
 class GoogleSheetsUploader:
     """Handles uploading session data to Google Sheets"""
 
-    def __init__(self, settings_file="settings.json"):
+    def __init__(self, settings_file="settings.json", read_only=False):
         """
         Initialize the Google Sheets uploader
 
         Args:
             settings_file: Path to settings file containing Google API configuration
+            read_only: If True, use read-only OAuth scope (for viewing only)
         """
         self.settings_file = settings_file
         self.settings = self._load_settings()
         self.credentials = None
         self.service = None
+        self.read_only = read_only
+        self.scopes = SCOPES_READONLY if read_only else SCOPES_FULL
 
     def _load_settings(self):
         """Load settings from file"""
@@ -48,12 +54,54 @@ class GoogleSheetsUploader:
         return self.settings.get("google_sheets", {}).get("enabled", False)
 
     def get_spreadsheet_id(self):
-        """Get the configured spreadsheet ID"""
-        return self.settings.get("google_sheets", {}).get("spreadsheet_id", "")
+        """Get the configured spreadsheet ID from settings or environment variable"""
+        # Try environment variable first (more secure)
+        spreadsheet_id = os.environ.get("GOOGLE_SHEETS_SPREADSHEET_ID", "")
+
+        # Fall back to settings file
+        if not spreadsheet_id:
+            spreadsheet_id = self.settings.get("google_sheets", {}).get(
+                "spreadsheet_id", ""
+            )
+
+        # Validate spreadsheet ID format (should be alphanumeric, hyphens, underscores)
+        if spreadsheet_id and not self._is_valid_spreadsheet_id(spreadsheet_id):
+            print(f"Warning: Invalid spreadsheet ID format: {spreadsheet_id}")
+            return ""
+
+        return spreadsheet_id
+
+    def _is_valid_spreadsheet_id(self, spreadsheet_id):
+        """Validate spreadsheet ID format to prevent injection attacks"""
+        # Google Sheets IDs are typically 44 characters, alphanumeric with hyphens/underscores
+        if not spreadsheet_id:
+            return False
+        # Allow alphanumeric, hyphens, and underscores only
+        return bool(re.match(r"^[a-zA-Z0-9_-]+$", spreadsheet_id))
 
     def get_sheet_name(self):
         """Get the configured sheet name (tab name within spreadsheet)"""
-        return self.settings.get("google_sheets", {}).get("sheet_name", "Sessions")
+        sheet_name = self.settings.get("google_sheets", {}).get(
+            "sheet_name", "Sessions"
+        )
+
+        # Validate sheet name to prevent injection attacks
+        if not self._is_valid_sheet_name(sheet_name):
+            print(f"Warning: Invalid sheet name format: {sheet_name}. Using default.")
+            return "Sessions"
+
+        return sheet_name
+
+    def _is_valid_sheet_name(self, sheet_name):
+        """Validate sheet name to prevent injection attacks"""
+        if not sheet_name:
+            return False
+        # Sheet names should be reasonable length and not contain dangerous characters
+        if len(sheet_name) > 100:
+            return False
+        # Disallow characters that could be used for injection
+        dangerous_chars = ["<", ">", '"', "'", "\\", "/", "|", "?", "*"]
+        return not any(char in sheet_name for char in dangerous_chars)
 
     def authenticate(self):
         """
@@ -63,15 +111,31 @@ class GoogleSheetsUploader:
             bool: True if authentication successful, False otherwise
         """
         creds = None
-        token_file = "token.pickle"
-        credentials_file = self.settings.get("google_sheets", {}).get(
-            "credentials_file", "credentials.json"
+
+        # Use environment variable for token file location (more secure)
+        token_file = os.environ.get("GOOGLE_SHEETS_TOKEN_FILE", "token.pickle")
+
+        # Get credentials file from environment variable or settings
+        credentials_file = os.environ.get(
+            "GOOGLE_SHEETS_CREDENTIALS_FILE",
+            self.settings.get("google_sheets", {}).get(
+                "credentials_file", "credentials.json"
+            ),
         )
+
+        # Validate credentials file path to prevent path traversal
+        if credentials_file and not self._is_safe_file_path(credentials_file):
+            print(f"Warning: Unsafe credentials file path: {credentials_file}")
+            return False
 
         # Check if we have valid credentials
         if os.path.exists(token_file):
-            with open(token_file, "rb") as token:
-                creds = pickle.load(token)
+            try:
+                with open(token_file, "rb") as token:
+                    creds = pickle.load(token)
+            except Exception as e:
+                print(f"Error loading token file: {e}")
+                creds = None
 
         # If credentials are invalid or don't exist, get new ones
         if not creds or not creds.valid:
@@ -88,8 +152,9 @@ class GoogleSheetsUploader:
                     return False
 
                 try:
+                    # Use appropriate scopes based on read_only setting
                     flow = InstalledAppFlow.from_client_secrets_file(
-                        credentials_file, SCOPES
+                        credentials_file, self.scopes
                     )
                     creds = flow.run_local_server(port=0)
                 except Exception as e:
@@ -112,6 +177,26 @@ class GoogleSheetsUploader:
         except Exception as e:
             print(f"Error building Google Sheets service: {e}")
             return False
+
+    def _is_safe_file_path(self, file_path):
+        """Validate file path to prevent directory traversal attacks"""
+        if not file_path:
+            return False
+
+        # Disallow path traversal patterns
+        dangerous_patterns = ["..", "~", "/etc/", "C:\\Windows\\", "%", "${"]
+        file_path_lower = file_path.lower()
+
+        for pattern in dangerous_patterns:
+            if pattern.lower() in file_path_lower:
+                return False
+
+        # Only allow certain file extensions
+        allowed_extensions = [".json", ".pickle", ".pkl"]
+        if not any(file_path.endswith(ext) for ext in allowed_extensions):
+            return False
+
+        return True
 
     def _ensure_sheet_headers(self):
         """

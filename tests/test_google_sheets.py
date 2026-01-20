@@ -22,6 +22,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)  # Ensures cleanup even if test fails
         self.test_settings_file = "test_google_settings.json"
 
         # Create settings with Google Sheets config
@@ -294,6 +295,171 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             # Expected when Google API libraries not installed
             # App should continue working without Google Sheets
             pass
+
+
+class TestGoogleSheetsInputValidation(unittest.TestCase):
+    """Test input validation for Google Sheets integration"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    def test_valid_spreadsheet_id(self):
+        """Test that valid spreadsheet IDs are accepted"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = "test_valid_id.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            spreadsheet_id = uploader.get_spreadsheet_id()
+
+            # Should return the valid ID
+            self.assertEqual(
+                spreadsheet_id, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+            )
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_malicious_spreadsheet_id_rejected(self):
+        """Test that malicious spreadsheet IDs are rejected"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            malicious_ids = [
+                "../../../etc/passwd",
+                "'; DROP TABLE sessions; --",
+                "<script>alert('xss')</script>",
+                "../../sensitive/data",
+                "C:\\Windows\\System32\\config",
+            ]
+
+            for malicious_id in malicious_ids:
+                settings = TestDataGenerator.create_settings_data()
+                settings["google_sheets"] = {
+                    "enabled": True,
+                    "spreadsheet_id": malicious_id,
+                    "sheet_name": "Sessions",
+                }
+
+                test_file = "test_malicious_id.json"
+                self.file_manager.create_test_file(test_file, settings)
+
+                uploader = GoogleSheetsUploader(test_file)
+                spreadsheet_id = uploader.get_spreadsheet_id()
+
+                # Should reject malicious ID and return empty string
+                self.assertEqual(
+                    spreadsheet_id, "", f"Failed to reject malicious ID: {malicious_id}"
+                )
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_malicious_sheet_name_sanitized(self):
+        """Test that malicious sheet names are sanitized"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            malicious_names = [
+                "<script>alert('xss')</script>",
+                "Sheet'; DROP TABLE--",
+                "../../../secrets",
+                "Sheet\\with\\paths",
+            ]
+
+            for malicious_name in malicious_names:
+                settings = TestDataGenerator.create_settings_data()
+                settings["google_sheets"] = {
+                    "enabled": True,
+                    "spreadsheet_id": "valid_id_123",
+                    "sheet_name": malicious_name,
+                }
+
+                test_file = "test_malicious_name.json"
+                self.file_manager.create_test_file(test_file, settings)
+
+                uploader = GoogleSheetsUploader(test_file)
+                sheet_name = uploader.get_sheet_name()
+
+                # Should sanitize to default "Sessions"
+                self.assertEqual(
+                    sheet_name,
+                    "Sessions",
+                    f"Failed to sanitize malicious sheet name: {malicious_name}",
+                )
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_path_traversal_in_credentials_blocked(self):
+        """Test that path traversal in credentials file is blocked"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            dangerous_paths = [
+                "../../../etc/passwd",
+                "C:\\Windows\\System32\\config\\sam",
+                "~/sensitive/data.json",
+                "%APPDATA%/secrets.json",
+            ]
+
+            for dangerous_path in dangerous_paths:
+                settings = TestDataGenerator.create_settings_data()
+                settings["google_sheets"] = {
+                    "enabled": True,
+                    "spreadsheet_id": "valid_id",
+                    "credentials_file": dangerous_path,
+                }
+
+                test_file = "test_path_traversal.json"
+                self.file_manager.create_test_file(test_file, settings)
+
+                uploader = GoogleSheetsUploader(test_file)
+                # Authentication should fail for unsafe paths
+                result = uploader.authenticate()
+                self.assertFalse(
+                    result, f"Failed to block path traversal: {dangerous_path}"
+                )
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_environment_variables_override_settings(self):
+        """Test that environment variables take precedence over settings file"""
+        try:
+            import os
+            from google_sheets_integration import GoogleSheetsUploader
+
+            # Set environment variable
+            os.environ["GOOGLE_SHEETS_SPREADSHEET_ID"] = "env_spreadsheet_123"
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "settings_spreadsheet_456",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = "test_env_vars.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            spreadsheet_id = uploader.get_spreadsheet_id()
+
+            # Should use environment variable, not settings file
+            self.assertEqual(spreadsheet_id, "env_spreadsheet_123")
+
+            # Cleanup
+            del os.environ["GOOGLE_SHEETS_SPREADSHEET_ID"]
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
 
 
 if __name__ == "__main__":

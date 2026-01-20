@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import json
 
+from ui_helpers import ScrollableFrame
+
 
 def disable_combobox_scroll(combobox):
     """Disable mousewheel scrolling on a combobox to prevent accidental value changes"""
@@ -45,51 +47,18 @@ class SettingsFrame(ttk.Frame):
     def create_widgets(self):
         """Create main settings interface"""
         # Create scrollable container
-        canvas = tk.Canvas(self)
-        scrollbar = ttk.Scrollbar(self, orient="vertical", command=canvas.yview)
+        scrollable_container = ScrollableFrame(self, padding="10")
+        scrollable_container.pack(fill="both", expand=True)
 
-        # Main content frame
-        content_frame = ttk.Frame(canvas, padding="10")
+        content_frame = scrollable_container.get_content_frame()
 
-        # Configure canvas scroll region with better update
-        def update_scrollregion(event=None):
-            canvas.update_idletasks()
-            canvas.configure(scrollregion=canvas.bbox("all"))
+        # Store update function for manual calls (for dynamic content updates)
+        self.update_scrollregion = lambda: scrollable_container.canvas.configure(
+            scrollregion=scrollable_container.canvas.bbox("all")
+        )
 
-        content_frame.bind("<Configure>", update_scrollregion)
-        canvas_window = canvas.create_window((0, 0), window=content_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Update canvas window width when canvas resizes
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        canvas.bind("<Configure>", on_canvas_configure)
-
-        # Pack canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Bind mousewheel for scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def bind_mousewheel(widget):
-            """Recursively bind mousewheel to widget and all children"""
-            # Skip Combobox widgets - they have their own mousewheel handling
-            if not isinstance(widget, ttk.Combobox):
-                widget.bind("<MouseWheel>", on_mousewheel)
-            for child in widget.winfo_children():
-                bind_mousewheel(child)
-
-        bind_mousewheel(content_frame)
-        canvas.bind("<MouseWheel>", on_mousewheel)
-
-        # Store binding function to rebind after widget updates
-        self.bind_mousewheel_func = lambda: bind_mousewheel(content_frame)
-
-        # Store update function for manual calls
-        self.update_scrollregion = update_scrollregion
+        # Keep bind_mousewheel_func for compatibility (already handled by ScrollableFrame)
+        self.bind_mousewheel_func = lambda: None
 
         self.row = 0
 

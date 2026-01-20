@@ -36,6 +36,7 @@ traceback.print_exception = _patched_print_exception
 
 from pynput import mouse, keyboard
 
+from ui_helpers import ScrollableFrame
 from frames.completion_frame import CompletionFrame
 from settings_frame import SettingsFrame
 from analysis_frame import AnalysisFrame
@@ -164,6 +165,74 @@ class TimeTracker:
                 return sphere
         return "General"
 
+    def get_active_spheres(self):
+        """Get list of active spheres and default sphere"""
+        active_spheres = [
+            sphere
+            for sphere, data in self.settings["spheres"].items()
+            if data.get("active", True)
+        ]
+
+        default_sphere = next(
+            (
+                sphere
+                for sphere, data in self.settings["spheres"].items()
+                if data.get("is_default", False)
+            ),
+            None,
+        )
+
+        return active_spheres, default_sphere
+
+    def get_active_projects(self, sphere=None):
+        """Get active projects, optionally filtered by sphere"""
+        projects = []
+        for project, data in self.settings.get("projects", {}).items():
+            if not data.get("active", True):
+                continue
+            if sphere and data.get("sphere") != sphere:
+                continue
+            projects.append(project)
+
+        return projects
+
+    def get_default_project(self, sphere):
+        """Get default project for a sphere"""
+        # First try to find default project in the sphere
+        for project, data in self.settings.get("projects", {}).items():
+            if (
+                data.get("sphere") == sphere
+                and data.get("is_default", False)
+                and data.get("active", True)
+            ):
+                return project
+
+        # Fallback to first active project in the sphere
+        for project, data in self.settings.get("projects", {}).items():
+            if data.get("sphere") == sphere and data.get("active", True):
+                return project
+
+        return None
+
+    def get_active_break_actions(self):
+        """Get break actions and default break action"""
+        break_actions = [
+            action
+            for action, data in self.settings["break_actions"].items()
+            if data.get("active", True)
+        ]
+
+        default_action = next(
+            (
+                action
+                for action, data in self.settings["break_actions"].items()
+                if data.get("is_default", True)
+            ),
+            None,
+        )
+
+        return break_actions, default_action
+
     def load_data(self):
         """Load existing session data"""
         if not os.path.exists(self.data_file):
@@ -198,43 +267,10 @@ class TimeTracker:
     def create_widgets(self):
         """Create the main GUI elements"""
         # Create scrollable container for main frame
-        main_frame_container = ttk.Frame(self.root)
-        main_frame_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.main_frame_container = ScrollableFrame(self.root, padding="10")
+        self.main_frame_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Create canvas and scrollbar
-        canvas = tk.Canvas(main_frame_container)
-        scrollbar = ttk.Scrollbar(
-            main_frame_container, orient="vertical", command=canvas.yview
-        )
-
-        # Main frame inside canvas
-        main_frame = ttk.Frame(canvas, padding="10")
-
-        # Configure canvas
-        main_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas_window = canvas.create_window((0, 0), window=main_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Update canvas window width when canvas resizes
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        canvas.bind("<Configure>", on_canvas_configure)
-
-        # Pack canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Bind mousewheel for scrolling (bind to container, not globally)
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        main_frame_container.bind("<MouseWheel>", on_mousewheel)
-
-        # Store reference to main frame container for show/hide
-        self.main_frame_container = main_frame_container
+        main_frame = self.main_frame_container.get_content_frame()
 
         # Top-right utility links frame
         top_right_frame = ttk.Frame(main_frame)
@@ -365,21 +401,8 @@ class TimeTracker:
         self.root.rowconfigure(0, weight=1)
         main_frame.columnconfigure(1, weight=1)
 
-        # Bind mousewheel recursively to all widgets
-        def bind_mousewheel(widget):
-            # Skip Combobox widgets - they have their own mousewheel handling
-            if not isinstance(widget, ttk.Combobox):
-                widget.bind("<MouseWheel>", on_mousewheel)
-            for child in widget.winfo_children():
-                bind_mousewheel(child)
-
-        bind_mousewheel(main_frame_container)
-        bind_mousewheel(main_frame)
-
         # Store references
         self.main_frame = main_frame
-        self.main_frame_container = main_frame_container
-        self.main_canvas = canvas
 
     def format_time(self, seconds):
         """Convert seconds to HH:MM:SS format"""
@@ -959,27 +982,38 @@ class TimeTracker:
 
     def open_analysis(self):
         """Open the analysis window"""
-        # Don't allow opening analysis while tracking time
-        if self.session_active:
-            messagebox.showwarning(
-                "Session Active",
-                "Cannot open analysis while tracking time. Please end the session first.",
-            )
-            return
+        try:
+            # Don't allow opening analysis while tracking time
+            if self.session_active:
+                messagebox.showwarning(
+                    "Session Active",
+                    "Cannot open analysis while tracking time. Please end the session first.",
+                )
+                return
 
-        if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
-            # Analysis already open, do nothing
-            return
+            if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
+                # Analysis already open, do nothing
+                return
 
-        # Hide main frame
-        self.main_frame_container.grid_forget()
+            # Hide main frame
+            self.main_frame_container.grid_forget()
 
-        # Create analysis frame in main window
-        self.analysis_frame = AnalysisFrame(self.root, self, self.root)
-        self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+            # Create analysis frame in main window
+            self.analysis_frame = AnalysisFrame(self.root, self, self.root)
+            self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Update window title
-        self.root.title("Time Aligned - Analysis")
+            # Update window title
+            self.root.title("Time Aligned - Analysis")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open analysis: {e}")
+            import traceback
+
+            traceback.print_exc()
+            # Make sure main frame is visible
+            if hasattr(self, "main_frame_container"):
+                self.main_frame_container.grid(
+                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                )
 
     def close_analysis(self):
         """Close analysis and return to main view"""
