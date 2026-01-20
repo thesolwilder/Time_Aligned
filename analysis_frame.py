@@ -145,15 +145,23 @@ class AnalysisFrame(ttk.Frame):
         )
         self.timeline_title.pack(side=tk.LEFT)
 
+        # Timeline header (frozen at top)
+        self.timeline_header_frame = tk.Frame(
+            self, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
+        )
+        self.timeline_header_frame.grid(
+            row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(0, 0)
+        )
+
         # Timeline with scrollbar
         timeline_container = ttk.Frame(self)
         timeline_container.grid(
-            row=4,
+            row=5,
             column=0,
             columnspan=3,
             sticky=(tk.N, tk.S, tk.W, tk.E),
             padx=10,
-            pady=5,
+            pady=(0, 5),
         )
 
         # Create canvas and scrollbar for timeline
@@ -504,49 +512,8 @@ class AnalysisFrame(ttk.Frame):
         # Limit to 100 entries
         periods = periods[:100]
 
-        # Create header with proper frame layout for alignment
-        header_frame = tk.Frame(
-            self.timeline_frame, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
-        )
-        header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=2)
-
-        def create_header_label(text, column_key, width):
-            """Create clickable header label for sorting"""
-            label = tk.Label(
-                header_frame,
-                text=(
-                    text + " ▼"
-                    if self.timeline_sort_column == column_key
-                    and self.timeline_sort_reverse
-                    else (
-                        text + " ▲" if self.timeline_sort_column == column_key else text
-                    )
-                ),
-                font=("Arial", 9, "bold"),
-                width=width,
-                anchor="w",
-                padx=5,
-                bg="#d0d0d0",
-                cursor="hand2",
-            )
-            label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
-            return label
-
-        create_header_label("Date", "date", 12).pack(side=tk.LEFT)
-        create_header_label("Type", "type", 8).pack(side=tk.LEFT)
-        create_header_label("Sphere", "sphere", 12).pack(side=tk.LEFT)
-        create_header_label("Project/Action", "project", 18).pack(side=tk.LEFT)
-        create_header_label("Start", "start", 10).pack(side=tk.LEFT)
-        create_header_label("Duration", "duration", 10).pack(side=tk.LEFT)
-        tk.Label(
-            header_frame,
-            text="Comment",
-            font=("Arial", 9, "bold"),
-            width=35,
-            anchor="w",
-            padx=5,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Update frozen header
+        self.update_timeline_header()
 
         # Create timeline entries with color coding
         for idx, period in enumerate(periods):
@@ -557,7 +524,7 @@ class AnalysisFrame(ttk.Frame):
                 bg_color = "#fff3e0"  # Light orange
 
             row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
-            row_frame.grid(row=idx + 1, column=0, sticky=(tk.W, tk.E), pady=1)
+            row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
 
             tk.Label(
                 row_frame,
@@ -613,7 +580,7 @@ class AnalysisFrame(ttk.Frame):
                 self.timeline_frame,
                 text="No data for selected filters",
                 font=("Arial", 12),
-            ).grid(row=1, column=0, pady=20)
+            ).grid(row=0, column=0, pady=20)
 
     def sort_timeline(self, column):
         """Sort timeline by column"""
@@ -623,6 +590,50 @@ class AnalysisFrame(ttk.Frame):
             self.timeline_sort_column = column
             self.timeline_sort_reverse = False
         self.update_timeline()
+
+    def update_timeline_header(self):
+        """Update the frozen timeline header with current sort indicators"""
+        # Clear existing header
+        for widget in self.timeline_header_frame.winfo_children():
+            widget.destroy()
+
+        def create_header_label(text, column_key, width):
+            """Create clickable header label for sorting"""
+            label = tk.Label(
+                self.timeline_header_frame,
+                text=(
+                    text + " ▼"
+                    if self.timeline_sort_column == column_key
+                    and self.timeline_sort_reverse
+                    else (
+                        text + " ▲" if self.timeline_sort_column == column_key else text
+                    )
+                ),
+                font=("Arial", 9, "bold"),
+                width=width,
+                anchor="w",
+                padx=5,
+                bg="#d0d0d0",
+                cursor="hand2",
+            )
+            label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
+            return label
+
+        create_header_label("Date", "date", 12).pack(side=tk.LEFT)
+        create_header_label("Type", "type", 8).pack(side=tk.LEFT)
+        create_header_label("Sphere", "sphere", 12).pack(side=tk.LEFT)
+        create_header_label("Project/Action", "project", 18).pack(side=tk.LEFT)
+        create_header_label("Start", "start", 10).pack(side=tk.LEFT)
+        create_header_label("Duration", "duration", 10).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Comment",
+            font=("Arial", 9, "bold"),
+            width=35,
+            anchor="w",
+            padx=5,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def export_to_csv(self):
         """Export timeline data to CSV"""
@@ -739,7 +750,7 @@ class AnalysisFrame(ttk.Frame):
         self.tracker.close_analysis()
 
         # Open completion frame with latest session
-        self.tracker.show_completion_screen(
+        self.tracker.show_completion_frame(
             session_data.get("total_duration", 0),
             session_data.get("active_duration", 0),
             session_data.get("break_duration", 0),

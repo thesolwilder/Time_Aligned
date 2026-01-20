@@ -4,11 +4,39 @@ import time
 import os
 import json
 from datetime import datetime
+import warnings
+import logging
+import sys
+
+# Suppress pynput's harmless Python 3.13 compatibility warnings
+logging.getLogger("pynput").setLevel(logging.ERROR)
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="pynput")
+
+# Monkey-patch to suppress pynput exception output in Python 3.13
+import traceback
+
+_original_print_exception = traceback.print_exception
+
+
+def _patched_print_exception(
+    exc, /, value=None, tb=None, limit=None, file=None, chain=True
+):
+    """Suppress pynput listener callback exceptions that are harmless in Python 3.13"""
+    if value and isinstance(value, (NotImplementedError, TypeError)):
+        exc_str = str(value)
+        if "_thread._ThreadHandle" in exc_str or "listener callback" in str(exc):
+            return  # Suppress this specific pynput error
+    _original_print_exception(exc, value, tb, limit, file, chain)
+
+
+traceback.print_exception = _patched_print_exception
+
 from pynput import mouse, keyboard
 
 from frames.completion_frame import CompletionFrame
 from settings_frame import SettingsFrame
 from analysis_frame import AnalysisFrame
+from screenshot_capture import ScreenshotCapture
 
 
 class TimeTracker:
@@ -58,6 +86,9 @@ class TimeTracker:
         self.mouse_listener = None
         self.keyboard_listener = None
 
+        # Screenshot capture
+        self.screenshot_capture = ScreenshotCapture(self.settings, self.data_file)
+
         # Frame references
         self.completion_frame = None
         self.settings_frame = None
@@ -75,6 +106,12 @@ class TimeTracker:
                 "idle_tracking_enabled": True,  # enable/disable idle tracking
                 "idle_threshold": 60,  # seconds before considering idle
                 "idle_break_threshold": 300,  # seconds of idle before auto-break
+            },
+            "screenshot_settings": {
+                "enabled": True,  # enable/disable screenshot capture
+                "capture_on_focus_change": True,  # capture on window focus change
+                "min_seconds_between_captures": 10,  # minimum seconds between captures
+                "screenshot_path": "screenshots",  # base path for screenshots
             },
             "spheres": {
                 "General": {"is_default": True, "active": True},
@@ -277,27 +314,35 @@ class TimeTracker:
         self.last_user_input = time.time()
 
         def on_activity(*args):
-            self.last_user_input = time.time()
-            if self.session_idle:
-                self.session_idle = False
-                self.status_label.config(text="Active")
-                # Save idle period end
-                all_data = self.load_data()
-                if self.session_name in all_data:
-                    idle_periods = all_data[self.session_name]["idle_periods"]
-                    # Check if there are any idle periods and the last one doesn't have an end time
-                    if idle_periods and "end" not in idle_periods[-1]:
-                        last_idle = idle_periods[-1]
-                        last_idle["end"] = datetime.now().strftime("%H:%M:%S")
-                        last_idle["end_timestamp"] = self.last_user_input
-                        last_idle["duration"] = (
-                            last_idle["end_timestamp"] - last_idle["start_timestamp"]
-                        )
-                        self.save_data(all_data)
+            try:
+                self.last_user_input = time.time()
+                if self.session_idle:
+                    self.session_idle = False
+                    self.status_label.config(text="Active")
+                    # Save idle period end
+                    all_data = self.load_data()
+                    if self.session_name in all_data:
+                        idle_periods = all_data[self.session_name]["idle_periods"]
+                        # Check if there are any idle periods and the last one doesn't have an end time
+                        if idle_periods and "end" not in idle_periods[-1]:
+                            last_idle = idle_periods[-1]
+                            last_idle["end"] = datetime.now().strftime("%H:%M:%S")
+                            last_idle["end_timestamp"] = self.last_user_input
+                            last_idle["duration"] = (
+                                last_idle["end_timestamp"]
+                                - last_idle["start_timestamp"]
+                            )
+                            self.save_data(all_data)
+            except Exception:
+                # Suppress harmless pynput Python 3.13 compatibility exceptions
+                pass
 
-        # Start mouse listener
+        # Start mouse listener with error suppression
         self.mouse_listener = mouse.Listener(
-            on_move=on_activity, on_click=on_activity, on_scroll=on_activity
+            on_move=on_activity,
+            on_click=on_activity,
+            on_scroll=on_activity,
+            suppress=False,
         )
         self.mouse_listener.start()
 
@@ -360,6 +405,10 @@ class TimeTracker:
         # Start input monitoring
         self.start_input_monitoring()
 
+        # Start screenshot capture for first active period
+        self.screenshot_capture.set_current_session(self.session_name, "active", 0)
+        self.screenshot_capture.start_monitoring()
+
     def end_session(self):
         """End the current session"""
         if not self.session_active:
@@ -383,23 +432,37 @@ class TimeTracker:
                 all_data[self.session_name]["active"] = all_data[self.session_name].get(
                     "active", []
                 )
-                all_data[self.session_name]["active"].append(
-                    {
-                        "start": datetime.fromtimestamp(
-                            self.active_period_start_time
-                        ).strftime("%H:%M:%S"),
-                        "start_timestamp": self.active_period_start_time,
-                        "end": datetime.fromtimestamp(current_time).strftime(
-                            "%H:%M:%S"
-                        ),
-                        "end_timestamp": current_time,
-                        "duration": duration,
-                    }
+                # Build final active period with screenshot data
+                final_period = {
+                    "start": datetime.fromtimestamp(
+                        self.active_period_start_time
+                    ).strftime("%H:%M:%S"),
+                    "start_timestamp": self.active_period_start_time,
+                    "end": datetime.fromtimestamp(current_time).strftime("%H:%M:%S"),
+                    "end_timestamp": current_time,
+                    "duration": duration,
+                }
+                # Add screenshot info if any were captured
+                current_screenshots = (
+                    self.screenshot_capture.get_current_period_screenshots()
                 )
+                if self.screenshot_capture.enabled and current_screenshots:
+                    screenshot_folder = (
+                        self.screenshot_capture.get_screenshot_folder_path()
+                    )
+                    if screenshot_folder:
+                        final_period["screenshot_folder"] = os.path.relpath(
+                            screenshot_folder, os.path.dirname(self.data_file)
+                        )
+                        final_period["screenshots"] = current_screenshots
+                all_data[self.session_name]["active"].append(final_period)
                 self.save_data(all_data)
 
         # Stop input monitoring
         self.stop_input_monitoring()
+
+        # Stop screenshot capture
+        self.screenshot_capture.stop_monitoring()
 
         # Calculate final time using original session start time
         end_time = time.time()
@@ -462,21 +525,39 @@ class TimeTracker:
                 all_data[self.session_name]["active"] = all_data[self.session_name].get(
                     "active", []
                 )
-                all_data[self.session_name]["active"].append(
-                    {
-                        "start": datetime.fromtimestamp(
-                            self.active_period_start_time
-                        ).strftime("%H:%M:%S"),
-                        "start_timestamp": self.active_period_start_time,
-                        "end": datetime.fromtimestamp(self.break_start_time).strftime(
-                            "%H:%M:%S"
-                        ),
-                        "end_timestamp": self.break_start_time,
-                        "duration": self.break_start_time
-                        - self.active_period_start_time,
-                    }
+                # Add screenshot folder to the active period
+                active_period = {
+                    "start": datetime.fromtimestamp(
+                        self.active_period_start_time
+                    ).strftime("%H:%M:%S"),
+                    "start_timestamp": self.active_period_start_time,
+                    "end": datetime.fromtimestamp(self.break_start_time).strftime(
+                        "%H:%M:%S"
+                    ),
+                    "end_timestamp": self.break_start_time,
+                    "duration": self.break_start_time - self.active_period_start_time,
+                }
+                # Add screenshot info if any were captured
+                current_screenshots = (
+                    self.screenshot_capture.get_current_period_screenshots()
                 )
+                if self.screenshot_capture.enabled and current_screenshots:
+                    screenshot_folder = (
+                        self.screenshot_capture.get_screenshot_folder_path()
+                    )
+                    if screenshot_folder:
+                        active_period["screenshot_folder"] = os.path.relpath(
+                            screenshot_folder, os.path.dirname(self.data_file)
+                        )
+                        active_period["screenshots"] = current_screenshots
+                all_data[self.session_name]["active"].append(active_period)
                 self.save_data(all_data)
+
+            # Switch screenshot capture to break period
+            break_period_count = len(all_data[self.session_name].get("breaks", []))
+            self.screenshot_capture.set_current_session(
+                self.session_name, "break", break_period_count
+            )
         else:
             # End break
             break_duration = time.time() - self.break_start_time
@@ -484,17 +565,29 @@ class TimeTracker:
             # Save break data
             all_data = self.load_data()
             if self.session_name in all_data:
-                all_data[self.session_name]["breaks"].append(
-                    {
-                        "start": datetime.fromtimestamp(self.break_start_time).strftime(
-                            "%H:%M:%S"
-                        ),
-                        "start_timestamp": self.break_start_time,
-                        "end": datetime.now().strftime("%H:%M:%S"),
-                        "end_timestamp": time.time(),
-                        "duration": break_duration,
-                    }
+                break_period = {
+                    "start": datetime.fromtimestamp(self.break_start_time).strftime(
+                        "%H:%M:%S"
+                    ),
+                    "start_timestamp": self.break_start_time,
+                    "end": datetime.now().strftime("%H:%M:%S"),
+                    "end_timestamp": time.time(),
+                    "duration": break_duration,
+                }
+                # Add screenshot info if any were captured
+                current_screenshots = (
+                    self.screenshot_capture.get_current_period_screenshots()
                 )
+                if self.screenshot_capture.enabled and current_screenshots:
+                    screenshot_folder = (
+                        self.screenshot_capture.get_screenshot_folder_path()
+                    )
+                    if screenshot_folder:
+                        break_period["screenshot_folder"] = os.path.relpath(
+                            screenshot_folder, os.path.dirname(self.data_file)
+                        )
+                        break_period["screenshots"] = current_screenshots
+                all_data[self.session_name]["breaks"].append(break_period)
                 self.save_data(all_data)
 
             # Track cumulative break time
@@ -509,6 +602,12 @@ class TimeTracker:
 
             # Start new active period
             self.active_period_start_time = time.time()
+
+            # Switch screenshot capture back to active period
+            active_period_count = len(all_data[self.session_name].get("active", []))
+            self.screenshot_capture.set_current_session(
+                self.session_name, "active", active_period_count
+            )
 
     def show_completion_frame(
         self, total_elapsed, active_time, break_time, original_start, end_time
@@ -674,6 +773,11 @@ class TimeTracker:
                         "break_duration"
                     ] = self.total_break_time
                     self.save_data(all_data)
+
+                # Collect screenshot if capture is enabled (monitor thread handles actual capture)
+                # Just check if new screenshots were captured and add to tracking list
+                # This is handled automatically by the ScreenshotCapture monitor thread
+
             self.backup_loop_count = 0
         self.backup_loop_count += 1
 
@@ -710,6 +814,12 @@ class TimeTracker:
             # Destroy settings frame
             self.settings_frame.destroy()
             self.settings_frame = None
+
+            # Reload settings in case they changed
+            self.settings = self.get_settings()
+
+            # Update screenshot capture settings
+            self.screenshot_capture.update_settings(self.settings)
 
             # Show main frame again
             self.main_frame_container.grid(
