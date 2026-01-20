@@ -3,6 +3,11 @@ from tkinter import ttk, messagebox, simpledialog
 import json
 
 
+def disable_combobox_scroll(combobox):
+    """Disable mousewheel scrolling on a combobox to prevent accidental value changes"""
+    combobox.bind("<MouseWheel>", lambda e: "break")
+
+
 class SettingsFrame(ttk.Frame):
     def __init__(self, parent, tracker, root):
         """
@@ -71,19 +76,17 @@ class SettingsFrame(ttk.Frame):
 
         def bind_mousewheel(widget):
             """Recursively bind mousewheel to widget and all children"""
-            widget.bind("<MouseWheel>", on_mousewheel)
+            # Skip Combobox widgets - they have their own mousewheel handling
+            if not isinstance(widget, ttk.Combobox):
+                widget.bind("<MouseWheel>", on_mousewheel)
             for child in widget.winfo_children():
                 bind_mousewheel(child)
 
-        # Initial binding
         bind_mousewheel(content_frame)
         canvas.bind("<MouseWheel>", on_mousewheel)
 
-        # Re-bind after any updates and update scroll region
-        self.bind_mousewheel_func = lambda: (
-            bind_mousewheel(content_frame),
-            update_scrollregion(),
-        )
+        # Store binding function to rebind after widget updates
+        self.bind_mousewheel_func = lambda: bind_mousewheel(content_frame)
 
         # Store update function for manual calls
         self.update_scrollregion = update_scrollregion
@@ -191,6 +194,7 @@ class SettingsFrame(ttk.Frame):
             exportselection=False,
         )
         self.sphere_dropdown.grid(row=self.row, column=0, pady=5, sticky=(tk.W))
+        disable_combobox_scroll(self.sphere_dropdown)
         self.sphere_dropdown.bind(
             "<<ComboboxSelected>>", lambda e: self.on_sphere_selected()
         )
@@ -559,6 +563,7 @@ class SettingsFrame(ttk.Frame):
             width=15,
         )
         sphere_combo.grid(row=0, column=3, sticky=(tk.W, tk.E), padx=5)
+        disable_combobox_scroll(sphere_combo)
 
         # Note
         ttk.Label(frame, text="Note:").grid(row=1, column=0, sticky=tk.W, padx=5)
@@ -748,6 +753,7 @@ class SettingsFrame(ttk.Frame):
             width=37,
         )
         sphere_combo.grid(row=1, column=1, padx=10, pady=5)
+        disable_combobox_scroll(sphere_combo)
 
         ttk.Label(dialog, text="Note:").grid(
             row=2, column=0, sticky=tk.W, padx=10, pady=5
@@ -950,6 +956,7 @@ class SettingsFrame(ttk.Frame):
             width=10,
         )
         idle_break_combo.pack()
+        disable_combobox_scroll(idle_break_combo)
         idle_row += 1
 
         # Save idle settings button

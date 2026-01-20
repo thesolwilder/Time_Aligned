@@ -10,6 +10,11 @@ from datetime import datetime
 from tkinter import messagebox
 
 
+def disable_combobox_scroll(combobox):
+    """Disable mousewheel scrolling on a combobox to prevent accidental value changes"""
+    combobox.bind("<MouseWheel>", lambda e: "break")
+
+
 class CompletionFrame(ttk.Frame):
     def __init__(self, parent, tracker, session_name):
         """
@@ -66,6 +71,10 @@ class CompletionFrame(ttk.Frame):
         self.secondary_percentage_labels = (
             []
         )  # Store secondary percentage label references
+
+        # Reference to canvas and mousewheel binding function (set by parent)
+        self.canvas = None
+        self.bind_mousewheel_func = None
 
         self.create_widgets()
 
@@ -140,6 +149,7 @@ class CompletionFrame(ttk.Frame):
             font=("Arial", 16, "bold"),
         )
         self.sphere_menu.set(initial_value)
+        disable_combobox_scroll(self.sphere_menu)
         self.sphere_menu.grid(row=0, column=0, sticky=tk.W, padx=5, pady=10)
 
         # Bind event to handle selection
@@ -173,6 +183,7 @@ class CompletionFrame(ttk.Frame):
         )
         self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
         self.default_project_menu.set(default_project)
+        disable_combobox_scroll(self.default_project_menu)
         ttk.Label(default_container, text="Default Break/Idle Action:").grid(
             row=0, column=2, sticky=tk.W, padx=5
         )
@@ -181,6 +192,7 @@ class CompletionFrame(ttk.Frame):
         )
         self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
         self.default_action_menu.set(default_break_action)
+        disable_combobox_scroll(self.default_action_menu)
 
         self.default_project_menu.bind(
             "<<ComboboxSelected>>",
@@ -292,6 +304,15 @@ class CompletionFrame(ttk.Frame):
             # Recreate all widgets
             self.create_widgets()
 
+            # Re-apply mousewheel binding to new widgets
+            if self.bind_mousewheel_func:
+                self.bind_mousewheel_func()
+
+            # Update scroll region
+            if self.canvas:
+                self.update_idletasks()
+                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
     def _save_new_sphere(self, event):
         """Save the new sphere to settings"""
         new_sphere = self.sphere_menu.get().strip()
@@ -390,6 +411,7 @@ class CompletionFrame(ttk.Frame):
             time_frame, values=date_options, state="readonly", width=12
         )
         self.date_selector.set(current_date)
+        disable_combobox_scroll(self.date_selector)
         self.date_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
         self.date_selector.bind("<<ComboboxSelected>>", self._on_date_selected)
         col += 1
@@ -422,6 +444,7 @@ class CompletionFrame(ttk.Frame):
             time_frame, values=self.session_name_readable, state="readonly", width=20
         )
         self.session_selector.set(current_session_readable)
+        disable_combobox_scroll(self.session_selector)
         self.session_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
         self.session_selector.bind("<<ComboboxSelected>>", self._on_session_selected)
         col += 1
@@ -835,6 +858,7 @@ class CompletionFrame(ttk.Frame):
                     width=15,
                 )
                 project_menu.set(initial_value)
+                disable_combobox_scroll(project_menu)
                 project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
 
                 # Bind selection event to handle "Add New Project..."
@@ -873,6 +897,7 @@ class CompletionFrame(ttk.Frame):
                     width=15,
                 )
                 break_action_menu.set(initial_value)
+                disable_combobox_scroll(break_action_menu)
                 break_action_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
 
                 # Bind selection event to handle "Add New Break Action..."
@@ -927,6 +952,7 @@ class CompletionFrame(ttk.Frame):
                     secondary_project_menu.set(saved_secondary_project)
                 else:
                     secondary_project_menu.set("Select A Project")
+                disable_combobox_scroll(secondary_project_menu)
                 secondary_project_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
@@ -955,6 +981,7 @@ class CompletionFrame(ttk.Frame):
                     secondary_action_menu.set(saved_secondary_action)
                 else:
                     secondary_action_menu.set("Select An Action")
+                disable_combobox_scroll(secondary_action_menu)
                 secondary_action_menu.grid(
                     row=idx, column=col, sticky=tk.W, padx=5, pady=2
                 )
