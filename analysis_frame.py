@@ -235,7 +235,7 @@ class AnalysisFrame(ttk.Frame):
         self.columnconfigure(0, weight=1)
         self.columnconfigure(1, weight=1)
         self.columnconfigure(2, weight=1)
-        self.rowconfigure(4, weight=1)
+        self.rowconfigure(5, weight=1)  # Make timeline container expand, not header
         # Load initial data
         self.refresh_all()
 
