@@ -7,7 +7,7 @@
   "screenshot_settings": {
     "enabled": true,
     "capture_on_focus_change": true,
-    "min_seconds_between_captures": 10,
+    "min_seconds_between_captures": 5,
     "screenshot_path": "screenshots"
   },
   "spheres": {

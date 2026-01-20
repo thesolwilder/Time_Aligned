@@ -1417,6 +1417,10 @@ class CompletionFrame(ttk.Frame):
             button_frame, text="Delete Session", command=self._delete_session
         ).grid(row=0, column=2, padx=5)
 
+        ttk.Button(
+            button_frame, text="Analysis", command=self.tracker.open_analysis
+        ).grid(row=0, column=3, padx=5)
+
     def save_and_close(self):
         """Save action tags and return to main frame"""
         all_data = self.tracker.load_data()

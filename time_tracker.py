@@ -108,7 +108,7 @@ class TimeTracker:
                 "idle_break_threshold": 300,  # seconds of idle before auto-break
             },
             "screenshot_settings": {
-                "enabled": True,  # enable/disable screenshot capture
+                "enabled": False,  # enable/disable screenshot capture
                 "capture_on_focus_change": True,  # capture on window focus change
                 "min_seconds_between_captures": 10,  # minimum seconds between captures
                 "screenshot_path": "screenshots",  # base path for screenshots

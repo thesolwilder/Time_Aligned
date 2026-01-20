@@ -25,8 +25,8 @@ class AnalysisFrame(ttk.Frame):
             "Last 7 Days",
             "Last 14 Days",
             "Last 30 Days",
-            "This Week",
-            "Last Week",
+            "This Week (Mon-Sun)",
+            "Last Week (Mon-Sun)",
             "This Month",
             "Last Month",
             "All Time",
@@ -47,6 +47,21 @@ class AnalysisFrame(ttk.Frame):
             "card_ranges", ["Last 7 Days", "Last 30 Days", "All Time"]
         )
 
+    def get_default_project(self, sphere):
+        """Get the default project for a given sphere"""
+        for project, data in self.tracker.settings.get("projects", {}).items():
+            if (
+                data.get("sphere") == sphere
+                and data.get("is_default", False)
+                and data.get("active", True)
+            ):
+                return project
+        # Fallback to first active project in the sphere
+        for project, data in self.tracker.settings.get("projects", {}).items():
+            if data.get("sphere") == sphere and data.get("active", True):
+                return project
+        return "All Projects"
+
     def save_card_ranges(self):
         """Save card range preferences to settings"""
         if "analysis_settings" not in self.tracker.settings:
@@ -62,8 +77,51 @@ class AnalysisFrame(ttk.Frame):
 
     def create_widgets(self):
         """Create all UI elements for the analysis frame"""
+        # Create scrollable container for entire frame
+        main_canvas = tk.Canvas(self)
+        main_scrollbar = ttk.Scrollbar(
+            self, orient="vertical", command=main_canvas.yview
+        )
+
+        # Main content frame inside canvas
+        content_frame = ttk.Frame(main_canvas)
+
+        # Configure canvas
+        main_canvas.configure(yscrollcommand=main_scrollbar.set)
+        main_canvas_window = main_canvas.create_window(
+            (0, 0), window=content_frame, anchor="nw"
+        )
+
+        def on_content_configure(event):
+            main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+            main_canvas.itemconfig(main_canvas_window, width=event.width)
+
+        content_frame.bind("<Configure>", on_content_configure)
+        main_canvas.bind("<Configure>", on_content_configure)
+
+        # Mousewheel scrolling for main canvas
+        def on_main_mousewheel(event):
+            main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def bind_mousewheel_recursive(widget):
+            """Recursively bind mcontent_framewheel to widget and children, skip Combobox and nested canvas"""
+            if not isinstance(widget, ttk.Combobox) and not isinstance(
+                widget, tk.Canvas
+            ):
+                widget.bind("<MouseWheel>", on_main_mousewheel)
+            for child in widget.winfo_children():
+                bind_mousewheel_recursive(child)
+
+        # Pack canvas and scrollbar
+        main_canvas.pack(side="left", fill="both", expand=True)
+        main_scrollbar.pack(side="right", fill="y")
+
+        # Store references
+        self.main_canvas = main_canvas
+        self.content_frame = content_frame
+
         # Back button and CSV export
-        header_frame = ttk.Frame(self)
+        header_frame = ttk.Frame(content_frame)
         header_frame.grid(
             row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
@@ -85,17 +143,19 @@ class AnalysisFrame(ttk.Frame):
         )
 
         # Filters
-        filter_frame = ttk.Frame(self)
+        filter_frame = ttk.Frame(content_frame)
         filter_frame.grid(
             row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
 
         ttk.Label(filter_frame, text="Sphere:").pack(side=tk.LEFT, padx=5)
 
-        self.sphere_var = tk.StringVar(value="All Spheres")
+        # Get default sphere using tracker's method
+        default_sphere = self.tracker._get_default_sphere()
         spheres = ["All Spheres"] + list(
             self.tracker.settings.get("spheres", {}).keys()
         )
+        self.sphere_var = tk.StringVar(value=default_sphere)
         self.sphere_filter = ttk.Combobox(
             filter_frame,
             textvariable=self.sphere_var,
@@ -108,16 +168,18 @@ class AnalysisFrame(ttk.Frame):
 
         ttk.Label(filter_frame, text="Project:").pack(side=tk.LEFT, padx=5)
 
+        # Get default project for the default sphere
+        self.default_project = self.get_default_project(default_sphere)
         self.project_var = tk.StringVar(value="All Projects")
         self.project_filter = ttk.Combobox(
             filter_frame, textvariable=self.project_var, state="readonly", width=15
         )
         self.project_filter.pack(side=tk.LEFT, padx=5)
         self.project_filter.bind("<<ComboboxSelected>>", self.on_filter_changed)
-        self.update_project_filter()
+        self.update_project_filter(set_default=True)
 
         # Three cards
-        cards_frame = ttk.Frame(self)
+        cards_frame = ttk.Frame(content_frame)
         cards_frame.grid(
             row=2, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
@@ -133,7 +195,7 @@ class AnalysisFrame(ttk.Frame):
             cards_frame.columnconfigure(i, weight=1)
 
         # Timeline section
-        timeline_label_frame = ttk.Frame(self)
+        timeline_label_frame = ttk.Frame(content_frame)
         timeline_label_frame.grid(
             row=3, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
@@ -147,7 +209,7 @@ class AnalysisFrame(ttk.Frame):
 
         # Timeline header (frozen at top)
         self.timeline_header_frame = tk.Frame(
-            self, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
+            content_frame, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
         )
         self.timeline_header_frame.grid(
             row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
@@ -188,7 +250,7 @@ class AnalysisFrame(ttk.Frame):
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Timeline with scrollbar
-        timeline_container = ttk.Frame(self)
+        timeline_container = ttk.Frame(content_frame)
         timeline_container.grid(
             row=5,
             column=0,
@@ -199,43 +261,22 @@ class AnalysisFrame(ttk.Frame):
         )
 
         # Create canvas and scrollbar for timeline
-        timeline_canvas = tk.Canvas(timeline_container, height=400)
-        timeline_scrollbar = ttk.Scrollbar(
-            timeline_container, orient="vertical", command=timeline_canvas.yview
-        )
+        # Use a simple frame for timeline - no separate scrollbar
+        self.timeline_frame = ttk.Frame(timeline_container)
+        self.timeline_frame.pack(fill="both", expand=True)
 
-        self.timeline_frame = ttk.Frame(timeline_canvas)
+        # Bind mousewheel to scroll the main canvas
+        self.timeline_frame.bind("<MouseWheel>", on_main_mousewheel)
 
-        timeline_canvas.configure(yscrollcommand=timeline_scrollbar.set)
-        timeline_canvas_window = timeline_canvas.create_window(
-            (0, 0), window=self.timeline_frame, anchor="nw"
-        )
+        # Configure grid weights for content_frame
+        content_frame.columnconfigure(0, weight=1)
+        content_frame.columnconfigure(1, weight=1)
+        content_frame.columnconfigure(2, weight=1)
+        content_frame.rowconfigure(5, weight=1)
 
-        def on_timeline_configure(event):
-            timeline_canvas.configure(scrollregion=timeline_canvas.bbox("all"))
-            timeline_canvas.itemconfig(timeline_canvas_window, width=event.width)
+        # Bind mousewheel to all widgets after creation
+        bind_mousewheel_recursive(content_frame)
 
-        self.timeline_frame.bind("<Configure>", on_timeline_configure)
-        timeline_canvas.bind("<Configure>", on_timeline_configure)
-
-        # Add mousewheel scrolling to timeline
-        def on_timeline_mousewheel(event):
-            timeline_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        timeline_canvas.bind("<MouseWheel>", on_timeline_mousewheel)
-        self.timeline_frame.bind("<MouseWheel>", on_timeline_mousewheel)
-
-        timeline_canvas.pack(side="left", fill="both", expand=True)
-        timeline_scrollbar.pack(side="right", fill="y")
-
-        # Store reference for later use
-        self.timeline_canvas = timeline_canvas
-
-        # Configure grid weights
-        self.columnconfigure(0, weight=1)
-        self.columnconfigure(1, weight=1)
-        self.columnconfigure(2, weight=1)
-        self.rowconfigure(5, weight=1)  # Make timeline container expand, not header
         # Load initial data
         self.refresh_all()
 
@@ -298,7 +339,7 @@ class AnalysisFrame(ttk.Frame):
         self.update_timeline()
         self.timeline_title.config(text=f"Timeline: {self.card_ranges[card_index]}")
 
-    def update_project_filter(self):
+    def update_project_filter(self, set_default=False):
         """Update project filter based on selected sphere"""
         sphere = self.sphere_var.get()
         projects = ["All Projects"]
@@ -315,7 +356,16 @@ class AnalysisFrame(ttk.Frame):
                     projects.append(proj)
 
             self.project_filter["values"] = projects
-            self.project_var.set("All Projects")
+
+            # Set default project if requested and it exists in the list
+            if (
+                set_default
+                and hasattr(self, "default_project")
+                and self.default_project in projects
+            ):
+                self.project_var.set(self.default_project)
+            else:
+                self.project_var.set("All Projects")
 
     def on_filter_changed(self, event=None):
         """Handle when filters change"""
@@ -343,11 +393,11 @@ class AnalysisFrame(ttk.Frame):
         elif range_name == "Last 30 Days":
             start = today - timedelta(days=29)
             end = today + timedelta(days=1)
-        elif range_name == "This Week":
+        elif range_name == "This Week (Mon-Sun)" or range_name == "This Week":
             # Monday to Sunday
             start = today - timedelta(days=today.weekday())
             end = start + timedelta(days=7)
-        elif range_name == "Last Week":
+        elif range_name == "Last Week (Mon-Sun)" or range_name == "Last Week":
             start = today - timedelta(days=today.weekday() + 7)
             end = start + timedelta(days=7)
         elif range_name == "This Month":
@@ -560,54 +610,79 @@ class AnalysisFrame(ttk.Frame):
             row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
             row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
 
-            tk.Label(
+            # Bind mousewheel to row frame for scrolling
+            def on_main_scroll(event):
+                self.main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+            row_frame.bind("<MouseWheel>", on_main_scroll)
+
+            date_lbl = tk.Label(
                 row_frame,
                 text=period["date"],
                 width=12,
                 anchor="w",
                 padx=5,
                 bg=bg_color,
-            ).pack(side=tk.LEFT)
-            tk.Label(
+            )
+            date_lbl.pack(side=tk.LEFT)
+            date_lbl.bind("<MouseWheel>", on_main_scroll)
+
+            type_lbl = tk.Label(
                 row_frame, text=period["type"], width=8, anchor="w", padx=5, bg=bg_color
-            ).pack(side=tk.LEFT)
-            tk.Label(
+            )
+            type_lbl.pack(side=tk.LEFT)
+            type_lbl.bind("<MouseWheel>", on_main_scroll)
+
+            sphere_lbl = tk.Label(
                 row_frame,
                 text=period["sphere"],
                 width=12,
                 anchor="w",
                 padx=5,
                 bg=bg_color,
-            ).pack(side=tk.LEFT)
+            )
+            sphere_lbl.pack(side=tk.LEFT)
+            sphere_lbl.bind("<MouseWheel>", on_main_scroll)
 
             proj_action = period.get("project") or period.get("action", "")
-            tk.Label(
+            proj_lbl = tk.Label(
                 row_frame, text=proj_action, width=18, anchor="w", padx=5, bg=bg_color
-            ).pack(side=tk.LEFT)
-            tk.Label(
+            )
+            proj_lbl.pack(side=tk.LEFT)
+            proj_lbl.bind("<MouseWheel>", on_main_scroll)
+
+            start_lbl = tk.Label(
                 row_frame,
                 text=self.format_time_12hr(period["start"]),
                 width=10,
                 anchor="w",
                 padx=5,
                 bg=bg_color,
-            ).pack(side=tk.LEFT)
-            tk.Label(
+            )
+            start_lbl.pack(side=tk.LEFT)
+            start_lbl.bind("<MouseWheel>", on_main_scroll)
+
+            dur_lbl = tk.Label(
                 row_frame,
                 text=self.format_duration(period["duration"]),
                 width=10,
                 anchor="w",
                 padx=5,
                 bg=bg_color,
-            ).pack(side=tk.LEFT)
-            tk.Label(
+            )
+            dur_lbl.pack(side=tk.LEFT)
+            dur_lbl.bind("<MouseWheel>", on_main_scroll)
+
+            comment_lbl = tk.Label(
                 row_frame,
                 text=period["comment"][:35],
                 width=35,
                 anchor="w",
                 padx=5,
                 bg=bg_color,
-            ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            )
+            comment_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            comment_lbl.bind("<MouseWheel>", on_main_scroll)
 
         if not periods:
             ttk.Label(

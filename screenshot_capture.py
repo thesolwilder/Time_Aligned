@@ -7,7 +7,7 @@ import os
 import time
 import threading
 from datetime import datetime
-from PIL import ImageGrab
+from PIL import ImageGrab, ImageDraw, ImageFont
 import win32gui
 import win32process
 import psutil
@@ -147,6 +147,40 @@ class ScreenshotCapture:
 
             # Capture screenshot
             screenshot = ImageGrab.grab()
+
+            # Add timestamp overlay to bottom left
+            draw = ImageDraw.Draw(screenshot)
+            timestamp_display = datetime.now().strftime("%m/%d/%Y %I:%M:%S %p")
+
+            # Try to use a nice font, fallback to default if not available
+            try:
+                font = ImageFont.truetype("arial.ttf", 16)
+            except:
+                font = ImageFont.load_default()
+
+            # Calculate text size for background rectangle
+            bbox = draw.textbbox((0, 0), timestamp_display, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+
+            # Get image dimensions for bottom left positioning
+            img_width, img_height = screenshot.size
+
+            # Draw semi-transparent background rectangle at bottom left
+            padding = 8
+            y_position = img_height - text_height - padding * 2
+            draw.rectangle(
+                [(0, y_position), (text_width + padding * 2, img_height)],
+                fill=(0, 0, 0, 100),
+            )
+
+            # Draw timestamp text in white at bottom left
+            draw.text(
+                (padding, y_position + padding),
+                timestamp_display,
+                fill=(255, 255, 255),
+                font=font,
+            )
 
             # Generate filename with timestamp and window info
             timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
