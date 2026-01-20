@@ -29,11 +29,22 @@ class CompletionFrame(ttk.Frame):
         """
         super().__init__(parent, padding="10")
         self.tracker = tracker
+
+        # If no session_name provided, get the most recent session
+        if session_name is None:
+            all_data = self.tracker.load_data()
+            if all_data:
+                # Get most recent session (sessions are named with timestamps)
+                session_name = max(all_data.keys())
+            else:
+                # No sessions available
+                session_name = None
+
         self.session_name = session_name
 
         # Load session data from JSON
         all_data = self.tracker.load_data()
-        if session_name in all_data:
+        if session_name and session_name in all_data:
             loaded_data = all_data[session_name]
             self.session_start_timestamp = loaded_data.get("start_timestamp", 0)
             self.session_end_timestamp = loaded_data.get("end_timestamp", 0)
@@ -400,9 +411,9 @@ class CompletionFrame(ttk.Frame):
                 dates_set.add(date_part)
 
         date_options = sorted(list(dates_set), reverse=True)  # Most recent first
-        current_date = (
-            self.session_name.split("_")[0] if "_" in self.session_name else ""
-        )
+        current_date = ""
+        if self.session_name and "_" in self.session_name:
+            current_date = self.session_name.split("_")[0]
 
         ttk.Label(time_frame, text="Date:", font=("Arial", 12, "bold")).grid(
             row=0, column=col, sticky=tk.W, padx=(0, 5)
@@ -1654,7 +1665,36 @@ class CompletionFrame(ttk.Frame):
 
         # Single save operation - minimizes I/O and reduces corruption risk
         self.tracker.save_data(all_data)
+
+        # Upload to Google Sheets if enabled
+        self._upload_to_google_sheets(session)
+
         self.tracker.show_main_frame()
+
+    def _upload_to_google_sheets(self, session_data):
+        """
+        Upload session data to Google Sheets if enabled
+
+        Args:
+            session_data: The session data dictionary to upload
+        """
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.tracker.settings_file)
+
+            if uploader.is_enabled():
+                success = uploader.upload_session(session_data, self.session_name)
+                if success:
+                    print(f"Session {self.session_name} uploaded to Google Sheets")
+                else:
+                    print(
+                        f"Failed to upload session {self.session_name} to Google Sheets"
+                    )
+        except ImportError:
+            print("Google Sheets integration not available - missing dependencies")
+        except Exception as e:
+            print(f"Error uploading to Google Sheets: {e}")
 
     def skip_and_close(self):
         """Return to main frame without saving"""

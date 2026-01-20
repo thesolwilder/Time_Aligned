@@ -1,46 +1,57 @@
+"""
+Tests for Idle Tracking Functionality
+
+Verifies that idle detection works correctly and idle periods are recorded accurately.
+"""
+
 import unittest
+from unittest.mock import Mock, patch, MagicMock
 import tkinter as tk
 import time
 import json
 import os
+import sys
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from test_helpers import MockTime, TestDataGenerator, TestFileManager
 from time_tracker import TimeTracker
 
 
 class TestIdleTracking(unittest.TestCase):
+    """Test idle detection and tracking"""
+
     def setUp(self):
         """Set up test fixtures before each test"""
+        self.file_manager = TestFileManager()
+        self.test_data_file = "test_idle_data.json"
+        self.test_settings_file = "test_idle_settings.json"
+
+        # Create test settings with short thresholds
+        settings = TestDataGenerator.create_settings_data()
+        settings["idle_settings"]["idle_threshold"] = 2  # 2 seconds
+        settings["idle_settings"]["idle_break_threshold"] = 10  # 10 seconds
+
+        self.file_manager.create_test_file(self.test_data_file, {})
+        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        # Create root window for TimeTracker
         self.root = tk.Tk()
         self.tracker = TimeTracker(self.root)
-
-        # Use test-specific filenames to avoid deleting user data
-        self.tracker.settings_file = "test_settings.json"
-        self.tracker.data_file = "test_data.json"
-
-        # Clean up any existing test data
-        if os.path.exists("test_data.json"):
-            os.remove("test_data.json")
-        if os.path.exists("test_settings.json"):
-            os.remove("test_settings.json")
-
-        # Set short thresholds for testing
-        self.tracker.settings = {
-            "idle_threshold": 2,  # 2 seconds to become idle
-            "idle_break_threshold": 10,  # 10 seconds for auto-break
-            "default_sphere": "General",
-        }
+        self.tracker.settings_file = self.test_settings_file
+        self.tracker.data_file = self.test_data_file
 
     def tearDown(self):
         """Clean up after each test"""
         if self.tracker.session_active:
             self.tracker.session_active = False
-            self.tracker.stop_input_monitoring()
+            if hasattr(self.tracker, "stop_input_monitoring"):
+                self.tracker.stop_input_monitoring()
         self.root.destroy()
 
         # Clean up test files
-        if os.path.exists("test_data.json"):
-            os.remove("test_data.json")
-        if os.path.exists("test_settings.json"):
-            os.remove("test_settings.json")
+        self.file_manager.cleanup()
 
     def test_idle_period_recorded_on_activity_before_auto_break(self):
         """Test that idle period is properly recorded when user becomes active before auto-break"""

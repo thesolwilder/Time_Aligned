@@ -10,6 +10,12 @@
     "min_seconds_between_captures": 5,
     "screenshot_path": "screenshots"
   },
+  "google_sheets": {
+    "enabled": false,
+    "spreadsheet_id": "",
+    "sheet_name": "Sessions",
+    "credentials_file": "credentials.json"
+  },
   "spheres": {
     "General": {
       "is_default": false,

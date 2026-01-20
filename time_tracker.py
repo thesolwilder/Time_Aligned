@@ -236,46 +236,113 @@ class TimeTracker:
         # Store reference to main frame container for show/hide
         self.main_frame_container = main_frame_container
 
+        # Top-right utility links frame
+        top_right_frame = ttk.Frame(main_frame)
+        top_right_frame.grid(row=0, column=2, sticky=tk.E, pady=5)
+
+        # Settings link (top right)
+        settings_link = tk.Label(
+            top_right_frame,
+            text="Settings",
+            fg="#0066CC",
+            cursor="hand2",
+            font=("Arial", 10, "underline"),
+        )
+        settings_link.grid(row=0, column=0, padx=8)
+        settings_link.bind("<Button-1>", lambda e: self.open_settings())
+
+        # Analysis link (top right)
+        analysis_link = tk.Label(
+            top_right_frame,
+            text="Analysis",
+            fg="#0066CC",
+            cursor="hand2",
+            font=("Arial", 10, "underline"),
+        )
+        analysis_link.grid(row=0, column=1, padx=8)
+        analysis_link.bind("<Button-1>", lambda e: self.open_analysis())
+
+        # Session View link (top right)
+        session_view_link = tk.Label(
+            top_right_frame,
+            text="Session View",
+            fg="#0066CC",
+            cursor="hand2",
+            font=("Arial", 10, "underline"),
+        )
+        session_view_link.grid(row=0, column=2, padx=8)
+        session_view_link.bind("<Button-1>", lambda e: self.open_session_view())
+
+        # Session start info
+        self.session_start_label = ttk.Label(
+            main_frame, text="", font=("Arial", 10), foreground="#666666"
+        )
+        self.session_start_label.grid(row=1, column=0, columnspan=3, pady=(5, 0))
+
         # Session timer
-        ttk.Label(main_frame, text="Session Time:", font=("Arial", 12, "bold")).grid(
-            row=1, column=0, sticky=tk.W, pady=10
-        )
+        session_timer_frame = ttk.Frame(main_frame)
+        session_timer_frame.grid(row=2, column=0, columnspan=3, pady=(5, 2))
+        ttk.Label(
+            session_timer_frame, text="Session Time:", font=("Arial", 12, "bold")
+        ).pack()
         self.session_timer_label = ttk.Label(
-            main_frame, text="00:00:00", font=("Arial", 20)
+            session_timer_frame, text="00:00:00", font=("Arial", 48, "bold")
         )
-        self.session_timer_label.grid(row=1, column=1, columnspan=2, pady=10)
+        self.session_timer_label.pack()
 
         # Break timer
-        ttk.Label(main_frame, text="Break Time:", font=("Arial", 12, "bold")).grid(
-            row=2, column=0, sticky=tk.W, pady=10
-        )
+        break_timer_frame = ttk.Frame(main_frame)
+        break_timer_frame.grid(row=3, column=0, columnspan=3, pady=2)
+        ttk.Label(
+            break_timer_frame, text="Break Time:", font=("Arial", 10, "bold")
+        ).pack()
         self.break_timer_label = ttk.Label(
-            main_frame, text="00:00:00", font=("Arial", 20)
+            break_timer_frame, text="00:00:00", font=("Arial", 28, "bold")
         )
-        self.break_timer_label.grid(row=2, column=1, columnspan=2, pady=10)
+        self.break_timer_label.pack()
+
+        # Total times display (Active / Break)
+        totals_frame = ttk.Frame(main_frame)
+        totals_frame.grid(row=4, column=0, columnspan=3, pady=(2, 2))
+
+        # Total Active Time
+        active_frame = ttk.Frame(totals_frame)
+        active_frame.pack(side=tk.LEFT, padx=20)
+        ttk.Label(active_frame, text="Total Active:", font=("Arial", 9)).pack()
+        self.total_active_label = ttk.Label(
+            active_frame,
+            text="00:00:00",
+            font=("Arial", 14, "bold"),
+            foreground="#2E7D32",
+        )
+        self.total_active_label.pack()
+
+        # Total Break Time
+        break_total_frame = ttk.Frame(totals_frame)
+        break_total_frame.pack(side=tk.LEFT, padx=20)
+        ttk.Label(break_total_frame, text="Total Break:", font=("Arial", 9)).pack()
+        self.total_break_label = ttk.Label(
+            break_total_frame,
+            text="00:00:00",
+            font=("Arial", 14, "bold"),
+            foreground="#F57C00",
+        )
+        self.total_break_label.pack()
 
         # Status label
         self.status_label = ttk.Label(
             main_frame, text="Ready to start", font=("Arial", 10)
         )
-        self.status_label.grid(row=3, column=0, columnspan=3, pady=10)
+        self.status_label.grid(row=5, column=0, columnspan=3, pady=5)
 
-        # Control buttons
+        # Bottom control buttons (Start, Break, End only)
         button_frame = ttk.Frame(main_frame)
-        button_frame.grid(row=4, column=0, columnspan=3, pady=20)
+        button_frame.grid(row=6, column=0, columnspan=3, pady=10)
 
         self.start_button = ttk.Button(
             button_frame, text="Start Session", command=self.start_session
         )
         self.start_button.grid(row=0, column=0, padx=5)
-
-        self.end_button = ttk.Button(
-            button_frame,
-            text="End Session",
-            command=self.end_session,
-            state=tk.DISABLED,
-        )
-        self.end_button.grid(row=0, column=2, padx=5)
 
         self.break_button = ttk.Button(
             button_frame,
@@ -285,17 +352,13 @@ class TimeTracker:
         )
         self.break_button.grid(row=0, column=1, padx=5)
 
-        # Settings button
-        settings_button = ttk.Button(
-            button_frame, text="Settings", command=self.open_settings
+        self.end_button = ttk.Button(
+            button_frame,
+            text="End Session",
+            command=self.end_session,
+            state=tk.DISABLED,
         )
-        settings_button.grid(row=0, column=3, padx=5)
-
-        # Analysis button
-        analysis_button = ttk.Button(
-            button_frame, text="Analysis", command=self.open_analysis
-        )
-        analysis_button.grid(row=0, column=4, padx=5)
+        self.end_button.grid(row=0, column=2, padx=5)
 
         # Configure grid weights
         self.root.columnconfigure(0, weight=1)
@@ -422,6 +485,14 @@ class TimeTracker:
         self.break_button.config(state=tk.NORMAL)
         self.status_label.config(text="Session active")
 
+        # Update session start label
+        start_datetime = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+        self.session_start_label.config(text=f"Started: {start_datetime}")
+
+        # Reset total time labels
+        self.total_active_label.config(text="00:00:00")
+        self.total_break_label.config(text="00:00:00")
+
         # Start input monitoring
         self.start_input_monitoring()
 
@@ -517,6 +588,9 @@ class TimeTracker:
         self.break_button.config(state=tk.DISABLED)
         self.status_label.config(text="Session ended")
         self.session_timer_label.config(text="00:00:00")
+        self.session_start_label.config(text="")
+        self.total_active_label.config(text="00:00:00")
+        self.total_break_label.config(text="00:00:00")
 
         # Show completion frame to label actions
         self.show_completion_frame(
@@ -694,7 +768,7 @@ class TimeTracker:
 
     def show_main_frame(self):
         """Show main timer frame (called from other frames to navigate back)"""
-        # Remove completion container
+        # Remove completion container (from end session)
         if hasattr(self, "completion_container") and self.completion_container:
             self.completion_container.grid_remove()
             self.completion_container.destroy()
@@ -703,8 +777,20 @@ class TimeTracker:
         if self.completion_frame:
             self.completion_frame = None
 
+        # Remove session view container (from session view)
+        if hasattr(self, "session_view_container") and self.session_view_container:
+            self.session_view_container.grid_remove()
+            self.session_view_container.destroy()
+            self.session_view_container = None
+
+        if hasattr(self, "session_view_frame") and self.session_view_frame:
+            self.session_view_frame = None
+
         # Show main frame
-        self.main_frame_container.grid()
+        self.main_frame_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Restore window title
+        self.root.title("Time Aligned - Time Tracker")
 
         # Clear session name
         self.session_name = None
@@ -765,14 +851,33 @@ class TimeTracker:
             self.session_elapsed = total_elapsed - self.total_break_time
             self.session_timer_label.config(text=self.format_time(self.session_elapsed))
 
+            # Update total active time
+            self.total_active_label.config(text=self.format_time(self.session_elapsed))
+
             # Check for idle
             self.check_idle()
 
         if self.break_active:
-            self.break_elapsed = time.time() - self.break_start_time
+            # Get current time once for all calculations
+            current_time = time.time()
+            self.break_elapsed = current_time - self.break_start_time
+
+            # Update break timer (current break)
             self.break_timer_label.config(text=self.format_time(self.break_elapsed))
+
+            # Total break stays at previous cumulative value (updates only when break ends)
+            # No need to update total_break_label here
         else:
             self.break_timer_label.config(text="00:00:00")
+
+            # Update total break time when not on break (shows cumulative total)
+            if self.session_active:
+                self.total_break_label.config(
+                    text=self.format_time(self.total_break_time)
+                )
+            else:
+                # Reset total break when no session is active
+                self.total_break_label.config(text="00:00:00")
 
         # save in case computer crashes or runtime stops unexpectedly
 
@@ -894,6 +999,92 @@ class TimeTracker:
             # Reload settings after closing settings window
             self.settings = self.get_settings()
 
+    def open_session_view(self):
+        """Open the session view window (shows completion frame)"""
+        # Don't allow opening session view while tracking time
+        if self.session_active:
+            messagebox.showwarning(
+                "Session Active",
+                "Cannot open session view while tracking time. Please end the session first.",
+            )
+            return
+
+        if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
+            # Session view already open, do nothing
+            return
+
+        # Hide main frame
+        self.main_frame_container.grid_forget()
+
+        # Create scrollable container for completion frame
+        completion_container = ttk.Frame(self.root)
+        completion_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        # Create canvas and scrollbar
+        canvas = tk.Canvas(completion_container)
+        scrollbar = ttk.Scrollbar(
+            completion_container, orient="vertical", command=canvas.yview
+        )
+
+        # Create completion frame (session view)
+        self.session_view_frame = CompletionFrame(canvas, self, None)
+
+        # Configure canvas
+        self.session_view_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        canvas_window = canvas.create_window(
+            (0, 0), window=self.session_view_frame, anchor="nw"
+        )
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Update canvas window width when canvas resizes
+        def on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas.bind("<Configure>", on_canvas_configure)
+
+        # Pack canvas and scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Bind mousewheel for scrolling
+        def on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        def bind_mousewheel(widget):
+            if not isinstance(widget, ttk.Combobox):
+                widget.bind("<MouseWheel>", on_mousewheel)
+            for child in widget.winfo_children():
+                bind_mousewheel(child)
+
+        bind_mousewheel(completion_container)
+        bind_mousewheel(self.session_view_frame)
+
+        # Store container reference
+        self.session_view_container = completion_container
+
+        # Update window title
+        self.root.title("Time Aligned - Session View")
+
+    def close_session_view(self):
+        """Close session view and return to main view"""
+        if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
+            # Destroy session view container
+            if hasattr(self, "session_view_container"):
+                self.session_view_container.destroy()
+                self.session_view_container = None
+
+            self.session_view_frame = None
+
+            # Show main frame again
+            self.main_frame_container.grid(
+                row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+            )
+
+            # Restore window title
+            self.root.title("Time Aligned - Time Tracker")
+
     def create_tray_icon_image(self, state="idle"):
         """Create icon image for system tray based on state"""
         # Create a simple colored circle icon
@@ -999,13 +1190,13 @@ class TimeTracker:
             # Start global hotkey listener in a separate thread
             self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
             self.hotkey_listener.start()
-            print("Global hotkeys enabled:")
-            print("  Ctrl+Shift+S - Start session")
-            print("  Ctrl+Shift+B - Toggle break")
-            print("  Ctrl+Shift+E - End session")
-            print("  Ctrl+Shift+W - Show/hide window")
+            logging.info("Global hotkeys enabled:")
+            logging.info("  Ctrl+Shift+S - Start session")
+            logging.info("  Ctrl+Shift+B - Toggle break")
+            logging.info("  Ctrl+Shift+E - End session")
+            logging.info("  Ctrl+Shift+W - Show/hide window")
         except Exception as e:
-            print(f"Failed to setup global hotkeys: {e}")
+            logging.error(f"Failed to setup global hotkeys: {e}")
             import traceback
 
             traceback.print_exc()
