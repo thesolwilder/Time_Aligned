@@ -15,6 +15,9 @@ settings.json
 data.json
 time_track_timer.txt
 
+# Screenshots - contains potentially sensitive information
+screenshots/
+
 # Test files
 test_settings.json
 test_data.json

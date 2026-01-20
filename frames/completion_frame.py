@@ -8,6 +8,8 @@ import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
 from tkinter import messagebox
+import os
+import subprocess
 
 
 def disable_combobox_scroll(combobox):
@@ -670,6 +672,7 @@ class CompletionFrame(ttk.Frame):
                         "secondary_project": secondary_project,
                         "secondary_comment": secondary_comment,
                         "secondary_percentage": secondary_percentage,
+                        "screenshot_folder": period.get("screenshot_folder", ""),
                     }
                 )
 
@@ -710,6 +713,7 @@ class CompletionFrame(ttk.Frame):
                         "secondary_action": secondary_action,
                         "secondary_comment": secondary_comment,
                         "secondary_percentage": secondary_percentage,
+                        "screenshot_folder": period.get("screenshot_folder", ""),
                     }
                 )
 
@@ -750,6 +754,7 @@ class CompletionFrame(ttk.Frame):
                         "secondary_action": secondary_action,
                         "secondary_comment": secondary_comment,
                         "secondary_percentage": secondary_percentage,
+                        "screenshot_folder": period.get("screenshot_folder", ""),
                     }
                 )
 
@@ -1045,6 +1050,41 @@ class CompletionFrame(ttk.Frame):
             if not has_secondary_data:
                 label_secondary_percentage.grid_remove()  # Hide initially if no data
             self.secondary_percentage_labels.append(label_secondary_percentage)
+            col += 1
+
+            # Screenshot folder button
+            screenshot_folder = period.get("screenshot_folder", "")
+            if screenshot_folder and os.path.exists(screenshot_folder):
+                screenshot_btn = ttk.Button(
+                    periods_frame,
+                    text="📸",
+                    width=3,
+                    command=lambda folder=screenshot_folder: self._open_screenshot_folder(
+                        folder
+                    ),
+                )
+                screenshot_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            else:
+                # Empty space to maintain alignment
+                ttk.Label(periods_frame, text="", width=3).grid(
+                    row=idx, column=col, sticky=tk.W, padx=2, pady=2
+                )
+
+    def _open_screenshot_folder(self, folder_path):
+        """Open the screenshot folder in file explorer"""
+        try:
+            if os.path.exists(folder_path):
+                # Windows
+                if os.name == "nt":
+                    os.startfile(folder_path)
+                # macOS
+                elif os.sys.platform == "darwin":
+                    subprocess.run(["open", folder_path])
+                # Linux
+                else:
+                    subprocess.run(["xdg-open", folder_path])
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not open screenshot folder: {e}")
 
     def _toggle_secondary(self, idx):
         """Toggle between showing and hiding secondary dropdown and text box"""
@@ -1376,6 +1416,10 @@ class CompletionFrame(ttk.Frame):
         ttk.Button(
             button_frame, text="Delete Session", command=self._delete_session
         ).grid(row=0, column=2, padx=5)
+
+        ttk.Button(
+            button_frame, text="Analysis", command=self.tracker.open_analysis
+        ).grid(row=0, column=3, padx=5)
 
     def save_and_close(self):
         """Save action tags and return to main frame"""

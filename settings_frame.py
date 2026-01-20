@@ -983,6 +983,118 @@ class SettingsFrame(ttk.Frame):
             idle_frame, text="Save Idle Settings", command=save_idle_settings
         ).grid(row=idle_row, column=0, columnspan=2, pady=10)
 
+        # SEPARATOR
+        ttk.Separator(parent, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
+
+        # SCREENSHOT SETTINGS SECTION (Third)
+        screenshot_frame = ttk.LabelFrame(parent, padding=10)
+        screenshot_frame.grid(
+            row=self.row,
+            column=0,
+            columnspan=3,
+            padx=5,
+            pady=5,
+            sticky=(tk.W, tk.E),
+        )
+        self.row += 1
+
+        # Header inside the frame
+        screenshot_header_row = 0
+        ttk.Label(
+            screenshot_frame, text="Screenshot Settings", font=("Arial", 14, "bold")
+        ).grid(
+            row=screenshot_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
+        )
+        screenshot_header_row += 1
+
+        # SCREENSHOT SETTINGS
+        screenshot_settings = self.tracker.settings.get("screenshot_settings", {})
+
+        screenshot_row = screenshot_header_row
+
+        # Screenshot capture enabled toggle
+        screenshot_enabled_var = tk.BooleanVar(
+            value=screenshot_settings.get("enabled", False)
+        )
+
+        # Warning label (initially hidden)
+        warning_label = ttk.Label(
+            screenshot_frame,
+            text="⚠️ Warning: Screenshots may capture sensitive information (passwords, private messages, etc.).\nSoftware creator is not liable for any data captured. Use at your own risk.",
+            foreground="red",
+            wraplength=500,
+            justify=tk.LEFT,
+        )
+
+        def toggle_warning():
+            if screenshot_enabled_var.get():
+                warning_label.grid(
+                    row=screenshot_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
+                )
+            else:
+                warning_label.grid_remove()
+
+        ttk.Checkbutton(
+            screenshot_frame,
+            text="Enable Screenshot Capture",
+            variable=screenshot_enabled_var,
+            command=toggle_warning,
+        ).grid(row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5)
+        screenshot_row += 1
+
+        # Show warning if already enabled
+        if screenshot_enabled_var.get():
+            warning_label.grid(
+                row=screenshot_row, column=0, columnspan=3, sticky=tk.W, pady=5
+            )
+        screenshot_row += 1
+
+        # Capture on focus change
+        capture_on_focus_var = tk.BooleanVar(
+            value=screenshot_settings.get("capture_on_focus_change", True)
+        )
+        ttk.Checkbutton(
+            screenshot_frame,
+            text="Capture on window focus change",
+            variable=capture_on_focus_var,
+        ).grid(row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5)
+        screenshot_row += 1
+
+        # Min seconds between captures
+        ttk.Label(screenshot_frame, text="Min seconds between captures:").grid(
+            row=screenshot_row, column=0, sticky=tk.W, pady=5
+        )
+        min_seconds_var = tk.IntVar(
+            value=screenshot_settings.get("min_seconds_between_captures", 10)
+        )
+        min_seconds_spin = ttk.Spinbox(
+            screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=10
+        )
+        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, padx=5)
+        screenshot_row += 1
+
+        # Save screenshot settings button
+        def save_screenshot_settings():
+            self.tracker.settings["screenshot_settings"] = {
+                "enabled": screenshot_enabled_var.get(),
+                "capture_on_focus_change": capture_on_focus_var.get(),
+                "min_seconds_between_captures": min_seconds_var.get(),
+                "screenshot_path": screenshot_settings.get(
+                    "screenshot_path", "screenshots"
+                ),
+            }
+            self.save_settings()
+            messagebox.showinfo("Success", "Screenshot settings saved")
+
+        ttk.Button(
+            screenshot_frame,
+            text="Save Screenshot Settings",
+            command=save_screenshot_settings,
+        ).grid(row=screenshot_row, column=0, columnspan=2, pady=10)
+
         # Rebind mousewheel to new widgets
         if hasattr(self, "bind_mousewheel_func"):
             self.bind_mousewheel_func()

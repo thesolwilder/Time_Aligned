@@ -4,6 +4,12 @@
     "idle_break_threshold": 300,
     "idle_tracking_enabled": true
   },
+  "screenshot_settings": {
+    "enabled": true,
+    "capture_on_focus_change": true,
+    "min_seconds_between_captures": 5,
+    "screenshot_path": "screenshots"
+  },
   "spheres": {
     "General": {
       "is_default": false,
@@ -181,5 +187,12 @@
       "active": false,
       "is_default": false
     }
+  },
+  "analysis_settings": {
+    "card_ranges": [
+      "Last 7 Days",
+      "Last 14 Days",
+      "All Time"
+    ]
   }
 }
