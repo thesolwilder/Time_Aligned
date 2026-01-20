@@ -7,6 +7,9 @@ from datetime import datetime
 import warnings
 import logging
 import sys
+import threading
+from PIL import Image, ImageDraw
+import pystray
 
 # Suppress pynput's harmless Python 3.13 compatibility warnings
 logging.getLogger("pynput").setLevel(logging.ERROR)
@@ -93,8 +96,22 @@ class TimeTracker:
         self.completion_frame = None
         self.settings_frame = None
 
+        # System tray icon
+        self.tray_icon = None
+        self.tray_thread = None
+        self.window_visible = True
+
+        # Global hotkeys
+        self.hotkey_listener = None
+
         # Create GUI
         self.create_widgets()
+
+        # Setup system tray
+        self.setup_tray_icon()
+
+        # Setup global hotkeys
+        self.setup_global_hotkeys()
 
         # Start update loop
         self.update_timers()
@@ -215,6 +232,9 @@ class TimeTracker:
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
 
         main_frame_container.bind("<MouseWheel>", on_mousewheel)
+
+        # Store reference to main frame container for show/hide
+        self.main_frame_container = main_frame_container
 
         # Session timer
         ttk.Label(main_frame, text="Session Time:", font=("Arial", 12, "bold")).grid(
@@ -736,6 +756,9 @@ class TimeTracker:
 
     def update_timers(self):
         """Update timer displays"""
+        # Update tray icon periodically
+        self.update_tray_icon()
+
         if self.session_active and not self.break_active:
             # Calculate active time by subtracting breaks from total elapsed
             total_elapsed = time.time() - self.session_start_time
@@ -871,6 +894,198 @@ class TimeTracker:
             # Reload settings after closing settings window
             self.settings = self.get_settings()
 
+    def create_tray_icon_image(self, state="idle"):
+        """Create icon image for system tray based on state"""
+        # Create a simple colored circle icon
+        size = 64
+        image = Image.new("RGB", (size, size), "white")
+        dc = ImageDraw.Draw(image)
+
+        # Color based on state
+        colors = {
+            "idle": "#808080",  # Gray
+            "active": "#4CAF50",  # Green
+            "break": "#FFC107",  # Amber/Yellow
+            "paused": "#FF9800",  # Orange
+        }
+
+        color = colors.get(state, "#808080")
+
+        # Draw circle
+        dc.ellipse([8, 8, size - 8, size - 8], fill=color, outline="black", width=2)
+
+        return image
+
+    def setup_tray_icon(self):
+        """Setup system tray icon with menu"""
+
+        def run_tray():
+            # Create menu
+            menu = pystray.Menu(
+                pystray.MenuItem("Show/Hide Window", self.toggle_window, default=True),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem(
+                    "Start Session",
+                    self.tray_start_session,
+                    enabled=lambda item: not self.session_active,
+                ),
+                pystray.MenuItem(
+                    "Start Break",
+                    self.tray_toggle_break,
+                    enabled=lambda item: self.session_active and not self.break_active,
+                ),
+                pystray.MenuItem(
+                    "End Break",
+                    self.tray_toggle_break,
+                    enabled=lambda item: self.session_active and self.break_active,
+                ),
+                pystray.MenuItem(
+                    "End Session",
+                    self.tray_end_session,
+                    enabled=lambda item: self.session_active,
+                ),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Settings", self.tray_open_settings),
+                pystray.MenuItem("Analysis", self.tray_open_analysis),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Quit", self.tray_quit),
+            )
+
+            # Create icon
+            self.tray_icon = pystray.Icon(
+                "TimeAligned",
+                self.create_tray_icon_image("idle"),
+                "Time Aligned - Ready",
+                menu,
+            )
+
+            # Run icon (blocks until stopped)
+            self.tray_icon.run()
+
+        # Start tray icon in separate thread
+        self.tray_thread = threading.Thread(target=run_tray, daemon=True)
+        self.tray_thread.start()
+
+    def update_tray_icon(self):
+        """Update tray icon based on current state"""
+        if self.tray_icon is None:
+            return
+
+        if self.session_active:
+            if self.break_active:
+                state = "break"
+                title = f"Time Aligned - Break ({self.format_time(int(self.break_elapsed))})"
+            else:
+                state = "active"
+                title = f"Time Aligned - Active ({self.format_time(int(self.session_elapsed))})"
+        else:
+            state = "idle"
+            title = "Time Aligned - Ready"
+
+        self.tray_icon.icon = self.create_tray_icon_image(state)
+        self.tray_icon.title = title
+
+    def setup_global_hotkeys(self):
+        """Setup global keyboard shortcuts"""
+        try:
+            # Define hotkey handlers using proper key format
+            hotkeys = {
+                "<ctrl>+<shift>+s": self._hotkey_start_session,
+                "<ctrl>+<shift>+b": self._hotkey_toggle_break,
+                "<ctrl>+<shift>+e": self._hotkey_end_session,
+                "<ctrl>+<shift>+w": self._hotkey_toggle_window,
+            }
+
+            # Start global hotkey listener in a separate thread
+            self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
+            self.hotkey_listener.start()
+            print("Global hotkeys enabled:")
+            print("  Ctrl+Shift+S - Start session")
+            print("  Ctrl+Shift+B - Toggle break")
+            print("  Ctrl+Shift+E - End session")
+            print("  Ctrl+Shift+W - Show/hide window")
+        except Exception as e:
+            print(f"Failed to setup global hotkeys: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+    def _hotkey_start_session(self):
+        """Start session via hotkey"""
+
+        def do_start():
+            if not self.session_active:
+                self.start_session()
+
+        self.root.after(0, do_start)
+
+    def _hotkey_toggle_break(self):
+        """Toggle break via hotkey"""
+
+        def do_break():
+            if self.session_active:
+                self.toggle_break()
+
+        self.root.after(0, do_break)
+
+    def _hotkey_end_session(self):
+        """End session via hotkey"""
+
+        def do_end():
+            if self.session_active:
+                # Show window when ending session
+                if not self.window_visible:
+                    self.toggle_window()
+                self.end_session()
+
+        self.root.after(0, do_end)
+
+    def _hotkey_toggle_window(self):
+        """Toggle window visibility via hotkey"""
+        self.root.after(0, self.toggle_window)
+
+    def toggle_window(self, icon=None, item=None):
+        """Toggle main window visibility"""
+        if self.window_visible:
+            self.root.withdraw()
+            self.window_visible = False
+        else:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+            self.window_visible = True
+
+    def tray_start_session(self, icon=None, item=None):
+        """Start session from tray menu"""
+        self.root.after(0, self.start_session)
+
+    def tray_toggle_break(self, icon=None, item=None):
+        """Toggle break from tray menu"""
+        self.root.after(0, self.toggle_break)
+
+    def tray_end_session(self, icon=None, item=None):
+        """End session from tray menu"""
+        # Show window when ending session (completion frame needs to be visible)
+        if not self.window_visible:
+            self.toggle_window()
+        self.root.after(0, self.end_session)
+
+    def tray_open_settings(self, icon=None, item=None):
+        """Open settings from tray menu"""
+        if not self.window_visible:
+            self.toggle_window()
+        self.root.after(0, self.open_settings)
+
+    def tray_open_analysis(self, icon=None, item=None):
+        """Open analysis from tray menu"""
+        if not self.window_visible:
+            self.toggle_window()
+        self.root.after(0, self.open_analysis)
+
+    def tray_quit(self, icon=None, item=None):
+        """Quit application from tray menu"""
+        self.root.after(0, self.on_closing)
+
     def on_closing(self):
         """Clean up before closing"""
         if self.session_active:
@@ -879,9 +1094,17 @@ class TimeTracker:
             ):
                 self.end_session()
                 self.stop_input_monitoring()
+                if self.hotkey_listener:
+                    self.hotkey_listener.stop()
+                if self.tray_icon:
+                    self.tray_icon.stop()
                 self.root.destroy()
         else:
             self.stop_input_monitoring()
+            if self.hotkey_listener:
+                self.hotkey_listener.stop()
+            if self.tray_icon:
+                self.tray_icon.stop()
             self.root.destroy()
 
 

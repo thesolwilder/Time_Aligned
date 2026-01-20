@@ -123,6 +123,15 @@ class SettingsFrame(ttk.Frame):
         # Break actions and idle settings
         self.create_break_idle_section(content_frame)
 
+        # Separator
+        ttk.Separator(content_frame, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
+
+        # Keyboard shortcuts reference section
+        self.create_keyboard_shortcuts_section(content_frame)
+
         # Back button
         self.row += 1
         ttk.Separator(content_frame, orient="horizontal").grid(
@@ -1096,6 +1105,68 @@ class SettingsFrame(ttk.Frame):
         ).grid(row=screenshot_row, column=0, columnspan=2, pady=10)
 
         # Rebind mousewheel to new widgets
+        if hasattr(self, "bind_mousewheel_func"):
+            self.bind_mousewheel_func()
+
+    def create_keyboard_shortcuts_section(self, parent):
+        """Create keyboard shortcuts reference section"""
+        shortcuts_frame = ttk.LabelFrame(
+            parent, padding=10, text="Global Keyboard Shortcuts"
+        )
+        shortcuts_frame.grid(
+            row=self.row,
+            column=0,
+            columnspan=3,
+            padx=5,
+            pady=5,
+            sticky=(tk.W, tk.E),
+        )
+        self.row += 1
+
+        # Header
+        ttk.Label(
+            shortcuts_frame,
+            text="Use these shortcuts anywhere to control Time Aligned:",
+            font=("Arial", 10),
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
+
+        # Shortcuts list
+        shortcuts = [
+            ("Ctrl + Shift + S", "Start a new session"),
+            ("Ctrl + Shift + B", "Toggle break (start/end)"),
+            ("Ctrl + Shift + E", "End current session"),
+            ("Ctrl + Shift + W", "Show/hide main window"),
+        ]
+
+        row = 1
+        for hotkey, description in shortcuts:
+            # Hotkey in bold/monospace
+            hotkey_label = ttk.Label(
+                shortcuts_frame,
+                text=hotkey,
+                font=("Consolas", 10, "bold"),
+                foreground="#0066CC",
+            )
+            hotkey_label.grid(row=row, column=0, sticky=tk.W, padx=(10, 20), pady=5)
+
+            # Description
+            desc_label = ttk.Label(
+                shortcuts_frame, text=description, font=("Arial", 10)
+            )
+            desc_label.grid(row=row, column=1, sticky=tk.W, pady=5)
+
+            row += 1
+
+        # Note about system-wide functionality
+        note_label = ttk.Label(
+            shortcuts_frame,
+            text="💡 Tip: These shortcuts work system-wide, even when the window is hidden!",
+            font=("Arial", 9, "italic"),
+            foreground="#666666",
+        )
+        note_label.grid(row=row, column=0, columnspan=2, pady=(10, 0), sticky=tk.W)
+
+        # Rebind mousewheel
         if hasattr(self, "bind_mousewheel_func"):
             self.bind_mousewheel_func()
 
