@@ -150,8 +150,42 @@ class AnalysisFrame(ttk.Frame):
             self, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
         )
         self.timeline_header_frame.grid(
-            row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(0, 0)
+            row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
         )
+
+        # Create initial clickable header labels
+        def create_initial_header(text, column_key, width):
+            label = tk.Label(
+                self.timeline_header_frame,
+                text=text,
+                font=("Arial", 9, "bold"),
+                width=width,
+                anchor="w",
+                padx=5,
+                pady=3,
+                bg="#d0d0d0",
+                cursor="hand2",
+            )
+            label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
+            label.pack(side=tk.LEFT)
+            return label
+
+        create_initial_header("Date", "date", 12)
+        create_initial_header("Type", "type", 8)
+        create_initial_header("Sphere", "sphere", 12)
+        create_initial_header("Project/Action", "project", 18)
+        create_initial_header("Start", "start", 10)
+        create_initial_header("Duration", "duration", 10)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Comment",
+            font=("Arial", 9, "bold"),
+            width=35,
+            anchor="w",
+            padx=5,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Timeline with scrollbar
         timeline_container = ttk.Frame(self)
@@ -613,6 +647,7 @@ class AnalysisFrame(ttk.Frame):
                 width=width,
                 anchor="w",
                 padx=5,
+                pady=3,
                 bg="#d0d0d0",
                 cursor="hand2",
             )
@@ -632,6 +667,7 @@ class AnalysisFrame(ttk.Frame):
             width=35,
             anchor="w",
             padx=5,
+            pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
 
