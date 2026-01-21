@@ -1,0 +1,76 @@
+{
+  "2026-01-21_1769020502": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:02",
+    "start_timestamp": 1769020502.3087115,
+    "breaks": [
+      {
+        "start": "13:35:03",
+        "start_timestamp": 1769020503.0409162,
+        "end": "13:35:03",
+        "end_timestamp": 1769020503.3339193,
+        "duration": 0.25330305099487305
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:02",
+        "start_timestamp": 1769020502.3087115,
+        "end": "13:35:03",
+        "end_timestamp": 1769020503.0409162,
+        "duration": 0.7322046756744385,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769020502\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769020502\\period_active_0\\20260121_133502_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769020502\\period_active_0\\20260121_133502_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "timestamp": "20260121_133502",
+            "window_title": "analysis_frame.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      },
+      {
+        "start": "13:35:03",
+        "start_timestamp": 1769020503.3393385,
+        "end": "13:35:03",
+        "end_timestamp": 1769020503.3660038,
+        "duration": 0.026665210723876953
+      }
+    ],
+    "end_time": "13:35:03",
+    "end_timestamp": 1769020503.8668478,
+    "total_duration": 1.558136224746704,
+    "active_duration": 1.304833173751831,
+    "break_duration": 0.25330305099487305
+  },
+  "2026-01-21_1769020505": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:05",
+    "start_timestamp": 1769020505.2486973,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:05",
+        "start_timestamp": 1769020505.2486973,
+        "end": "13:35:05",
+        "end_timestamp": 1769020505.807053,
+        "duration": 0.5583558082580566,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769020505\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769020505\\period_active_0\\20260121_133505_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769020505\\period_active_0\\20260121_133505_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_133505",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "2026-01-21_1769020513": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:13",
+    "start_timestamp": 1769020513.5335915,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:13",
+        "start_timestamp": 1769020513.5335915,
+        "end": "13:35:13",
+        "end_timestamp": 1769020513.9155807,
+        "duration": 0.3819892406463623
+      }
+    ]
+  },
+  "2026-01-21_1769020514": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:14",
+    "start_timestamp": 1769020514.5598948,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:14",
+        "start_timestamp": 1769020514.5598948,
+        "end": "13:35:14",
+        "end_timestamp": 1769020514.9233694,
+        "duration": 0.36347460746765137
+      }
+    ]
+  }
+}

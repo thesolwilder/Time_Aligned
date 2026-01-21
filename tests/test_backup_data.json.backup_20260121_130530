@@ -1,0 +1,60 @@
+{
+  "2026-01-20_1737374400": {
+    "sphere": "TestSphere",
+    "date": "2026-01-20",
+    "start_time": "07:00:00",
+    "start_timestamp": 1737374400.0,
+    "active": [
+      {
+        "start": "07:00:00",
+        "start_timestamp": 1737374400.0,
+        "end": "07:05:00",
+        "end_timestamp": 1737374700.0,
+        "duration": 300.0,
+        "project": "TestProject0",
+        "comment": "Test comment 0"
+      },
+      {
+        "start": "07:06:00",
+        "start_timestamp": 1737374760.0,
+        "end": "07:11:00",
+        "end_timestamp": 1737375060.0,
+        "duration": 300.0,
+        "project": "TestProject1",
+        "comment": "Test comment 1"
+      }
+    ],
+    "breaks": [
+      {
+        "start": "07:05:00",
+        "start_timestamp": 1737374700.0,
+        "end": "07:06:00",
+        "end_timestamp": 1737374760.0,
+        "duration": 60.0,
+        "action": "Resting",
+        "comment": ""
+      }
+    ],
+    "idle_periods": [],
+    "end_time": "07:11:00",
+    "end_timestamp": 1737375060.0,
+    "total_duration": 660.0,
+    "active_duration": 600.0,
+    "break_duration": 60.0
+  },
+  "session_2": {
+    "date": "2024-01-21",
+    "start_time": "11:00:00",
+    "end_time": "12:00:00",
+    "start_timestamp": 1234567000,
+    "end_timestamp": 1234570600,
+    "total_duration": 3600,
+    "active_duration": 3000,
+    "break_duration": 600,
+    "sphere": "",
+    "active": [],
+    "breaks": [],
+    "actions": [],
+    "break_actions": []
+  }
+}

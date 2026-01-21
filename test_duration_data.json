@@ -1,0 +1,106 @@
+{
+  "2026-01-21_1769020538": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:38",
+    "start_timestamp": 1769020538.842961,
+    "breaks": [
+      {
+        "start": "13:35:39",
+        "start_timestamp": 1769020539.4451447,
+        "end": "13:35:39",
+        "end_timestamp": 1769020539.8391907,
+        "duration": 0.3646738529205322
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:38",
+        "start_timestamp": 1769020538.842961,
+        "end": "13:35:39",
+        "end_timestamp": 1769020539.4451447,
+        "duration": 0.6021835803985596,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769020538\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769020538\\period_active_0\\20260121_133538_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769020538\\period_active_0\\20260121_133538_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "timestamp": "20260121_133538",
+            "window_title": "analysis_frame.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ]
+  },
+  "2026-01-21_1769020540": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:40",
+    "start_timestamp": 1769020540.3091478,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:40",
+        "start_timestamp": 1769020540.3091478,
+        "end": "13:35:40",
+        "end_timestamp": 1769020540.9743752,
+        "duration": 0.6652274131774902
+      }
+    ],
+    "end_time": "13:35:42",
+    "end_timestamp": 1769020542.5767336,
+    "total_duration": 2.2675857543945312,
+    "active_duration": 2.2675857543945312,
+    "break_duration": 0
+  },
+  "2026-01-21_1769020543": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:43",
+    "start_timestamp": 1769020543.1226902,
+    "breaks": [
+      {
+        "start": "13:35:43",
+        "start_timestamp": 1769020543.729286,
+        "end": "13:35:44",
+        "end_timestamp": 1769020544.0266075,
+        "duration": 0.2694683074951172
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:43",
+        "start_timestamp": 1769020543.1226902,
+        "end": "13:35:43",
+        "end_timestamp": 1769020543.729286,
+        "duration": 0.6065957546234131,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769020543\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769020543\\period_active_0\\20260121_133543_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769020543\\period_active_0\\20260121_133543_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
+            "timestamp": "20260121_133543",
+            "window_title": "analysis_frame.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      },
+      {
+        "start": "13:35:44",
+        "start_timestamp": 1769020544.0310755,
+        "end": "13:35:44",
+        "end_timestamp": 1769020544.2745638,
+        "duration": 0.24348831176757812
+      }
+    ],
+    "end_time": "13:35:44",
+    "end_timestamp": 1769020544.7167063,
+    "total_duration": 1.5940160751342773,
+    "active_duration": 1.3245477676391602,
+    "break_duration": 0.2694683074951172
+  }
+}

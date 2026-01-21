@@ -1,0 +1,152 @@
+{
+  "2026-01-21_1769019537": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "13:18:57",
+    "start_timestamp": 1769019537.4637017,
+    "breaks": [],
+    "idle_periods": []
+  },
+  "2026-01-21_1769019930": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "13:25:30",
+    "start_timestamp": 1769019930.2677302,
+    "breaks": [
+      {
+        "start": "13:25:30",
+        "start_timestamp": 1769019930.7278361,
+        "end": "13:25:30",
+        "end_timestamp": 1769019930.956951,
+        "duration": 0.20194077491760254
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:25:30",
+        "start_timestamp": 1769019930.2677302,
+        "end": "13:25:30",
+        "end_timestamp": 1769019930.7278361,
+        "duration": 0.46010589599609375
+      }
+    ]
+  },
+  "2026-01-21_1769020156": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "13:29:16",
+    "start_timestamp": 1769020156.575065,
+    "breaks": [
+      {
+        "start": "13:29:17",
+        "start_timestamp": 1769020157.0561,
+        "end": "13:29:17",
+        "end_timestamp": 1769020157.2904675,
+        "duration": 0.21227335929870605
+      },
+      {
+        "start": "13:29:17",
+        "start_timestamp": 1769020157.4185276,
+        "end": "13:29:17",
+        "end_timestamp": 1769020157.635462,
+        "duration": 0.19725871086120605
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:29:16",
+        "start_timestamp": 1769020156.575065,
+        "end": "13:29:17",
+        "end_timestamp": 1769020157.0561,
+        "duration": 0.4810349941253662
+      },
+      {
+        "start": "13:29:17",
+        "start_timestamp": 1769020157.2926295,
+        "end": "13:29:17",
+        "end_timestamp": 1769020157.4185276,
+        "duration": 0.12589812278747559
+      }
+    ]
+  },
+  "2026-01-21_1769020244": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "13:30:44",
+    "start_timestamp": 1769020244.499175,
+    "breaks": [
+      {
+        "start": "13:30:44",
+        "start_timestamp": 1769020244.9399283,
+        "end": "13:30:45",
+        "end_timestamp": 1769020245.1678152,
+        "duration": 0.20114922523498535
+      },
+      {
+        "start": "13:30:45",
+        "start_timestamp": 1769020245.2981532,
+        "end": "13:30:45",
+        "end_timestamp": 1769020245.5231817,
+        "duration": 0.20152711868286133
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:30:44",
+        "start_timestamp": 1769020244.499175,
+        "end": "13:30:44",
+        "end_timestamp": 1769020244.9399283,
+        "duration": 0.4407532215118408
+      },
+      {
+        "start": "13:30:45",
+        "start_timestamp": 1769020245.1701648,
+        "end": "13:30:45",
+        "end_timestamp": 1769020245.2981532,
+        "duration": 0.12798833847045898
+      }
+    ]
+  },
+  "2026-01-21_1769020455": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "13:34:15",
+    "start_timestamp": 1769020455.2770524,
+    "breaks": [
+      {
+        "start": "13:34:15",
+        "start_timestamp": 1769020455.727159,
+        "end": "13:34:15",
+        "end_timestamp": 1769020455.9854796,
+        "duration": 0.23546576499938965
+      },
+      {
+        "start": "13:34:16",
+        "start_timestamp": 1769020456.1244526,
+        "end": "13:34:16",
+        "end_timestamp": 1769020456.3518858,
+        "duration": 0.2062075138092041
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:34:15",
+        "start_timestamp": 1769020455.2770524,
+        "end": "13:34:15",
+        "end_timestamp": 1769020455.727159,
+        "duration": 0.4501066207885742
+      },
+      {
+        "start": "13:34:15",
+        "start_timestamp": 1769020455.9913163,
+        "end": "13:34:16",
+        "end_timestamp": 1769020456.1244526,
+        "duration": 0.13313627243041992
+      }
+    ]
+  }
+}

@@ -22,9 +22,15 @@ class TestButtonNavigation(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
+        from test_helpers import TestDataGenerator
+
         self.file_manager = TestFileManager()
         self.test_data_file = "test_navigation_data.json"
         self.test_settings_file = "test_navigation_settings.json"
+
+        # Create test settings file
+        settings = TestDataGenerator.create_settings_data()
+        self.file_manager.create_test_file(self.test_settings_file, settings)
 
         self.root = tk.Tk()
         self.tracker = TimeTracker(self.root)
@@ -82,12 +88,14 @@ class TestButtonNavigation(unittest.TestCase):
 
         # Call save_and_close
         self.tracker.completion_frame.save_and_close()
+        self.root.update()  # Process pending events
 
         # Verify main frame is shown
         self.assertIsNone(self.tracker.completion_container)
         self.assertIsNone(self.tracker.session_name)
 
         # Verify main frame container is visible
+        self.root.update()  # Ensure frame is mapped
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
     def test_skip_and_close_returns_to_main(self):
@@ -120,12 +128,14 @@ class TestButtonNavigation(unittest.TestCase):
 
         # Call skip_and_close
         self.tracker.completion_frame.skip_and_close()
+        self.root.update()  # Process pending events
 
         # Verify main frame is shown
         self.assertIsNone(self.tracker.completion_container)
         self.assertIsNone(self.tracker.session_name)
 
         # Verify main frame container is visible
+        self.root.update()  # Ensure frame is mapped
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
     def test_delete_session_from_completion_returns_to_main(self):
@@ -134,7 +144,7 @@ class TestButtonNavigation(unittest.TestCase):
         self.tracker.session_name = "test_session"
         self.tracker.session_active = False
 
-        # Save test session data
+        # Save test session data with TWO sessions (so deleting one doesn't empty the file)
         test_data = {
             "test_session": {
                 "sphere": "Work",
@@ -145,24 +155,39 @@ class TestButtonNavigation(unittest.TestCase):
                 "breaks": [],
                 "idle_periods": [],
                 "active": [],
-            }
+            },
+            "other_session": {
+                "sphere": "Personal",
+                "date": "2026-01-19",
+                "start_time": "09:00:00",
+                "start_timestamp": 1234467890,
+                "end_timestamp": 1234471490,
+                "breaks": [],
+                "idle_periods": [],
+                "active": [],
+            },
         }
         self.tracker.save_data(test_data, merge=False)
 
         # Show completion frame
         self.tracker.show_completion_frame(3600, 3600, 0, 1234567890, 1234571490)
 
-        # Mock the messagebox to auto-confirm
+        # Mock the messagebox to auto-confirm and shutil.copy2 to avoid creating backup files
         with patch("tkinter.messagebox.askyesno", return_value=True):
             with patch("tkinter.messagebox.showinfo"):
-                # Call delete
-                self.tracker.completion_frame._delete_session()
+                with patch("shutil.copy2"):
+                    # Call delete
+                    self.tracker.completion_frame._delete_session()
+                    self.root.update()  # Process pending events
 
         # Verify session was deleted
         all_data = self.tracker.load_data()
         self.assertNotIn("test_session", all_data)
+        # But other session should still exist
+        self.assertIn("other_session", all_data)
 
         # Verify returned to main frame
+        self.root.update()  # Ensure frame is mapped
         self.assertIsNone(self.tracker.completion_container)
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
@@ -222,9 +247,11 @@ class TestButtonNavigation(unittest.TestCase):
 
         # Click analysis link
         self.tracker.open_analysis()
+        self.root.update()  # Process pending events
 
         # Verify analysis frame is shown
         self.assertIsNotNone(self.tracker.analysis_frame)
+        self.root.update()  # Ensure frame is mapped
         self.assertTrue(self.tracker.analysis_frame.winfo_ismapped())
 
         # Verify main frame is hidden
@@ -234,15 +261,18 @@ class TestButtonNavigation(unittest.TestCase):
         """Test that Back to Tracker from settings returns to main"""
         # Open settings
         self.tracker.open_settings()
+        self.root.update()  # Process pending events
 
         # Verify settings is shown
         self.assertIsNotNone(self.tracker.settings_frame)
 
         # Close settings
         self.tracker.close_settings()
+        self.root.update()  # Process pending events
 
         # Verify main frame is shown
         self.assertIsNone(self.tracker.settings_frame)
+        self.root.update()  # Ensure frame is mapped
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
     def test_back_to_tracker_from_analysis(self):
@@ -250,15 +280,18 @@ class TestButtonNavigation(unittest.TestCase):
         # Open analysis
         self.tracker.session_active = False
         self.tracker.open_analysis()
+        self.root.update()  # Process pending events
 
         # Verify analysis is shown
         self.assertIsNotNone(self.tracker.analysis_frame)
 
         # Close analysis
         self.tracker.close_analysis()
+        self.root.update()  # Process pending events
 
         # Verify main frame is shown
         self.assertIsNone(self.tracker.analysis_frame)
+        self.root.update()  # Ensure frame is mapped
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
 

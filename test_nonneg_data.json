@@ -1,0 +1,24 @@
+{
+  "2026-01-21_1769020546": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "13:35:46",
+    "start_timestamp": 1769020546.9159205,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "13:35:46",
+        "start_timestamp": 1769020546.9159205,
+        "end": "13:35:47",
+        "end_timestamp": 1769020547.3607974,
+        "duration": 0.44487690925598145
+      }
+    ],
+    "end_time": "13:35:48",
+    "end_timestamp": 1769020547.9904935,
+    "total_duration": 1.074573040008545,
+    "active_duration": 1.074573040008545,
+    "break_duration": 0
+  }
+}
