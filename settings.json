@@ -196,7 +196,7 @@
   },
   "analysis_settings": {
     "card_ranges": [
-      "Last 14 Days",
+      "This Week (Mon-Sun)",
       "All Time",
       "This Week (Mon-Sun)"
     ]

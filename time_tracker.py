@@ -1015,9 +1015,20 @@ class TimeTracker:
             if hasattr(self, "completion_container") and self.completion_container:
                 self.completion_container.grid_forget()
 
-            # Hide session view container if present
-            if hasattr(self, "session_view_container") and self.session_view_container:
-                self.session_view_container.grid_forget()
+            # Close session view if present (don't just hide it)
+            if (
+                hasattr(self, "session_view_frame")
+                and self.session_view_frame is not None
+            ):
+                # Properly close session view to clear references
+                if (
+                    hasattr(self, "session_view_container")
+                    and self.session_view_container
+                ):
+                    self.session_view_container.destroy()
+                    self.session_view_container = None
+                self.session_view_frame = None
+                self.session_view_from_analysis = False
 
             # Create analysis frame in main window
             self.analysis_frame = AnalysisFrame(self.root, self, self.root)
@@ -1063,15 +1074,17 @@ class TimeTracker:
                 self.analysis_from_completion = False
 
             # Otherwise determine which frame to show based on what's available
-            # Priority: session view > main
+            # If session view exists but was hidden (we're closing from analysis), go to main
+            # Priority: main frame (session view was hidden when analysis opened)
             elif (
-                hasattr(self, "session_view_container") and self.session_view_container
+                hasattr(self, "session_view_frame")
+                and self.session_view_frame is not None
+                and hasattr(self, "session_view_container")
+                and self.session_view_container
             ):
-                # Return to session view
-                self.session_view_container.grid(
-                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
-                )
-                self.root.title("Time Aligned - Session View")
+                # Session view was open but hidden - close it and go to main
+                self.close_session_view()
+                # Main frame will already be shown by close_session_view
             else:
                 # Show main frame
                 self.main_frame_container.grid(
