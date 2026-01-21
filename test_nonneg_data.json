@@ -20,5 +20,181 @@
     "total_duration": 1.074573040008545,
     "active_duration": 1.074573040008545,
     "break_duration": 0
+  },
+  "2026-01-21_1769033126": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:05:26",
+    "start_timestamp": 1769033126.2119236,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:05:26",
+        "start_timestamp": 1769033126.2119236,
+        "end": "17:05:26",
+        "end_timestamp": 1769033126.7202308,
+        "duration": 0.5083072185516357
+      }
+    ],
+    "end_time": "17:05:27",
+    "end_timestamp": 1769033127.3646076,
+    "total_duration": 1.152683973312378,
+    "active_duration": 1.152683973312378,
+    "break_duration": 0
+  },
+  "2026-01-21_1769033415": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:10:15",
+    "start_timestamp": 1769033415.9778483,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:10:15",
+        "start_timestamp": 1769033415.9778483,
+        "end": "17:10:16",
+        "end_timestamp": 1769033416.4172447,
+        "duration": 0.43939638137817383
+      }
+    ],
+    "end_time": "17:10:17",
+    "end_timestamp": 1769033417.084283,
+    "total_duration": 1.1064348220825195,
+    "active_duration": 1.1064348220825195,
+    "break_duration": 0
+  },
+  "2026-01-21_1769033989": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:19:49",
+    "start_timestamp": 1769033989.0185785,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:19:49",
+        "start_timestamp": 1769033989.0185785,
+        "end": "17:19:49",
+        "end_timestamp": 1769033989.477201,
+        "duration": 0.45862245559692383
+      }
+    ],
+    "end_time": "17:19:50",
+    "end_timestamp": 1769033990.1214168,
+    "total_duration": 1.1028382778167725,
+    "active_duration": 1.1028382778167725,
+    "break_duration": 0
+  },
+  "2026-01-21_1769034027": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:20:27",
+    "start_timestamp": 1769034027.9879196,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:20:27",
+        "start_timestamp": 1769034027.9879196,
+        "end": "17:20:28",
+        "end_timestamp": 1769034028.3976064,
+        "duration": 0.409686803817749
+      }
+    ],
+    "end_time": "17:20:29",
+    "end_timestamp": 1769034029.102737,
+    "total_duration": 1.1148173809051514,
+    "active_duration": 1.1148173809051514,
+    "break_duration": 0
+  },
+  "2026-01-21_1769034119": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:21:59",
+    "start_timestamp": 1769034119.75257,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:21:59",
+        "start_timestamp": 1769034119.75257,
+        "end": "17:22:00",
+        "end_timestamp": 1769034120.293688,
+        "duration": 0.5411181449890137
+      }
+    ],
+    "end_time": "17:22:00",
+    "end_timestamp": 1769034120.8306844,
+    "total_duration": 1.0781145095825195,
+    "active_duration": 1.0781145095825195,
+    "break_duration": 0
+  },
+  "2026-01-21_1769034767": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:32:47",
+    "start_timestamp": 1769034767.7497666,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:32:47",
+        "start_timestamp": 1769034767.7497666,
+        "end": "17:32:48",
+        "end_timestamp": 1769034768.1729472,
+        "duration": 0.42318058013916016
+      }
+    ],
+    "end_time": "17:32:48",
+    "end_timestamp": 1769034768.8469796,
+    "total_duration": 1.0972130298614502,
+    "active_duration": 1.0972130298614502,
+    "break_duration": 0
+  },
+  "2026-01-21_1769035473": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:44:33",
+    "start_timestamp": 1769035473.666532,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:44:33",
+        "start_timestamp": 1769035473.666532,
+        "end": "17:44:34",
+        "end_timestamp": 1769035474.1763241,
+        "duration": 0.5097920894622803
+      }
+    ],
+    "end_time": "17:44:34",
+    "end_timestamp": 1769035474.752411,
+    "total_duration": 1.085878849029541,
+    "active_duration": 1.085878849029541,
+    "break_duration": 0
+  },
+  "2026-01-21_1769035649": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "17:47:29",
+    "start_timestamp": 1769035649.5885339,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:47:29",
+        "start_timestamp": 1769035649.5885339,
+        "end": "17:47:30",
+        "end_timestamp": 1769035650.0879555,
+        "duration": 0.4994215965270996
+      }
+    ],
+    "end_time": "17:47:30",
+    "end_timestamp": 1769035650.7647662,
+    "total_duration": 1.1762323379516602,
+    "active_duration": 1.1762323379516602,
+    "break_duration": 0
   }
 }

@@ -1,34 +1,34 @@
 {
-  "2026-01-21_1769020536": {
+  "2026-01-21_1769035638": {
     "sphere": "Coding",
     "date": "2026-01-21",
-    "start_time": "13:35:36",
-    "start_timestamp": 1769020536.7664142,
+    "start_time": "17:47:18",
+    "start_timestamp": 1769035638.9182608,
     "breaks": [],
     "idle_periods": [],
     "active": [
       {
-        "start": "13:35:36",
-        "start_timestamp": 1769020536.7664142,
-        "end": "13:35:37",
-        "end_timestamp": 1769020537.4647124,
-        "duration": 0.6982982158660889,
-        "screenshot_folder": "screenshots\\2026-01-21\\session_1769020536\\period_active_0",
+        "start": "17:47:18",
+        "start_timestamp": 1769035638.9182608,
+        "end": "17:47:19",
+        "end_timestamp": 1769035639.7030618,
+        "duration": 0.7848010063171387,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769035638\\period_active_0",
         "screenshots": [
           {
-            "filepath": "screenshots\\2026-01-21\\session_1769020536\\period_active_0\\20260121_133536_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
-            "relative_path": "screenshots\\2026-01-21\\session_1769020536\\period_active_0\\20260121_133536_Code.exe_analysis_frame_py - time_aligned - Visual Studio C.png",
-            "timestamp": "20260121_133536",
-            "window_title": "analysis_frame.py - time_aligned - Visual Studio Code",
+            "filepath": "screenshots\\2026-01-21\\session_1769035638\\period_active_0\\20260121_174719_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769035638\\period_active_0\\20260121_174719_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "timestamp": "20260121_174719",
+            "window_title": "test_analysis_calculations.py - time_aligned - Visual Studio Code",
             "process_name": "Code.exe"
           }
         ]
       }
     ],
-    "end_time": "13:35:37",
-    "end_timestamp": 1769020537.8824644,
-    "total_duration": 1.1160502433776855,
-    "active_duration": 1.1160502433776855,
+    "end_time": "17:47:20",
+    "end_timestamp": 1769035640.0633693,
+    "total_duration": 1.1451084613800049,
+    "active_duration": 1.1451084613800049,
     "break_duration": 0
   }
 }

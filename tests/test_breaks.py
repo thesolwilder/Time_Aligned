@@ -73,8 +73,8 @@ class TestBreakRecording(unittest.TestCase):
         # Break should no longer be active
         self.assertFalse(tracker.break_active)
 
-        # Break duration should be recorded
-        self.assertGreater(tracker.break_elapsed, 0)
+        # Break duration should be recorded in total_break_time (break_elapsed resets to 0)
+        self.assertGreater(tracker.total_break_time, 0)
 
     def test_multiple_breaks_in_session(self):
         """Test that multiple breaks can be taken during a session"""
@@ -94,7 +94,7 @@ class TestBreakRecording(unittest.TestCase):
         tracker.toggle_break()
         self.root.update()
 
-        first_break_time = tracker.break_elapsed
+        first_break_time = tracker.total_break_time
 
         # Second break
         time.sleep(0.1)
@@ -105,28 +105,7 @@ class TestBreakRecording(unittest.TestCase):
         self.root.update()
 
         # Total break time should include both breaks
-        self.assertGreater(tracker.break_elapsed, first_break_time)
-
-        # Test removed - break_actions and record_action are not implemented in TimeTracker
-        # def test_break_actions_recorded(self):
-        #     """Test that actions during breaks are recorded separately"""
-        tracker = TimeTracker(self.root)
-        tracker.data_file = self.test_data_file
-        tracker.settings_file = self.test_settings_file
-
-        # Start session and break
-        tracker.start_session()
-        self.root.update()
-        tracker.toggle_break()
-        self.root.update()
-
-        # Record action during break
-        initial_break_actions = len(tracker.break_actions)
-        tracker.record_action()
-        self.root.update()
-
-        # Should have one more break action
-        self.assertEqual(len(tracker.break_actions), initial_break_actions + 1)
+        self.assertGreater(tracker.total_break_time, first_break_time)
 
 
 class TestBreakTimerDisplay(unittest.TestCase):
@@ -218,47 +197,13 @@ class TestBreakDataPersistence(unittest.TestCase):
         # Load data and verify break info is saved
         data = tracker.load_data()
 
-        # Should have exactly one session
-        self.assertEqual(len(data), 1)
-
-        session = list(data.values())[0]
+        # Get the session by name
+        self.assertIn(tracker.session_name, data, "Session not found in saved data")
+        session = data[tracker.session_name]
 
         # Session should have break_duration
         self.assertIn("break_duration", session)
         self.assertGreater(session["break_duration"], 0)
-
-        # Test removed - record_action is not implemented in TimeTracker
-        # def test_break_actions_structure(self):
-        #     """Test that break actions have correct structure in saved data"""
-        tracker = TimeTracker(self.root)
-        tracker.data_file = self.test_data_file
-        tracker.settings_file = self.test_settings_file
-
-        # Start session and break
-        tracker.start_session()
-        self.root.update()
-        tracker.toggle_break()
-        self.root.update()
-
-        # Record some break actions
-        tracker.record_action()
-        self.root.update()
-        time.sleep(0.1)
-        tracker.record_action()
-        self.root.update()
-
-        tracker.toggle_break()
-        self.root.update()
-        tracker.end_session()
-        self.root.update()
-
-        # Load and check structure
-        data = tracker.load_data()
-        session = list(data.values())[0]
-
-        # Should have break_actions
-        self.assertIn("break_actions", session)
-        self.assertIsInstance(session["break_actions"], list)
 
 
 class TestBreakDurationAccuracy(unittest.TestCase):
@@ -296,9 +241,10 @@ class TestBreakDurationAccuracy(unittest.TestCase):
         self.root.update()
 
         # Break duration should be approximately 0.3 seconds
+        # Check total_break_time (break_elapsed resets to 0 after break ends)
         # Allow 1 second tolerance for UI overhead
-        self.assertGreater(tracker.break_elapsed, 0.2)
-        self.assertLess(tracker.break_elapsed, 1.5)
+        self.assertGreater(tracker.total_break_time, 0.2)
+        self.assertLess(tracker.total_break_time, 1.5)
 
 
 if __name__ == "__main__":

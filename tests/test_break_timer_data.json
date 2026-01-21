@@ -150,5 +150,175 @@
         "duration": 0.37607669830322266
       }
     ]
+  },
+  "2026-01-21_1769034245": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:24:05",
+    "start_timestamp": 1769034245.2621868,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:24:05",
+        "start_timestamp": 1769034245.2621868,
+        "end": "17:24:05",
+        "end_timestamp": 1769034245.6677651,
+        "duration": 0.4055783748626709
+      }
+    ]
+  },
+  "2026-01-21_1769034246": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:24:06",
+    "start_timestamp": 1769034246.233921,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:24:06",
+        "start_timestamp": 1769034246.233921,
+        "end": "17:24:06",
+        "end_timestamp": 1769034246.5946946,
+        "duration": 0.36077356338500977
+      }
+    ]
+  },
+  "2026-01-21_1769034321": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:25:21",
+    "start_timestamp": 1769034321.7553911,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:25:21",
+        "start_timestamp": 1769034321.7553911,
+        "end": "17:25:22",
+        "end_timestamp": 1769034322.3916233,
+        "duration": 0.6362321376800537
+      }
+    ]
+  },
+  "2026-01-21_1769034323": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:25:23",
+    "start_timestamp": 1769034323.024706,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:25:23",
+        "start_timestamp": 1769034323.024706,
+        "end": "17:25:23",
+        "end_timestamp": 1769034323.3375292,
+        "duration": 0.3128232955932617
+      }
+    ]
+  },
+  "2026-01-21_1769034428": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:27:08",
+    "start_timestamp": 1769034428.7565203,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:27:08",
+        "start_timestamp": 1769034428.7565203,
+        "end": "17:27:09",
+        "end_timestamp": 1769034429.174451,
+        "duration": 0.41793084144592285
+      }
+    ]
+  },
+  "2026-01-21_1769034429": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:27:09",
+    "start_timestamp": 1769034429.772723,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:27:09",
+        "start_timestamp": 1769034429.772723,
+        "end": "17:27:10",
+        "end_timestamp": 1769034430.144582,
+        "duration": 0.371859073638916
+      }
+    ]
+  },
+  "2026-01-21_1769034506": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:28:26",
+    "start_timestamp": 1769034506.926501,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:28:26",
+        "start_timestamp": 1769034506.926501,
+        "end": "17:28:27",
+        "end_timestamp": 1769034507.3755324,
+        "duration": 0.44903135299682617
+      }
+    ]
+  },
+  "2026-01-21_1769034508": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:28:28",
+    "start_timestamp": 1769034508.3831117,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:28:28",
+        "start_timestamp": 1769034508.3831117,
+        "end": "17:28:28",
+        "end_timestamp": 1769034508.8392153,
+        "duration": 0.4561035633087158
+      }
+    ]
+  },
+  "2026-01-21_1769034619": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:30:19",
+    "start_timestamp": 1769034619.3634112,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:30:19",
+        "start_timestamp": 1769034619.3634112,
+        "end": "17:30:19",
+        "end_timestamp": 1769034619.7864854,
+        "duration": 0.42307424545288086
+      }
+    ]
+  },
+  "2026-01-21_1769034620": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "17:30:20",
+    "start_timestamp": 1769034620.4549332,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "17:30:20",
+        "start_timestamp": 1769034620.4549332,
+        "end": "17:30:20",
+        "end_timestamp": 1769034620.8676817,
+        "duration": 0.4127485752105713
+      }
+    ]
   }
 }

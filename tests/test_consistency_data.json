@@ -1,24 +1,24 @@
 {
-  "2026-01-21_1769020449": {
+  "2026-01-21_1769034649": {
     "sphere": "General",
     "date": "2026-01-21",
-    "start_time": "13:34:09",
-    "start_timestamp": 1769020449.2771811,
+    "start_time": "17:30:49",
+    "start_timestamp": 1769034649.172296,
     "breaks": [],
     "idle_periods": [],
     "active": [
       {
-        "start": "13:34:09",
-        "start_timestamp": 1769020449.2771811,
-        "end": "13:34:09",
-        "end_timestamp": 1769020449.8825977,
-        "duration": 0.6054165363311768
+        "start": "17:30:49",
+        "start_timestamp": 1769034649.172296,
+        "end": "17:30:49",
+        "end_timestamp": 1769034649.8539546,
+        "duration": 0.6816585063934326
       }
     ],
-    "end_time": "13:34:09",
-    "end_timestamp": 1769020449.9112203,
-    "total_duration": 0.6340391635894775,
-    "active_duration": 0.6340391635894775,
+    "end_time": "17:30:49",
+    "end_timestamp": 1769034649.9131057,
+    "total_duration": 0.7408096790313721,
+    "active_duration": 0.7408096790313721,
     "break_duration": 0
   }
 }

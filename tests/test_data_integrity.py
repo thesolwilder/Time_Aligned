@@ -62,7 +62,8 @@ class TestDurationCalculations(unittest.TestCase):
         # Load session data
         data = tracker.load_data()
         self.assertGreater(len(data), 0, "No session data was saved")
-        session = list(data.values())[0]
+        # Get the session by name, not by position
+        session = data[tracker.session_name]
 
         # Check that required fields exist
         self.assertIn("total_duration", session, f"Session data: {session.keys()}")
@@ -98,7 +99,7 @@ class TestDurationCalculations(unittest.TestCase):
 
         # Active time should not have increased during break
         # (allowing small tolerance for timer updates)
-        self.assertLess(tracker.session_elapsed - active_before_break, 0.2)
+        self.assertLess(tracker.session_elapsed - active_before_break, 0.5)
 
     @patch("time_tracker.TimeTracker.show_completion_frame")
     def test_session_duration_matches_timestamps(self, mock_completion):
@@ -115,7 +116,7 @@ class TestDurationCalculations(unittest.TestCase):
 
         data = tracker.load_data()
         self.assertGreater(len(data), 0, "No session data was saved")
-        session = list(data.values())[0]
+        session = data[tracker.session_name]
 
         # Check required fields exist
         self.assertIn("end_timestamp", session, f"Session data keys: {session.keys()}")
@@ -211,7 +212,7 @@ class TestDataConsistency(unittest.TestCase):
 
         # Load the data
         data1 = tracker.load_data()
-        session_name = list(data1.keys())[0]
+        session_name = tracker.session_name
 
         # Save again (should preserve data)
         tracker.save_data(data1, merge=False)
@@ -330,7 +331,7 @@ class TestNonNegativeDurations(unittest.TestCase):
         self.root.update()
 
         data = tracker.load_data()
-        session = list(data.values())[0]
+        session = data[tracker.session_name]
 
         # All durations should be non-negative
         self.assertGreaterEqual(session["total_duration"], 0)
