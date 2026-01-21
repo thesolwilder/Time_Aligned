@@ -422,10 +422,17 @@ class AnalysisFrame(ttk.Frame):
         return total_active, total_break
 
     def format_duration(self, seconds):
-        """Format seconds as Xh Ym"""
+        """Format seconds as Xh Ym Zs"""
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
-        return f"{hours}h {minutes}m"
+        secs = int(seconds % 60)
+
+        if hours > 0:
+            return f"{hours}h {minutes}m"
+        elif minutes > 0:
+            return f"{minutes}m {secs}s"
+        else:
+            return f"{secs}s"
 
     def format_time_12hr(self, time_str):
         """Convert 24hr time to 12hr format"""
