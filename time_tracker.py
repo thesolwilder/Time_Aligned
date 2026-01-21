@@ -257,6 +257,10 @@ class TimeTracker:
                 all_data = self.load_data()
                 all_data.update(session_data)
             else:
+                # Safety check: Don't save if replacement data is empty
+                if not session_data:
+                    print("WARNING: Refusing to save empty data with merge=False")
+                    return
                 all_data = session_data
 
             with open(self.data_file, "w") as f:
@@ -734,76 +738,52 @@ class TimeTracker:
         self.main_frame_container.grid_remove()
 
         # Create scrollable container for completion frame
-        completion_container = ttk.Frame(self.root)
-        completion_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        self.completion_container = ScrollableFrame(self.root)
+        self.completion_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-        # Create canvas and scrollbar
-        canvas = tk.Canvas(completion_container)
-        scrollbar = ttk.Scrollbar(
-            completion_container, orient="vertical", command=canvas.yview
+        # Get content frame and create completion frame with session name
+        completion_parent = self.completion_container.get_content_frame()
+        self.completion_frame = CompletionFrame(
+            completion_parent, self, self.session_name
         )
+        self.completion_frame.pack(fill="both", expand=True)
 
-        # Create completion frame with session name
-        self.completion_frame = CompletionFrame(canvas, self, self.session_name)
-
-        # Configure canvas
-        self.completion_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas_window = canvas.create_window(
-            (0, 0), window=self.completion_frame, anchor="nw"
-        )
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Update canvas window width when canvas resizes
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        canvas.bind("<Configure>", on_canvas_configure)
-
-        # Pack canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Store container reference
-        self.completion_container = completion_container
-        self.completion_canvas = canvas
-
-        # Bind mousewheel for scrolling (bind to all widgets recursively)
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def bind_mousewheel(widget):
-            # Skip Combobox widgets - they have their own mousewheel handling
-            if not isinstance(widget, ttk.Combobox):
-                widget.bind("<MouseWheel>", on_mousewheel)
-            for child in widget.winfo_children():
-                bind_mousewheel(child)
-
-        bind_mousewheel(completion_container)
-        bind_mousewheel(self.completion_frame)
-
-        # Store canvas reference and binding function in completion frame
-        self.completion_frame.canvas = canvas
-        self.completion_frame.bind_mousewheel_func = lambda: bind_mousewheel(
-            self.completion_frame
-        )
+        # Store canvas reference for completion frame
+        self.completion_frame.canvas = self.completion_container.canvas
+        self.completion_frame.bind_mousewheel_func = (
+            lambda: None
+        )  # Already handled by ScrollableFrame
 
     def show_main_frame(self):
         """Show main timer frame (called from other frames to navigate back)"""
+        # Remove analysis frame if present
+        if hasattr(self, "analysis_frame") and self.analysis_frame:
+            try:
+                self.analysis_frame.grid_remove()
+                self.analysis_frame.destroy()
+            except:
+                pass
+            self.analysis_frame = None
+
         # Remove completion container (from end session)
         if hasattr(self, "completion_container") and self.completion_container:
-            self.completion_container.grid_remove()
-            self.completion_container.destroy()
+            try:
+                self.completion_container.grid_remove()
+                self.completion_container.destroy()
+            except:
+                pass
             self.completion_container = None
 
-        if self.completion_frame:
+        if hasattr(self, "completion_frame") and self.completion_frame:
             self.completion_frame = None
 
         # Remove session view container (from session view)
         if hasattr(self, "session_view_container") and self.session_view_container:
-            self.session_view_container.grid_remove()
-            self.session_view_container.destroy()
+            try:
+                self.session_view_container.grid_remove()
+                self.session_view_container.destroy()
+            except:
+                pass
             self.session_view_container = None
 
         if hasattr(self, "session_view_frame") and self.session_view_frame:
@@ -815,8 +795,9 @@ class TimeTracker:
         # Restore window title
         self.root.title("Time Aligned - Time Tracker")
 
-        # Clear session name
-        self.session_name = None
+        # Clear session name only if no active session
+        if not self.session_active:
+            self.session_name = None
 
     def check_idle(self):
         """Check if user is idle and update status"""
@@ -991,12 +972,52 @@ class TimeTracker:
                 )
                 return
 
+            # Special case: if we're in session view and analysis already exists,
+            # just close session view to return to analysis
+            if (
+                hasattr(self, "session_view_frame")
+                and self.session_view_frame is not None
+                and hasattr(self, "analysis_frame")
+                and self.analysis_frame is not None
+            ):
+                self.close_session_view()
+                return
+
             if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
                 # Analysis already open, do nothing
                 return
 
-            # Hide main frame
+            # Track if we're coming from completion frame (for proper back navigation)
+            self.analysis_from_completion = False
+
+            # If we're in completion frame or session view, save data first
+            if hasattr(self, "completion_frame") and self.completion_frame:
+                # Ask user to save or skip before going to analysis
+                result = messagebox.askyesnocancel(
+                    "Unsaved Changes",
+                    "You have unsaved session data. Would you like to save before viewing analysis?\n\nYes = Save and open analysis\nNo = Skip and open analysis\nCancel = Stay here",
+                )
+                if result is None:  # Cancel
+                    return
+                elif result:  # Yes - save
+                    # Save the completion frame data without navigating
+                    if hasattr(self.completion_frame, "save_and_close"):
+                        self.completion_frame.save_and_close(navigate=False)
+                # If No, just continue without saving
+
+                # Mark that we came from completion frame
+                self.analysis_from_completion = True
+
+            # Hide current frames
             self.main_frame_container.grid_forget()
+
+            # Hide completion container if present
+            if hasattr(self, "completion_container") and self.completion_container:
+                self.completion_container.grid_forget()
+
+            # Hide session view container if present
+            if hasattr(self, "session_view_container") and self.session_view_container:
+                self.session_view_container.grid_forget()
 
             # Create analysis frame in main window
             self.analysis_frame = AnalysisFrame(self.root, self, self.root)
@@ -1016,25 +1037,57 @@ class TimeTracker:
                 )
 
     def close_analysis(self):
-        """Close analysis and return to main view"""
+        """Close analysis and return to previous view"""
         if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
             # Destroy analysis frame
             self.analysis_frame.destroy()
             self.analysis_frame = None
 
-            # Show main frame again
-            self.main_frame_container.grid(
-                row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
-            )
+            # If we came from completion frame, user wants to go to tracker (not back to completion)
+            if (
+                hasattr(self, "analysis_from_completion")
+                and self.analysis_from_completion
+            ):
+                # Destroy completion frame/container
+                if hasattr(self, "completion_container") and self.completion_container:
+                    self.completion_container.destroy()
+                    self.completion_container = None
+                if hasattr(self, "completion_frame"):
+                    self.completion_frame = None
 
-            # Restore window title
-            self.root.title("Time Aligned - Time Tracker")
+                # Show main tracker
+                self.main_frame_container.grid(
+                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                )
+                self.root.title("Time Aligned - Time Tracker")
+                self.analysis_from_completion = False
 
-            # Reload settings after closing settings window
+            # Otherwise determine which frame to show based on what's available
+            # Priority: session view > main
+            elif (
+                hasattr(self, "session_view_container") and self.session_view_container
+            ):
+                # Return to session view
+                self.session_view_container.grid(
+                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                )
+                self.root.title("Time Aligned - Session View")
+            else:
+                # Show main frame
+                self.main_frame_container.grid(
+                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                )
+                self.root.title("Time Aligned - Time Tracker")
+
+            # Reload settings after closing analysis
             self.settings = self.get_settings()
 
-    def open_session_view(self):
-        """Open the session view window (shows completion frame)"""
+    def open_session_view(self, from_analysis=False):
+        """Open the session view window (shows completion frame)
+
+        Args:
+            from_analysis: True if opened from analysis frame
+        """
         # Don't allow opening session view while tracking time
         if self.session_active:
             messagebox.showwarning(
@@ -1047,63 +1100,38 @@ class TimeTracker:
             # Session view already open, do nothing
             return
 
-        # Hide main frame
-        self.main_frame_container.grid_forget()
+        # Track where we came from
+        self.session_view_from_analysis = from_analysis
+
+        # Hide current frame
+        if from_analysis and hasattr(self, "analysis_frame") and self.analysis_frame:
+            self.analysis_frame.grid_forget()
+        else:
+            self.main_frame_container.grid_forget()
 
         # Create scrollable container for completion frame
-        completion_container = ttk.Frame(self.root)
-        completion_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-        # Create canvas and scrollbar
-        canvas = tk.Canvas(completion_container)
-        scrollbar = ttk.Scrollbar(
-            completion_container, orient="vertical", command=canvas.yview
+        self.session_view_container = ScrollableFrame(self.root)
+        self.session_view_container.grid(
+            row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
         )
 
-        # Create completion frame (session view)
-        self.session_view_frame = CompletionFrame(canvas, self, None)
-
-        # Configure canvas
-        self.session_view_frame.bind(
-            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        canvas_window = canvas.create_window(
-            (0, 0), window=self.session_view_frame, anchor="nw"
-        )
-        canvas.configure(yscrollcommand=scrollbar.set)
-
-        # Update canvas window width when canvas resizes
-        def on_canvas_configure(event):
-            canvas.itemconfig(canvas_window, width=event.width)
-
-        canvas.bind("<Configure>", on_canvas_configure)
-
-        # Pack canvas and scrollbar
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-
-        # Bind mousewheel for scrolling
-        def on_mousewheel(event):
-            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        def bind_mousewheel(widget):
-            if not isinstance(widget, ttk.Combobox):
-                widget.bind("<MouseWheel>", on_mousewheel)
-            for child in widget.winfo_children():
-                bind_mousewheel(child)
-
-        bind_mousewheel(completion_container)
-        bind_mousewheel(self.session_view_frame)
-
-        # Store container reference
-        self.session_view_container = completion_container
+        # Get content frame and create completion frame (session view)
+        session_view_parent = self.session_view_container.get_content_frame()
+        self.session_view_frame = CompletionFrame(session_view_parent, self, None)
+        self.session_view_frame.pack(fill="both", expand=True)
 
         # Update window title
         self.root.title("Time Aligned - Session View")
 
     def close_session_view(self):
-        """Close session view and return to main view"""
+        """Close session view and return to previous view"""
         if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
+            # Check where we came from before destroying
+            came_from_analysis = (
+                hasattr(self, "session_view_from_analysis")
+                and self.session_view_from_analysis
+            )
+
             # Destroy session view container
             if hasattr(self, "session_view_container"):
                 self.session_view_container.destroy()
@@ -1111,13 +1139,27 @@ class TimeTracker:
 
             self.session_view_frame = None
 
-            # Show main frame again
-            self.main_frame_container.grid(
-                row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
-            )
-
-            # Restore window title
-            self.root.title("Time Aligned - Time Tracker")
+            # Return to analysis frame if we came from there
+            if came_from_analysis:
+                if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
+                    # Restore analysis frame
+                    self.analysis_frame.grid(
+                        row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                    )
+                    self.root.title("Time Aligned - Analysis")
+                else:
+                    # Analysis frame is gone, go to main
+                    self.main_frame_container.grid(
+                        row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                    )
+                    self.root.title("Time Aligned - Time Tracker")
+                self.session_view_from_analysis = False
+            else:
+                # Show main frame
+                self.main_frame_container.grid(
+                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
+                )
+                self.root.title("Time Aligned - Time Tracker")
 
     def create_tray_icon_image(self, state="idle"):
         """Create icon image for system tray based on state"""

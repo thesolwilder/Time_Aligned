@@ -2,12 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import json
 
-from ui_helpers import ScrollableFrame
-
-
-def disable_combobox_scroll(combobox):
-    """Disable mousewheel scrolling on a combobox to prevent accidental value changes"""
-    combobox.bind("<MouseWheel>", lambda e: "break")
+from ui_helpers import ScrollableFrame, sanitize_name
 
 
 class SettingsFrame(ttk.Frame):
@@ -123,11 +118,12 @@ class SettingsFrame(ttk.Frame):
 
         # Store references
         self.content_frame = content_frame
-        self.canvas = canvas
 
         # Force final scroll region update after all widgets are created
         content_frame.update_idletasks()
-        canvas.configure(scrollregion=canvas.bbox("all"))
+        scrollable_container.canvas.configure(
+            scrollregion=scrollable_container.canvas.bbox("all")
+        )
 
     def create_sphere_section(self, parent):
         """Create sphere management section"""
@@ -181,7 +177,6 @@ class SettingsFrame(ttk.Frame):
             exportselection=False,
         )
         self.sphere_dropdown.grid(row=self.row, column=0, pady=5, sticky=(tk.W))
-        disable_combobox_scroll(self.sphere_dropdown)
         self.sphere_dropdown.bind(
             "<<ComboboxSelected>>", lambda e: self.on_sphere_selected()
         )
@@ -244,7 +239,10 @@ class SettingsFrame(ttk.Frame):
         """Create a new sphere"""
         name = simpledialog.askstring("New Sphere", "Enter sphere name:")
         if name and name.strip():
-            name = name.strip()
+            name = sanitize_name(name.strip())
+            if not name:
+                messagebox.showerror("Error", "Invalid sphere name")
+                return
             if name in self.tracker.settings.get("spheres", {}):
                 messagebox.showerror("Error", "A sphere with this name already exists")
                 return
@@ -340,7 +338,10 @@ class SettingsFrame(ttk.Frame):
         )
 
         if new_name and new_name.strip() and new_name != old_name:
-            new_name = new_name.strip()
+            new_name = sanitize_name(new_name.strip())
+            if not new_name:
+                messagebox.showerror("Error", "Invalid sphere name")
+                return
 
             if new_name in self.tracker.settings.get("spheres", {}):
                 messagebox.showerror("Error", "A sphere with this name already exists")
@@ -550,7 +551,6 @@ class SettingsFrame(ttk.Frame):
             width=15,
         )
         sphere_combo.grid(row=0, column=3, sticky=(tk.W, tk.E), padx=5)
-        disable_combobox_scroll(sphere_combo)
 
         # Note
         ttk.Label(frame, text="Note:").grid(row=1, column=0, sticky=tk.W, padx=5)
@@ -740,7 +740,6 @@ class SettingsFrame(ttk.Frame):
             width=37,
         )
         sphere_combo.grid(row=1, column=1, padx=10, pady=5)
-        disable_combobox_scroll(sphere_combo)
 
         ttk.Label(dialog, text="Note:").grid(
             row=2, column=0, sticky=tk.W, padx=10, pady=5
@@ -755,10 +754,12 @@ class SettingsFrame(ttk.Frame):
         goal_entry.grid(row=3, column=1, padx=10, pady=5)
 
         def on_ok():
-            name = name_var.get().strip()
+            name = sanitize_name(name_var.get().strip())
             if not name:
                 messagebox.showerror(
-                    "Error", "Project name cannot be empty", parent=dialog
+                    "Error",
+                    "Project name cannot be empty or contains invalid characters",
+                    parent=dialog,
                 )
                 return
             if name in self.tracker.settings.get("projects", {}):
@@ -767,6 +768,7 @@ class SettingsFrame(ttk.Frame):
                 )
                 return
             result["confirmed"] = True
+            name_var.set(name)  # Update with sanitized name
             dialog.destroy()
 
         def on_cancel():
@@ -943,7 +945,6 @@ class SettingsFrame(ttk.Frame):
             width=10,
         )
         idle_break_combo.pack()
-        disable_combobox_scroll(idle_break_combo)
         idle_row += 1
 
         # Save idle settings button
@@ -1519,7 +1520,10 @@ class SettingsFrame(ttk.Frame):
         """Create a new break action"""
         name = simpledialog.askstring("New Break Action", "Enter break action name:")
         if name and name.strip():
-            name = name.strip()
+            name = sanitize_name(name.strip())
+            if not name:
+                messagebox.showerror("Error", "Invalid break action name")
+                return
             if name in self.tracker.settings.get("break_actions", {}):
                 messagebox.showerror(
                     "Error", "A break action with this name already exists"

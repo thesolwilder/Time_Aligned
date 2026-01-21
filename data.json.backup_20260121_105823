@@ -1,0 +1,362 @@
+{
+  "2026-01-21_1769005989": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "09:33:09",
+    "start_timestamp": 1769005989.6681035,
+    "breaks": [
+      {
+        "start": "09:33:12",
+        "start_timestamp": 1769005992.640431,
+        "end": "09:33:15",
+        "end_timestamp": 1769005995.3985622,
+        "duration": 2.733670234680176,
+        "action": "bathroom"
+      },
+      {
+        "start": "09:33:18",
+        "start_timestamp": 1769005998.0538802,
+        "end": "09:33:22",
+        "end_timestamp": 1769006002.7457094,
+        "duration": 4.670986652374268,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "09:33:09",
+        "start_timestamp": 1769005989.6681035,
+        "end": "09:33:12",
+        "end_timestamp": 1769005992.640431,
+        "duration": 2.972327470779419,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769005989\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769005989\\period_active_0\\20260121_093309_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769005989\\period_active_0\\20260121_093309_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_093309",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "learning_to_code"
+      },
+      {
+        "start": "09:33:15",
+        "start_timestamp": 1769005995.4004924,
+        "end": "09:33:18",
+        "end_timestamp": 1769005998.0538802,
+        "duration": 2.6533877849578857,
+        "project": "learning_to_code"
+      }
+    ],
+    "end_time": "09:33:22",
+    "end_timestamp": 1769006002.8824902,
+    "total_duration": 13.214386701583862,
+    "active_duration": 5.809729814529419,
+    "break_duration": 7.404656887054443,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  },
+  "2026-01-21_1769006737": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "09:45:37",
+    "start_timestamp": 1769006737.469376,
+    "breaks": [
+      {
+        "start": "09:45:39",
+        "start_timestamp": 1769006739.5930705,
+        "end": "09:45:42",
+        "end_timestamp": 1769006742.603279,
+        "duration": 2.988663911819458,
+        "action": "bathroom"
+      },
+      {
+        "start": "09:45:46",
+        "start_timestamp": 1769006746.4698443,
+        "end": "09:45:49",
+        "end_timestamp": 1769006749.8917496,
+        "duration": 3.399606466293335,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "09:45:37",
+        "start_timestamp": 1769006737.469376,
+        "end": "09:45:39",
+        "end_timestamp": 1769006739.5930705,
+        "duration": 2.12369441986084,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769006737\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769006737\\period_active_0\\20260121_094537_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769006737\\period_active_0\\20260121_094537_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_094537",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "learning_to_code"
+      },
+      {
+        "start": "09:45:42",
+        "start_timestamp": 1769006742.6060205,
+        "end": "09:45:46",
+        "end_timestamp": 1769006746.4698443,
+        "duration": 3.863823890686035,
+        "project": "learning_to_code"
+      }
+    ],
+    "end_time": "09:45:50",
+    "end_timestamp": 1769006750.3345017,
+    "total_duration": 12.86512565612793,
+    "active_duration": 6.476855278015137,
+    "break_duration": 6.388270378112793,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  },
+  "2026-01-21_1769006822": {
+    "sphere": "General",
+    "date": "2026-01-21",
+    "start_time": "09:47:02",
+    "start_timestamp": 1769006822.0472054,
+    "breaks": [
+      {
+        "start": "09:47:05",
+        "start_timestamp": 1769006825.0279799,
+        "end": "09:47:07",
+        "end_timestamp": 1769006827.993448,
+        "duration": 2.9435579776763916,
+        "action": "bathroom"
+      },
+      {
+        "start": "09:47:11",
+        "start_timestamp": 1769006831.041905,
+        "end": "09:47:13",
+        "end_timestamp": 1769006833.8082097,
+        "duration": 2.7424557209014893,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "09:47:02",
+        "start_timestamp": 1769006822.0472054,
+        "end": "09:47:05",
+        "end_timestamp": 1769006825.0279799,
+        "duration": 2.980774402618408,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769006822\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769006822\\period_active_0\\20260121_094702_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769006822\\period_active_0\\20260121_094702_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_094702",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "Work"
+      },
+      {
+        "start": "09:47:07",
+        "start_timestamp": 1769006827.9958956,
+        "end": "09:47:11",
+        "end_timestamp": 1769006831.041905,
+        "duration": 3.0460093021392822,
+        "project": "Work"
+      }
+    ],
+    "end_time": "09:47:13",
+    "end_timestamp": 1769006833.8914175,
+    "total_duration": 11.844212055206299,
+    "active_duration": 6.158198356628418,
+    "break_duration": 5.686013698577881,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  },
+  "2026-01-21_1769007111": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "09:51:51",
+    "start_timestamp": 1769007111.100381,
+    "breaks": [
+      {
+        "start": "09:51:54",
+        "start_timestamp": 1769007114.036583,
+        "end": "09:51:57",
+        "end_timestamp": 1769007117.9349453,
+        "duration": 3.8750832080841064,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "09:51:51",
+        "start_timestamp": 1769007111.100381,
+        "end": "09:51:54",
+        "end_timestamp": 1769007114.036583,
+        "duration": 2.936202049255371,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769007111\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769007111\\period_active_0\\20260121_095151_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769007111\\period_active_0\\20260121_095151_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_095151",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "learning_to_code"
+      }
+    ],
+    "end_time": "09:51:58",
+    "end_timestamp": 1769007118.3339164,
+    "total_duration": 7.233535528182983,
+    "active_duration": 3.358452320098877,
+    "break_duration": 3.8750832080841064,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  },
+  "2026-01-21_1769009549": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "10:32:29",
+    "start_timestamp": 1769009549.8828566,
+    "breaks": [
+      {
+        "start": "10:32:32",
+        "start_timestamp": 1769009552.4956648,
+        "end": "10:32:35",
+        "end_timestamp": 1769009555.0332139,
+        "duration": 2.515455961227417,
+        "action": "bathroom"
+      },
+      {
+        "start": "10:32:37",
+        "start_timestamp": 1769009557.69911,
+        "end": "10:32:41",
+        "end_timestamp": 1769009561.1103885,
+        "duration": 3.3884785175323486,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:32:29",
+        "start_timestamp": 1769009549.8828566,
+        "end": "10:32:32",
+        "end_timestamp": 1769009552.4956648,
+        "duration": 2.6128082275390625,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769009549\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769009549\\period_active_0\\20260121_103229_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769009549\\period_active_0\\20260121_103229_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_103229",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "learning_to_code"
+      },
+      {
+        "start": "10:32:35",
+        "start_timestamp": 1769009555.0361583,
+        "end": "10:32:37",
+        "end_timestamp": 1769009557.69911,
+        "duration": 2.662951707839966,
+        "project": "learning_to_code"
+      },
+      {
+        "start": "10:32:41",
+        "start_timestamp": 1769009561.115201,
+        "end": "10:32:43",
+        "end_timestamp": 1769009563.5201235,
+        "duration": 2.4049224853515625,
+        "project": "learning_to_code"
+      }
+    ],
+    "end_time": "10:32:43",
+    "end_timestamp": 1769009563.6347764,
+    "total_duration": 13.751919746398926,
+    "active_duration": 7.84798526763916,
+    "break_duration": 5.903934478759766,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  },
+  "2026-01-21_1769009914": {
+    "sphere": "Coding",
+    "date": "2026-01-21",
+    "start_time": "10:38:34",
+    "start_timestamp": 1769009914.9816704,
+    "breaks": [
+      {
+        "start": "10:38:38",
+        "start_timestamp": 1769009918.1216238,
+        "end": "10:38:43",
+        "end_timestamp": 1769009923.9085157,
+        "duration": 5.7637670040130615,
+        "action": "bathroom"
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:38:34",
+        "start_timestamp": 1769009914.9816704,
+        "end": "10:38:38",
+        "end_timestamp": 1769009918.1216238,
+        "duration": 3.139953374862671,
+        "screenshot_folder": "screenshots\\2026-01-21\\session_1769009914\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-21\\session_1769009914\\period_active_0\\20260121_103835_python.exe_Time Aligned - Time Tracker.png",
+            "relative_path": "screenshots\\2026-01-21\\session_1769009914\\period_active_0\\20260121_103835_python.exe_Time Aligned - Time Tracker.png",
+            "timestamp": "20260121_103835",
+            "window_title": "Time Aligned - Time Tracker",
+            "process_name": "python.exe"
+          }
+        ],
+        "project": "learning_to_code"
+      }
+    ],
+    "end_time": "10:38:44",
+    "end_timestamp": 1769009924.216013,
+    "total_duration": 9.234342575073242,
+    "active_duration": 3.4705755710601807,
+    "break_duration": 5.7637670040130615,
+    "session_comments": {
+      "active_notes": "",
+      "break_notes": "",
+      "idle_notes": "",
+      "session_notes": ""
+    }
+  }
+}

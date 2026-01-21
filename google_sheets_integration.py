@@ -22,6 +22,32 @@ SCOPES_FULL = ["https://www.googleapis.com/auth/spreadsheets"]
 SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
+def escape_for_sheets(text):
+    """
+    Escape text for safe upload to Google Sheets.
+    Prevents formula injection and XSS attacks.
+
+    Args:
+        text: The text to escape
+
+    Returns:
+        Escaped text string safe for Google Sheets
+    """
+    if not text:
+        return ""
+
+    text = str(text)
+
+    # Prevent formula injection - formulas start with =, +, -, @, or |
+    if text and text[0] in ("=", "+", "-", "@", "|"):
+        text = "'" + text  # Prefix with single quote to treat as text
+
+    # Escape HTML/XML special characters to prevent XSS
+    text = text.replace("<", "&lt;").replace(">", "&gt;")
+
+    return text
+
+
 class GoogleSheetsUploader:
     """Handles uploading session data to Google Sheets"""
 
@@ -333,17 +359,17 @@ class GoogleSheetsUploader:
             break_actions_list = session_data.get("break_actions", [])
             break_actions = sum(len(ba.get("actions", [])) for ba in break_actions_list)
 
-            # Get notes if any
-            notes = session_data.get("notes", "")
+            # Get notes and escape for safe upload (prevent formula injection)
+            notes = escape_for_sheets(session_data.get("notes", ""))
 
-            # Prepare row data
+            # Prepare row data - escape text fields for safety
             row = [
                 session_id,
                 date,
                 start_time,
                 end_time,
-                sphere,
-                project,
+                escape_for_sheets(sphere),
+                escape_for_sheets(project),
                 round(total_duration, 2),
                 round(active_duration, 2),
                 round(break_duration, 2),

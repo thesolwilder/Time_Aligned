@@ -794,33 +794,9 @@ class AnalysisFrame(ttk.Frame):
             messagebox.showerror("Error", f"Failed to export CSV: {e}")
 
     def open_latest_session(self):
-        """Open completion frame with the most recent session"""
-        all_data = self.tracker.load_data()
-
-        if not all_data:
-            messagebox.showinfo("No Data", "No sessions found")
-            return
-
-        # Get most recent session
-        sessions = sorted(all_data.keys(), reverse=True)
-        latest_session = sessions[0]
-        session_data = all_data[latest_session]
-
-        # Set up session data in tracker
-        self.tracker.session_name = latest_session
-        self.tracker.current_session = session_data
-
-        # Close analysis frame
-        self.tracker.close_analysis()
-
-        # Open completion frame with latest session
-        self.tracker.show_completion_frame(
-            session_data.get("total_duration", 0),
-            session_data.get("active_duration", 0),
-            session_data.get("break_duration", 0),
-            session_data.get("start_timestamp", 0),
-            session_data.get("end_timestamp", 0),
-        )
+        """Open session view from analysis frame"""
+        # Open session view with flag indicating we came from analysis
+        self.tracker.open_session_view(from_analysis=True)
 
     def generate_dummy_data(self):
         """Generate two months of dummy data for testing"""

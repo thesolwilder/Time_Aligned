@@ -1389,12 +1389,17 @@ class CompletionFrame(ttk.Frame):
             button_frame, text="Analysis", command=self.tracker.open_analysis
         ).grid(row=0, column=3, padx=5)
 
-    def save_and_close(self):
-        """Save action tags and return to main frame"""
+    def save_and_close(self, navigate=True):
+        """Save action tags and return to main frame
+
+        Args:
+            navigate: If True, navigate back to previous frame. If False, just save.
+        """
         all_data = self.tracker.load_data()
 
         if self.session_name not in all_data:
-            self.tracker.show_main_frame()
+            if navigate:
+                self.tracker.show_main_frame()
             return
 
         session = all_data[self.session_name]
@@ -1626,7 +1631,18 @@ class CompletionFrame(ttk.Frame):
         # Upload to Google Sheets if enabled
         self._upload_to_google_sheets(session)
 
-        self.tracker.show_main_frame()
+        # Check if we should navigate
+        if not navigate:
+            return
+
+        # Check if we're in session view mode
+        if (
+            hasattr(self.tracker, "session_view_frame")
+            and self.tracker.session_view_frame == self
+        ):
+            self.tracker.close_session_view()
+        else:
+            self.tracker.show_main_frame()
 
     def _upload_to_google_sheets(self, session_data):
         """
@@ -1654,8 +1670,15 @@ class CompletionFrame(ttk.Frame):
             print(f"Error uploading to Google Sheets: {e}")
 
     def skip_and_close(self):
-        """Return to main frame without saving"""
-        self.tracker.show_main_frame()
+        """Return to appropriate frame without saving"""
+        # Check if we're in session view mode
+        if (
+            hasattr(self.tracker, "session_view_frame")
+            and self.tracker.session_view_frame == self
+        ):
+            self.tracker.close_session_view()
+        else:
+            self.tracker.show_main_frame()
 
     def _delete_session(self):
         """Delete the current session after confirmation"""
@@ -1670,8 +1693,30 @@ class CompletionFrame(ttk.Frame):
         if result:
             all_data = self.tracker.load_data()
 
+            # Safety check: Don't delete if data load failed
+            if not all_data:
+                messagebox.showerror(
+                    "Error",
+                    "Failed to load session data. Cannot delete session safely.",
+                )
+                return
+
             # Delete the session if it exists
             if self.session_name in all_data:
+                # Create backup before deletion
+                import shutil
+                import datetime
+
+                backup_file = f"{self.tracker.data_file}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                try:
+                    shutil.copy2(self.tracker.data_file, backup_file)
+                except Exception as e:
+                    messagebox.showerror(
+                        "Backup Failed",
+                        f"Could not create backup before deletion: {e}\n\nDeletion cancelled.",
+                    )
+                    return
+
                 del all_data[self.session_name]
                 self.tracker.save_data(all_data, merge=False)
 
@@ -1681,5 +1726,29 @@ class CompletionFrame(ttk.Frame):
                     f"Session '{self.session_name}' has been deleted successfully.",
                 )
 
-            # Return to main frame
-            self.tracker.show_main_frame()
+                # If we're in session view (from analysis), reload with next session
+                if (
+                    hasattr(self.tracker, "session_view_frame")
+                    and self.tracker.session_view_frame == self
+                ):
+                    # Get the next most recent session
+                    all_data = self.tracker.load_data()
+                    if all_data:
+                        # Reload session view with most recent session
+                        self.session_name = max(all_data.keys())
+                        self.destroy()
+
+                        # Recreate session view with new session
+                        session_view_parent = (
+                            self.tracker.session_view_container.get_content_frame()
+                        )
+                        self.tracker.session_view_frame = CompletionFrame(
+                            session_view_parent, self.tracker, None
+                        )
+                        self.tracker.session_view_frame.pack(fill="both", expand=True)
+                    else:
+                        # No more sessions, go back to main
+                        self.tracker.show_main_frame()
+                else:
+                    # Return to main frame (called from end session flow)
+                    self.tracker.show_main_frame()
