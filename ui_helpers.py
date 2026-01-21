@@ -156,44 +156,73 @@ class ScrollableFrame(ttk.Frame):
         """Setup mousewheel scrolling"""
 
         def on_mousewheel(event):
-            # Check if a combobox dropdown is open
+            # Check if mouse is over this scrollable frame
             try:
-                widget = event.widget
-                # If the event came from a combobox, don't scroll
-                if isinstance(widget, ttk.Combobox):
-                    return "break"
+                # Get widget under mouse
+                x, y = self.winfo_pointerxy()
+                widget = self.winfo_containing(x, y)
+
+                # Check if it's a combobox
+                if widget and isinstance(widget, ttk.Combobox):
+                    return
+
+                # Check if the widget is a descendant of this ScrollableFrame
+                if widget:
+                    parent = widget
+                    while parent:
+                        if parent == self:
+                            # Mouse is over this frame, scroll it
+                            self.canvas.yview_scroll(
+                                int(-1 * (event.delta / 120)), "units"
+                            )
+                            return
+                        parent = parent.master
             except:
                 pass
 
-            self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-            return "break"  # Prevent event propagation
+        # Bind to the root window to capture all mousewheel events
+        def setup_root_binding():
+            try:
+                root = self.winfo_toplevel()
+                # Use bind_all to ensure we capture events everywhere
+                root.bind_all("<MouseWheel>", on_mousewheel, add="+")
+            except:
+                pass
 
-        # Bind directly to canvas for global coverage
-        self.canvas.bind("<MouseWheel>", on_mousewheel)
+        # Delay binding until widget is visible
+        self.after(100, setup_root_binding)
 
-        def bind_mousewheel(widget):
-            # Skip Combobox widgets - they handle their own mousewheel
-            if isinstance(widget, ttk.Combobox):
-                # Disable mousewheel on comboboxes to prevent accidental changes
-                widget.bind("<MouseWheel>", lambda e: "break")
-            else:
-                # Bind to all other widgets
-                widget.bind("<MouseWheel>", on_mousewheel)
+        # Also bind directly to our widgets as backup
+        self.bind("<MouseWheel>", on_mousewheel, add="+")
+        self.canvas.bind("<MouseWheel>", on_mousewheel, add="+")
+        self.content_frame.bind("<MouseWheel>", on_mousewheel, add="+")
 
-            # Recursively bind to children
-            for child in widget.winfo_children():
-                bind_mousewheel(child)
+        # Disable scrolling on all comboboxes
+        self._disable_combobox_scrolling()
 
-        bind_mousewheel(self)
-        bind_mousewheel(self.content_frame)
+    def _disable_combobox_scrolling(self):
+        """Find and disable mousewheel on all comboboxes in the content frame"""
 
-        # Store the binding function so it can be called after adding new widgets
-        self._bind_mousewheel_func = lambda: bind_mousewheel(self.content_frame)
+        def disable_recursive(widget):
+            try:
+                if isinstance(widget, ttk.Combobox):
+                    # Bind to prevent scrolling, returning "break" stops event propagation
+                    widget.bind("<MouseWheel>", lambda e: "break")
+
+                for child in widget.winfo_children():
+                    disable_recursive(child)
+            except:
+                pass
+
+        try:
+            disable_recursive(self.content_frame)
+        except:
+            pass
 
     def rebind_mousewheel(self):
         """Rebind mousewheel to all widgets (call after adding new widgets)"""
-        if hasattr(self, "_bind_mousewheel_func"):
-            self._bind_mousewheel_func()
+        # Re-disable combobox scrolling for any newly added comboboxes
+        self._disable_combobox_scrolling()
 
     def get_content_frame(self):
         """Get the content frame to add widgets to"""

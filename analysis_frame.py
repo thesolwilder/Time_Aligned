@@ -78,6 +78,7 @@ class AnalysisFrame(ttk.Frame):
         # Store references
         self.main_canvas = scrollable_container.canvas
         self.content_frame = content_frame
+        self.scrollable_container = scrollable_container
 
         # Back button and CSV export
         header_frame = ttk.Frame(content_frame)
@@ -229,6 +230,9 @@ class AnalysisFrame(ttk.Frame):
         content_frame.columnconfigure(1, weight=1)
         content_frame.columnconfigure(2, weight=1)
         content_frame.rowconfigure(5, weight=1)
+
+        # Disable mousewheel scrolling on all comboboxes
+        scrollable_container.rebind_mousewheel()
 
         # Load initial data
         self.refresh_all()

@@ -52,8 +52,8 @@ class SettingsFrame(ttk.Frame):
             scrollregion=scrollable_container.canvas.bbox("all")
         )
 
-        # Keep bind_mousewheel_func for compatibility (already handled by ScrollableFrame)
-        self.bind_mousewheel_func = lambda: None
+        # Store rebind function for when widgets are added dynamically
+        self.bind_mousewheel_func = scrollable_container.rebind_mousewheel
 
         self.row = 0
 
