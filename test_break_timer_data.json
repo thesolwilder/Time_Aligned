@@ -168,5 +168,137 @@
         "duration": 0.45038676261901855
       }
     ]
+  },
+  "2026-01-22_1769096603": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:43:23",
+    "start_timestamp": 1769096603.043498,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:43:23",
+        "start_timestamp": 1769096603.043498,
+        "end": "10:43:23",
+        "end_timestamp": 1769096603.5607562,
+        "duration": 0.5172581672668457,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769096603\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769096603\\period_active_0\\20260122_104323_Notepad.exe__Untitled - Notepad.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769096603\\period_active_0\\20260122_104323_Notepad.exe__Untitled - Notepad.png",
+            "timestamp": "20260122_104323",
+            "window_title": "*Untitled - Notepad",
+            "process_name": "Notepad.exe"
+          }
+        ]
+      }
+    ]
+  },
+  "2026-01-22_1769096604": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:43:24",
+    "start_timestamp": 1769096604.0310352,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:43:24",
+        "start_timestamp": 1769096604.0310352,
+        "end": "10:43:24",
+        "end_timestamp": 1769096604.6352649,
+        "duration": 0.6042296886444092,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769096604\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769096604\\period_active_0\\20260122_104324_Notepad.exe__Untitled - Notepad.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769096604\\period_active_0\\20260122_104324_Notepad.exe__Untitled - Notepad.png",
+            "timestamp": "20260122_104324",
+            "window_title": "*Untitled - Notepad",
+            "process_name": "Notepad.exe"
+          }
+        ]
+      }
+    ]
+  },
+  "2026-01-22_1769096766": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:46:06",
+    "start_timestamp": 1769096766.3891735,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:46:06",
+        "start_timestamp": 1769096766.3891735,
+        "end": "10:46:06",
+        "end_timestamp": 1769096766.8915606,
+        "duration": 0.5023870468139648
+      }
+    ]
+  },
+  "2026-01-22_1769096767": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:46:07",
+    "start_timestamp": 1769096767.4402628,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:46:07",
+        "start_timestamp": 1769096767.4402628,
+        "end": "10:46:07",
+        "end_timestamp": 1769096767.957653,
+        "duration": 0.517390251159668
+      }
+    ]
+  },
+  "2026-01-22_1769097879": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "11:04:39",
+    "start_timestamp": 1769097879.5625567,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "11:04:39",
+        "start_timestamp": 1769097879.5625567,
+        "end": "11:04:40",
+        "end_timestamp": 1769097880.1212795,
+        "duration": 0.558722734451294
+      }
+    ]
+  },
+  "2026-01-22_1769097880": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "11:04:40",
+    "start_timestamp": 1769097880.6535861,
+    "breaks": [],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "11:04:40",
+        "start_timestamp": 1769097880.6535861,
+        "end": "11:04:41",
+        "end_timestamp": 1769097881.920522,
+        "duration": 1.2669358253479004,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769097880\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769097880\\period_active_0\\20260122_110440_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769097880\\period_active_0\\20260122_110440_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "timestamp": "20260122_110440",
+            "window_title": "test_analysis_calculations.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ]
   }
 }

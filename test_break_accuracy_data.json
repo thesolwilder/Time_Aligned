@@ -173,5 +173,100 @@
         "duration": 0.6144804954528809
       }
     ]
+  },
+  "2026-01-22_1769096596": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:43:16",
+    "start_timestamp": 1769096596.8421047,
+    "breaks": [
+      {
+        "start": "10:43:17",
+        "start_timestamp": 1769096597.5036397,
+        "end": "10:43:17",
+        "end_timestamp": 1769096597.9254096,
+        "duration": 0.37244462966918945
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:43:16",
+        "start_timestamp": 1769096596.8421047,
+        "end": "10:43:17",
+        "end_timestamp": 1769096597.5036397,
+        "duration": 0.6615350246429443,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769096596\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769096596\\period_active_0\\20260122_104316_Notepad.exe__Untitled - Notepad.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769096596\\period_active_0\\20260122_104316_Notepad.exe__Untitled - Notepad.png",
+            "timestamp": "20260122_104316",
+            "window_title": "*Untitled - Notepad",
+            "process_name": "Notepad.exe"
+          }
+        ]
+      }
+    ]
+  },
+  "2026-01-22_1769096758": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "10:45:58",
+    "start_timestamp": 1769096758.6347842,
+    "breaks": [
+      {
+        "start": "10:45:59",
+        "start_timestamp": 1769096759.7086613,
+        "end": "10:46:00",
+        "end_timestamp": 1769096760.2339253,
+        "duration": 0.45577096939086914,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769096758\\period_break_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769096758\\period_active_0\\20260122_104559_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769096758\\period_active_0\\20260122_104559_Code.exe_test_analysis_calculations_py - time_aligned - Vis.png",
+            "timestamp": "20260122_104559",
+            "window_title": "test_analysis_calculations.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "10:45:58",
+        "start_timestamp": 1769096758.6347842,
+        "end": "10:45:59",
+        "end_timestamp": 1769096759.7086613,
+        "duration": 1.0738770961761475
+      }
+    ]
+  },
+  "2026-01-22_1769097872": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "11:04:32",
+    "start_timestamp": 1769097872.933846,
+    "breaks": [
+      {
+        "start": "11:04:33",
+        "start_timestamp": 1769097873.5878818,
+        "end": "11:04:33",
+        "end_timestamp": 1769097873.9954336,
+        "duration": 0.3771934509277344
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "11:04:32",
+        "start_timestamp": 1769097872.933846,
+        "end": "11:04:33",
+        "end_timestamp": 1769097873.5878818,
+        "duration": 0.6540358066558838
+      }
+    ]
   }
 }
