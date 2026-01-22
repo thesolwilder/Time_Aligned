@@ -1,6 +1,10 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import json
+import os
+import csv
+import subprocess
+import platform
 
 from ui_helpers import ScrollableFrame, sanitize_name
 
@@ -104,6 +108,15 @@ class SettingsFrame(ttk.Frame):
 
         # Keyboard shortcuts reference section
         self.create_keyboard_shortcuts_section(content_frame)
+
+        # Separator
+        ttk.Separator(content_frame, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
+
+        # CSV Export section
+        self.create_csv_export_section(content_frame)
 
         # Back button
         self.row += 1
@@ -1336,6 +1349,250 @@ class SettingsFrame(ttk.Frame):
         # Force scroll region update
         if hasattr(self, "update_scrollregion"):
             self.update_scrollregion()
+
+    def create_csv_export_section(self, parent):
+        """Create CSV export section"""
+        export_frame = ttk.LabelFrame(parent, padding=10, text="Data Export")
+        export_frame.grid(
+            row=self.row,
+            column=0,
+            columnspan=3,
+            padx=5,
+            pady=5,
+            sticky=(tk.W, tk.E),
+        )
+        self.row += 1
+
+        # Description
+        ttk.Label(
+            export_frame,
+            text="Export all tracking data to CSV format for analysis in spreadsheet applications.",
+            font=("Arial", 10),
+            wraplength=500,
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
+
+        # Export button
+        ttk.Button(
+            export_frame, text="Save All Data to CSV", command=self.save_all_data_to_csv
+        ).grid(row=1, column=0, pady=5, sticky=tk.W, padx=10)
+
+        # Rebind mousewheel
+        if hasattr(self, "bind_mousewheel_func"):
+            self.bind_mousewheel_func()
+
+        # Force scroll region update
+        if hasattr(self, "update_scrollregion"):
+            self.update_scrollregion()
+
+    def save_all_data_to_csv(self):
+        """Export all tracking data to CSV file"""
+        from tkinter import filedialog
+
+        try:
+            # Load data from data.json
+            data_file = self.tracker.data_file
+
+            if not os.path.exists(data_file):
+                messagebox.showerror("Error", "Data file not found")
+                return
+
+            with open(data_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if not data:
+                messagebox.showwarning("No Data", "No tracking data to export")
+                return
+
+            # Ask user where to save the CSV
+            file_path = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+                title="Save Data as CSV",
+                initialfile=f"time_aligned_data_{data.get(list(data.keys())[0], {}).get('date', 'export') if data else 'export'}.csv",
+            )
+
+            if not file_path:
+                return  # User cancelled
+
+            # Convert data to CSV format
+            csv_rows = []
+
+            for session_id, session_data in data.items():
+                # Get session-level data
+                sphere = session_data.get("sphere", "")
+                date = session_data.get("date", "")
+                start_time = session_data.get("start_time", "")
+                end_time = session_data.get("end_time", "")
+                total_duration = session_data.get("total_duration", 0)
+                active_duration = session_data.get("active_duration", 0)
+                break_duration = session_data.get("break_duration", 0)
+
+                # Get session comments
+                session_comments = session_data.get("session_comments", {})
+                active_notes = session_comments.get("active_notes", "")
+                break_notes = session_comments.get("break_notes", "")
+                idle_notes = session_comments.get("idle_notes", "")
+                session_notes = session_comments.get("session_notes", "")
+
+                # Process active periods
+                active_periods = session_data.get("active", [])
+                breaks = session_data.get("breaks", [])
+                idle_periods = session_data.get("idle_periods", [])
+
+                # If there are active periods, create a row for each
+                if active_periods:
+                    for active in active_periods:
+                        row = {
+                            "session_id": session_id,
+                            "date": date,
+                            "sphere": sphere,
+                            "session_start_time": start_time,
+                            "session_end_time": end_time,
+                            "session_total_duration": total_duration,
+                            "session_active_duration": active_duration,
+                            "session_break_duration": break_duration,
+                            "type": "active",
+                            "project": active.get("project", ""),
+                            "activity_start": active.get("start", ""),
+                            "activity_end": active.get("end", ""),
+                            "activity_duration": active.get("duration", 0),
+                            "activity_comment": active.get("comment", ""),
+                            "break_action": "",
+                            "active_notes": active_notes,
+                            "break_notes": break_notes,
+                            "idle_notes": idle_notes,
+                            "session_notes": session_notes,
+                        }
+                        csv_rows.append(row)
+
+                # Process breaks
+                if breaks:
+                    for brk in breaks:
+                        row = {
+                            "session_id": session_id,
+                            "date": date,
+                            "sphere": sphere,
+                            "session_start_time": start_time,
+                            "session_end_time": end_time,
+                            "session_total_duration": total_duration,
+                            "session_active_duration": active_duration,
+                            "session_break_duration": break_duration,
+                            "type": "break",
+                            "project": "",
+                            "activity_start": brk.get("start", ""),
+                            "activity_end": "",
+                            "activity_duration": brk.get("duration", 0),
+                            "activity_comment": brk.get("comment", ""),
+                            "break_action": brk.get("action", ""),
+                            "active_notes": active_notes,
+                            "break_notes": break_notes,
+                            "idle_notes": idle_notes,
+                            "session_notes": session_notes,
+                        }
+                        csv_rows.append(row)
+
+                # Process idle periods
+                if idle_periods:
+                    for idle in idle_periods:
+                        row = {
+                            "session_id": session_id,
+                            "date": date,
+                            "sphere": sphere,
+                            "session_start_time": start_time,
+                            "session_end_time": end_time,
+                            "session_total_duration": total_duration,
+                            "session_active_duration": active_duration,
+                            "session_break_duration": break_duration,
+                            "type": "idle",
+                            "project": "",
+                            "activity_start": idle.get("start", ""),
+                            "activity_end": idle.get("end", ""),
+                            "activity_duration": idle.get("duration", 0),
+                            "activity_comment": "",
+                            "break_action": "",
+                            "active_notes": active_notes,
+                            "break_notes": break_notes,
+                            "idle_notes": idle_notes,
+                            "session_notes": session_notes,
+                        }
+                        csv_rows.append(row)
+
+                # If no active periods, breaks, or idle, create summary row
+                if not active_periods and not breaks and not idle_periods:
+                    row = {
+                        "session_id": session_id,
+                        "date": date,
+                        "sphere": sphere,
+                        "session_start_time": start_time,
+                        "session_end_time": end_time,
+                        "session_total_duration": total_duration,
+                        "session_active_duration": active_duration,
+                        "session_break_duration": break_duration,
+                        "type": "session_summary",
+                        "project": "",
+                        "activity_start": "",
+                        "activity_end": "",
+                        "activity_duration": 0,
+                        "activity_comment": "",
+                        "break_action": "",
+                        "active_notes": active_notes,
+                        "break_notes": break_notes,
+                        "idle_notes": idle_notes,
+                        "session_notes": session_notes,
+                    }
+                    csv_rows.append(row)
+
+            # Write to CSV file
+            if csv_rows:
+                with open(file_path, "w", newline="", encoding="utf-8") as f:
+                    fieldnames = [
+                        "session_id",
+                        "date",
+                        "sphere",
+                        "session_start_time",
+                        "session_end_time",
+                        "session_total_duration",
+                        "session_active_duration",
+                        "session_break_duration",
+                        "type",
+                        "project",
+                        "activity_start",
+                        "activity_end",
+                        "activity_duration",
+                        "activity_comment",
+                        "break_action",
+                        "active_notes",
+                        "break_notes",
+                        "idle_notes",
+                        "session_notes",
+                    ]
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(csv_rows)
+
+                messagebox.showinfo(
+                    "Export Successful",
+                    f"Data exported successfully to:\n{file_path}\n\n{len(csv_rows)} rows exported",
+                )
+
+                # Open file location
+                try:
+                    directory = os.path.dirname(file_path)
+                    if platform.system() == "Windows":
+                        os.startfile(directory)
+                    elif platform.system() == "Darwin":  # macOS
+                        subprocess.Popen(["open", directory])
+                    else:  # Linux
+                        subprocess.Popen(["xdg-open", directory])
+                except Exception as e:
+                    # Silently fail if can't open directory
+                    pass
+
+            else:
+                messagebox.showwarning("No Data", "No data rows to export")
+
+        except Exception as e:
+            messagebox.showerror("Export Error", f"Failed to export data:\n{str(e)}")
 
     def create_break_actions_list(self, parent):
         """Create break actions management list"""

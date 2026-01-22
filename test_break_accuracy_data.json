@@ -268,5 +268,180 @@
         "duration": 0.6540358066558838
       }
     ]
+  },
+  "2026-01-22_1769100203": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "11:43:23",
+    "start_timestamp": 1769100203.607446,
+    "breaks": [
+      {
+        "start": "11:43:24",
+        "start_timestamp": 1769100204.1381931,
+        "end": "11:43:24",
+        "end_timestamp": 1769100204.5367608,
+        "duration": 0.3650515079498291,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769100203\\period_break_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769100203\\period_active_0\\20260122_114323_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769100203\\period_active_0\\20260122_114323_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260122_114323",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "11:43:23",
+        "start_timestamp": 1769100203.607446,
+        "end": "11:43:24",
+        "end_timestamp": 1769100204.1381931,
+        "duration": 0.5307471752166748
+      }
+    ]
+  },
+  "2026-01-22_1769102573": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "12:22:53",
+    "start_timestamp": 1769102573.9291556,
+    "breaks": [
+      {
+        "start": "12:22:55",
+        "start_timestamp": 1769102575.1411715,
+        "end": "12:22:55",
+        "end_timestamp": 1769102575.641354,
+        "duration": 0.46602845191955566
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "12:22:53",
+        "start_timestamp": 1769102573.9291556,
+        "end": "12:22:55",
+        "end_timestamp": 1769102575.1411715,
+        "duration": 1.2120158672332764,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769102573\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769102573\\period_active_0\\20260122_122254_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769102573\\period_active_0\\20260122_122254_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260122_122254",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ]
+  },
+  "2026-01-22_1769103053": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "12:30:53",
+    "start_timestamp": 1769103053.9327946,
+    "breaks": [
+      {
+        "start": "12:30:54",
+        "start_timestamp": 1769103054.7324831,
+        "end": "12:30:55",
+        "end_timestamp": 1769103055.2198267,
+        "duration": 0.43073129653930664,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769103053\\period_break_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769103053\\period_active_0\\20260122_123054_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769103053\\period_active_0\\20260122_123054_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260122_123054",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "12:30:53",
+        "start_timestamp": 1769103053.9327946,
+        "end": "12:30:54",
+        "end_timestamp": 1769103054.7324831,
+        "duration": 0.7996885776519775
+      }
+    ]
+  },
+  "2026-01-22_1769103332": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "12:35:32",
+    "start_timestamp": 1769103332.021533,
+    "breaks": [
+      {
+        "start": "12:35:32",
+        "start_timestamp": 1769103332.6589084,
+        "end": "12:35:33",
+        "end_timestamp": 1769103333.248697,
+        "duration": 0.5485935211181641,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769103332\\period_break_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769103332\\period_active_0\\20260122_123532_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769103332\\period_active_0\\20260122_123532_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260122_123532",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "12:35:32",
+        "start_timestamp": 1769103332.021533,
+        "end": "12:35:32",
+        "end_timestamp": 1769103332.6589084,
+        "duration": 0.6373753547668457
+      }
+    ]
+  },
+  "2026-01-22_1769103840": {
+    "sphere": "Coding",
+    "date": "2026-01-22",
+    "start_time": "12:44:00",
+    "start_timestamp": 1769103840.6199987,
+    "breaks": [
+      {
+        "start": "12:44:01",
+        "start_timestamp": 1769103841.872398,
+        "end": "12:44:02",
+        "end_timestamp": 1769103842.5242271,
+        "duration": 0.6010901927947998,
+        "screenshot_folder": "screenshots\\2026-01-22\\session_1769103840\\period_break_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-22\\session_1769103840\\period_active_0\\20260122_124401_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-22\\session_1769103840\\period_active_0\\20260122_124401_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260122_124401",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
+      }
+    ],
+    "idle_periods": [],
+    "active": [
+      {
+        "start": "12:44:00",
+        "start_timestamp": 1769103840.6199987,
+        "end": "12:44:01",
+        "end_timestamp": 1769103841.872398,
+        "duration": 1.252399206161499
+      }
+    ]
   }
 }
