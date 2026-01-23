@@ -124,7 +124,16 @@ Access settings to configure:
 
 ## Contributing
 
-Feel free to submit issues and enhancement requests!
+Contributions are welcome! Please see:
+
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development standards and testing procedures
+- **[docs/AGENT_STANDING_ORDERS.md](docs/AGENT_STANDING_ORDERS.md)** - Guide for AI-assisted development
+
+This project follows **Test-Driven Development (TDD)**:
+
+1. Import test → 2. Unit tests → 3. Integration tests → 4. E2E tests
+
+All contributions must include appropriate tests. See DEVELOPMENT.md for details.
 
 ## License
 

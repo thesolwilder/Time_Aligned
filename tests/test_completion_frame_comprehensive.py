@@ -17,8 +17,8 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from frames.completion_frame import CompletionFrame
-from test_helpers import TestFileManager, TestDataGenerator
+from src.completion_frame import CompletionFrame
+from tests.test_helpers import TestFileManager, TestDataGenerator
 
 
 class TestCompletionFrameAfterSession(unittest.TestCase):
@@ -31,10 +31,8 @@ class TestCompletionFrameAfterSession(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_completion_after_session.json"
-        self.test_settings_file = "test_completion_after_settings.json"
-
         # Create settings with default sphere and project
+        test_data = {}
         self.settings = {
             "idle_settings": {
                 "idle_tracking_enabled": True,
@@ -67,7 +65,13 @@ class TestCompletionFrameAfterSession(unittest.TestCase):
                 "Coffee": {"is_default": False, "active": True},
             },
         }
-        self.file_manager.create_test_file(self.test_settings_file, self.settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_completion_after_session.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_completion_after_settings.json", self.settings
+        )
 
     def test_default_sphere_populates(self):
         """Test that default sphere is selected on completion frame load"""
@@ -84,7 +88,6 @@ class TestCompletionFrameAfterSession(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -490,11 +493,15 @@ class TestCompletionFrameNoSessionCompleted(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_completion_no_session.json"
-        self.test_settings_file = "test_completion_no_settings.json"
-
+        test_data = {}
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_completion_no_session.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_completion_no_settings.json", settings
+        )
 
     def test_shows_last_active_session(self):
         """Test that completion frame shows most recent session when no session_name provided"""
@@ -524,7 +531,6 @@ class TestCompletionFrameNoSessionCompleted(unittest.TestCase):
                 "idle_periods": [],
             },
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -549,11 +555,15 @@ class TestCompletionFrameBreakEnding(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_completion_break_end.json"
-        self.test_settings_file = "test_completion_break_settings.json"
-
+        test_data = {}
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_completion_break_end.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_completion_break_settings.json", settings
+        )
 
     def test_no_zero_duration_active_period_after_break(self):
         """Test that timeline doesn't show a 0-duration active period if session ended on break"""
@@ -570,7 +580,6 @@ class TestCompletionFrameBreakEnding(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -598,9 +607,7 @@ class TestCompletionFrameDataValidation(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_completion_validation.json"
-        self.test_settings_file = "test_completion_validation_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {
                 "idle_tracking_enabled": True,
@@ -612,7 +619,13 @@ class TestCompletionFrameDataValidation(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_completion_validation.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_completion_validation_settings.json", settings
+        )
 
     def test_active_duration_sum_matches_display(self):
         """Test that sum of active period durations matches displayed active time"""
@@ -632,7 +645,6 @@ class TestCompletionFrameDataValidation(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file

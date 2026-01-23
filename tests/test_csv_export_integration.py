@@ -24,7 +24,6 @@ class TestCSVExportIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_csv_integration_data.json"
 
         # Create comprehensive test data
         self.test_data = {
@@ -122,7 +121,9 @@ class TestCSVExportIntegration(unittest.TestCase):
             },
         }
 
-        self.file_manager.create_test_file(self.test_data_file, self.test_data)
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_integration_data.json", self.test_data
+        )
 
     def tearDown(self):
         """Clean up"""

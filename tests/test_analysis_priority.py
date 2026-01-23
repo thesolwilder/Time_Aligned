@@ -18,8 +18,8 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from analysis_frame import AnalysisFrame
-from test_helpers import TestFileManager, TestDataGenerator
+from src.analysis_frame import AnalysisFrame
+from tests.test_helpers import TestFileManager, TestDataGenerator
 
 
 class TestAnalysisCSVExport(unittest.TestCase):
@@ -32,9 +32,7 @@ class TestAnalysisCSVExport(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_csv_data.json"
-        self.test_settings_file = "test_csv_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": True, "idle_threshold": 60},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -43,7 +41,13 @@ class TestAnalysisCSVExport(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_settings.json", settings
+        )
 
     def test_csv_export_creates_file(self):
         """Test that CSV export creates a file with correct data"""
@@ -71,7 +75,6 @@ class TestAnalysisCSVExport(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -231,9 +234,7 @@ class TestAnalysisSessionSpanningMidnight(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_midnight_data.json"
-        self.test_settings_file = "test_midnight_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -242,7 +243,13 @@ class TestAnalysisSessionSpanningMidnight(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_midnight_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_midnight_settings.json", settings
+        )
 
     def test_session_assigned_to_start_date(self):
         """Test that sessions spanning midnight are assigned to start date"""
@@ -264,7 +271,6 @@ class TestAnalysisSessionSpanningMidnight(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -336,9 +342,7 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_secondary_data.json"
-        self.test_settings_file = "test_secondary_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -349,7 +353,13 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_secondary_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_secondary_settings.json", settings
+        )
 
     def test_secondary_projects_aggregated_correctly(self):
         """Test that periods with secondary projects are aggregated correctly"""
@@ -385,7 +395,6 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -501,9 +510,6 @@ class TestAnalysisCardRangeCustomization(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_card_data.json"
-        self.test_settings_file = "test_card_settings.json"
-
         # Settings without analysis_settings initially
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -513,8 +519,13 @@ class TestAnalysisCardRangeCustomization(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
-        self.file_manager.create_test_file(self.test_data_file, {})
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_card_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_card_settings.json", settings
+        )
 
     def test_default_card_ranges(self):
         """Test that default card ranges are loaded correctly"""

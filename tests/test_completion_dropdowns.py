@@ -15,7 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from frames.completion_frame import CompletionFrame
+from src.completion_frame import CompletionFrame
 from tests.test_helpers import TestFileManager
 
 
@@ -29,9 +29,7 @@ class TestCompletionFrameSphereDropdownBehavior(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_sphere_dropdown_data.json"
-        self.test_settings_file = "test_sphere_dropdown_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {
@@ -46,7 +44,13 @@ class TestCompletionFrameSphereDropdownBehavior(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_sphere_dropdown_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_dropdown_settings.json", settings
+        )
 
     def test_sphere_change_updates_default_project_dropdown(self):
         """Test that changing sphere updates default project dropdown to new sphere's default"""
@@ -74,7 +78,6 @@ class TestCompletionFrameSphereDropdownBehavior(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -82,6 +85,7 @@ class TestCompletionFrameSphereDropdownBehavior(unittest.TestCase):
         tracker.settings = tracker.get_settings()
 
         frame = CompletionFrame(self.root, tracker, session_name)
+        self.root.update()  # Allow widgets to fully initialize
 
         # Initially should be Work sphere with Project A as default
         self.assertEqual(frame.selected_sphere, "Work")
@@ -166,9 +170,7 @@ class TestCompletionFrameDefaultProjectBehavior(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_default_project_data.json"
-        self.test_settings_file = "test_default_project_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -179,7 +181,13 @@ class TestCompletionFrameDefaultProjectBehavior(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_default_project_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_default_project_settings.json", settings
+        )
 
     def test_default_project_change_updates_all_timeline_dropdowns(self):
         """Test that changing default project updates all active period dropdowns"""
@@ -212,7 +220,6 @@ class TestCompletionFrameDefaultProjectBehavior(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -244,9 +251,7 @@ class TestCompletionFrameDefaultBreakActionBehavior(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_default_break_data.json"
-        self.test_settings_file = "test_default_break_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": True, "idle_threshold": 60},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -259,7 +264,13 @@ class TestCompletionFrameDefaultBreakActionBehavior(unittest.TestCase):
                 "Eating": {"is_default": False, "active": True},
             },
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_default_break_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_default_break_settings.json", settings
+        )
 
     def test_default_break_action_change_updates_all_break_dropdowns(self):
         """Test that changing default break action updates all break and idle dropdowns"""
@@ -304,7 +315,6 @@ class TestCompletionFrameDefaultBreakActionBehavior(unittest.TestCase):
                 ],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -340,9 +350,7 @@ class TestCompletionFrameCommentPersistence(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_comment_persistence_data.json"
-        self.test_settings_file = "test_comment_persistence_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -351,7 +359,13 @@ class TestCompletionFrameCommentPersistence(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_comment_persistence_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_comment_persistence_settings.json", settings
+        )
 
     def test_comments_are_saved(self):
         """Test that comments are saved to data file"""
@@ -368,7 +382,6 @@ class TestCompletionFrameCommentPersistence(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -477,9 +490,7 @@ class TestCompletionFrame12HourFormat(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_12hour_data.json"
-        self.test_settings_file = "test_12hour_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -488,7 +499,13 @@ class TestCompletionFrame12HourFormat(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_12hour_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_12hour_settings.json", settings
+        )
 
     def test_12_hour_format_displays_correctly(self):
         """Test that timestamps display in 12-hour format with AM/PM"""
@@ -519,7 +536,6 @@ class TestCompletionFrame12HourFormat(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -589,9 +605,7 @@ class TestCompletionFrameCommentSanitization(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_sanitize_data.json"
-        self.test_settings_file = "test_sanitize_settings.json"
-
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -600,7 +614,13 @@ class TestCompletionFrameCommentSanitization(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_sanitize_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sanitize_settings.json", settings
+        )
 
     def test_dangerous_characters_handled_in_comments(self):
         """Test that dangerous characters in comments are handled safely"""
@@ -617,7 +637,6 @@ class TestCompletionFrameCommentSanitization(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file

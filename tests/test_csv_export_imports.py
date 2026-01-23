@@ -18,7 +18,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_settings_frame_imports_os(self):
         """Test that settings_frame imports os module"""
-        import settings_frame
+        from src import settings_frame
 
         self.assertTrue(
             hasattr(settings_frame, "os"),
@@ -27,7 +27,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_settings_frame_imports_csv(self):
         """Test that settings_frame imports csv module"""
-        import settings_frame
+        from src import settings_frame
 
         self.assertTrue(
             hasattr(settings_frame, "csv"),
@@ -36,7 +36,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_settings_frame_imports_subprocess(self):
         """Test that settings_frame imports subprocess module"""
-        import settings_frame
+        from src import settings_frame
 
         self.assertTrue(
             hasattr(settings_frame, "subprocess"),
@@ -45,7 +45,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_settings_frame_imports_platform(self):
         """Test that settings_frame imports platform module"""
-        import settings_frame
+        from src import settings_frame
 
         self.assertTrue(
             hasattr(settings_frame, "platform"),
@@ -64,7 +64,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_settings_frame_class_exists(self):
         """Test that SettingsFrame class exists"""
-        import settings_frame
+        from src import settings_frame
 
         self.assertTrue(
             hasattr(settings_frame, "SettingsFrame"),
@@ -73,7 +73,7 @@ class TestCSVExportImports(unittest.TestCase):
 
     def test_save_all_data_to_csv_method_exists(self):
         """Test that save_all_data_to_csv method exists"""
-        from settings_frame import SettingsFrame
+        from src.settings_frame import SettingsFrame
 
         self.assertTrue(
             hasattr(SettingsFrame, "save_all_data_to_csv"),

@@ -17,8 +17,8 @@ from unittest.mock import patch, MagicMock
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from frames.completion_frame import CompletionFrame
-from test_helpers import TestFileManager
+from src.completion_frame import CompletionFrame
+from tests.test_helpers import TestFileManager
 
 
 class TestCompletionFrameSaveAndClose(unittest.TestCase):
@@ -31,9 +31,8 @@ class TestCompletionFrameSaveAndClose(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_save_data.json"
-        self.test_settings_file = "test_save_settings.json"
-
+        # Create test data and settings
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -43,7 +42,13 @@ class TestCompletionFrameSaveAndClose(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_save_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_save_settings.json", settings
+        )
 
     def test_save_single_project_writes_correctly(self):
         """Test that saving a single project writes data correctly"""
@@ -60,7 +65,6 @@ class TestCompletionFrameSaveAndClose(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -269,9 +273,8 @@ class TestCompletionFramePercentageValidation(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_percentage_data.json"
-        self.test_settings_file = "test_percentage_settings.json"
-
+        # Create test data and settings
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -281,7 +284,13 @@ class TestCompletionFramePercentageValidation(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_percentage_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_percentage_settings.json", settings
+        )
 
     def test_percentage_split_50_50(self):
         """Test 50/50 percentage split"""
@@ -298,7 +307,6 @@ class TestCompletionFramePercentageValidation(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -424,9 +432,8 @@ class TestCompletionFrameAddRemoveSecondary(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_toggle_data.json"
-        self.test_settings_file = "test_toggle_settings.json"
-
+        # Create test data and settings
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -436,7 +443,13 @@ class TestCompletionFrameAddRemoveSecondary(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_toggle_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_toggle_settings.json", settings
+        )
 
     def test_toggle_shows_secondary_widgets(self):
         """Test that toggling + shows secondary widgets"""
@@ -453,7 +466,6 @@ class TestCompletionFrameAddRemoveSecondary(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -574,9 +586,8 @@ class TestCompletionFrameCommentSpecialCharacters(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_comment_data.json"
-        self.test_settings_file = "test_comment_settings.json"
-
+        # Create test data and settings
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -585,7 +596,13 @@ class TestCompletionFrameCommentSpecialCharacters(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_comment_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_comment_settings.json", settings
+        )
 
     def test_comment_with_quotes(self):
         """Test that comments with quotes are saved correctly"""
@@ -602,7 +619,6 @@ class TestCompletionFrameCommentSpecialCharacters(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -779,9 +795,8 @@ class TestCompletionFrameMultipleSecondaryProjects(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_multi_secondary_data.json"
-        self.test_settings_file = "test_multi_secondary_settings.json"
-
+        # Create test data and settings
+        test_data = {}
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {"Work": {"is_default": True, "active": True}},
@@ -792,7 +807,13 @@ class TestCompletionFrameMultipleSecondaryProjects(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_multi_secondary_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_multi_secondary_settings.json", settings
+        )
 
     def test_multiple_periods_with_different_secondaries(self):
         """Test saving multiple periods each with different secondary projects"""
@@ -812,7 +833,6 @@ class TestCompletionFrameMultipleSecondaryProjects(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file

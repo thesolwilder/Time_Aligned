@@ -26,7 +26,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from tests.test_helpers import TestDataGenerator, TestFileManager
-from settings_frame import SettingsFrame
+from src.settings_frame import SettingsFrame
 
 
 class MockTracker:
@@ -75,16 +75,18 @@ class TestCSVExportButton(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_csv_export_settings.json"
-        self.test_data_file = "test_csv_export_data.json"
 
         # Create test settings and data
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
-
         # Create test data with sample sessions
         test_data = self._create_test_data()
-        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_export_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_export_data.json", test_data
+        )
 
         # Create GUI components
         self.root = tk.Tk()
@@ -206,14 +208,16 @@ class TestCSVExportFunctionCall(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_csv_func_settings.json"
-        self.test_data_file = "test_csv_func_data.json"
 
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
-
         test_data = {"test_key": {"sphere": "Test", "date": "2026-01-20"}}
-        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_func_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_func_data.json", test_data
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file, self.test_data_file)
@@ -234,7 +238,7 @@ class TestCSVExportFunctionCall(unittest.TestCase):
             "SettingsFrame should have save_all_data_to_csv method",
         )
 
-    @patch("settings_frame.SettingsFrame.save_all_data_to_csv")
+    @patch("src.settings_frame.SettingsFrame.save_all_data_to_csv")
     def test_button_calls_save_all_data_csv(self, mock_save):
         """Test that clicking the CSV button calls save_all_data_to_csv"""
         # Find the CSV export button
@@ -274,7 +278,6 @@ class TestCSVDataAccess(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_csv_data_access.json"
 
         # Create comprehensive test data
         self.test_data = {
@@ -317,7 +320,9 @@ class TestCSVDataAccess(unittest.TestCase):
             },
         }
 
-        self.file_manager.create_test_file(self.test_data_file, self.test_data)
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_data_access.json", self.test_data
+        )
 
     def tearDown(self):
         """Clean up"""

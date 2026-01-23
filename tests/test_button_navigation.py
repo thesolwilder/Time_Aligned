@@ -13,8 +13,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from time_tracker import TimeTracker
-from frames.completion_frame import CompletionFrame
-from test_helpers import TestFileManager
+from src.completion_frame import CompletionFrame
+from tests.test_helpers import TestFileManager
 
 
 class TestButtonNavigation(unittest.TestCase):
@@ -22,15 +22,17 @@ class TestButtonNavigation(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        from test_helpers import TestDataGenerator
+        from tests.test_helpers import TestDataGenerator
 
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_navigation_data.json"
-        self.test_settings_file = "test_navigation_settings.json"
 
         # Create test settings file
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = "test_navigation_data.json"
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_navigation_settings.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = TimeTracker(self.root)

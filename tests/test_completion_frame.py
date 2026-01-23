@@ -15,8 +15,8 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from frames.completion_frame import CompletionFrame
-from test_helpers import TestDataGenerator, TestFileManager
+from src.completion_frame import CompletionFrame
+from tests.test_helpers import TestDataGenerator, TestFileManager
 
 
 class TestCompletionFrameDataPersistence(unittest.TestCase):
@@ -30,16 +30,16 @@ class TestCompletionFrameDataPersistence(unittest.TestCase):
         self.addCleanup(self.root.destroy)
 
         # Create test data and settings files
-        self.test_data_file = "test_completion_data.json"
-        self.test_settings_file = "test_completion_settings.json"
-
-        # Create test data with multiple sessions
         test_data = TestDataGenerator.create_session_data()
-        self.file_manager.create_test_file(self.test_data_file, test_data)
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_completion_data.json", test_data
+        )
 
         # Create test settings
         test_settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, test_settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_completion_settings.json", test_settings
+        )
 
     def test_completion_frame_loads_most_recent_session(self):
         """Test that completion frame loads most recent session when no session_name provided"""
@@ -110,14 +110,15 @@ class TestCompletionFrameSphere(unittest.TestCase):
         self.addCleanup(self.root.destroy)
 
         # Create test files
-        self.test_data_file = "test_sphere_data.json"
-        self.test_settings_file = "test_sphere_settings.json"
-
         test_data = TestDataGenerator.create_session_data()
         test_settings = TestDataGenerator.create_settings_data()
 
-        self.file_manager.create_test_file(self.test_data_file, test_data)
-        self.file_manager.create_test_file(self.test_settings_file, test_settings)
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_sphere_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_settings.json", test_settings
+        )
 
     def test_sphere_defaults_from_settings(self):
         """Test that sphere defaults are loaded from settings"""
@@ -156,15 +157,17 @@ class TestCompletionFrameProjectAssignment(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        # Create test files
-        self.test_data_file = "test_project_data.json"
-        self.test_settings_file = "test_project_settings.json"
-
+        # Create test data first
         test_data = TestDataGenerator.create_session_data()
         test_settings = TestDataGenerator.create_settings_data()
 
-        self.file_manager.create_test_file(self.test_data_file, test_data)
-        self.file_manager.create_test_file(self.test_settings_file, test_settings)
+        # Create test files
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_project_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_project_settings.json", test_settings
+        )
 
     def test_projects_loaded_from_settings(self):
         """Test that projects are loaded from settings for each sphere"""
@@ -189,10 +192,6 @@ class TestCompletionFrameSaveSkipDelete(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        # Create test files with multiple sessions
-        self.test_data_file = "test_actions_data.json"
-        self.test_settings_file = "test_actions_settings.json"
-
         # Create data with at least 2 sessions
         test_data = TestDataGenerator.create_session_data()
         # Add a second session
@@ -214,11 +213,16 @@ class TestCompletionFrameSaveSkipDelete(unittest.TestCase):
 
         test_settings = TestDataGenerator.create_settings_data()
 
-        self.file_manager.create_test_file(self.test_data_file, test_data)
-        self.file_manager.create_test_file(self.test_settings_file, test_settings)
+        # Create test files
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_actions_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_actions_settings.json", test_settings
+        )
 
-    @patch("frames.completion_frame.messagebox.showinfo")  # Suppress success message
-    @patch("frames.completion_frame.messagebox.askyesno", return_value=True)
+    @patch("src.completion_frame.messagebox.showinfo")  # Suppress success message
+    @patch("src.completion_frame.messagebox.askyesno", return_value=True)
     @patch("shutil.copy2")  # Prevent backup file creation
     def test_delete_session_removes_from_data(
         self, mock_copy, mock_askyesno, mock_showinfo
@@ -245,7 +249,7 @@ class TestCompletionFrameSaveSkipDelete(unittest.TestCase):
         self.assertEqual(len(updated_data), initial_count - 1)
         self.assertNotIn(session_to_delete, updated_data)
 
-    @patch("frames.completion_frame.messagebox.askyesno", return_value=False)
+    @patch("src.completion_frame.messagebox.askyesno", return_value=False)
     def test_delete_session_cancelled_preserves_data(self, mock_messagebox):
         """Test that cancelling delete preserves session data"""
         tracker = TimeTracker(self.root)
@@ -280,10 +284,7 @@ class TestCompletionFrameGoogleSheets(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        # Create test files
-        self.test_data_file = "test_google_data.json"
-        self.test_settings_file = "test_google_settings.json"
-
+        # Create test data first
         test_data = TestDataGenerator.create_session_data()
         test_settings = TestDataGenerator.create_settings_data()
 
@@ -294,8 +295,13 @@ class TestCompletionFrameGoogleSheets(unittest.TestCase):
             "sheet_name": "Sessions",
         }
 
-        self.file_manager.create_test_file(self.test_data_file, test_data)
-        self.file_manager.create_test_file(self.test_settings_file, test_settings)
+        # Create test files
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_google_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_google_settings.json", test_settings
+        )
 
     def test_google_sheets_disabled_by_default_in_tests(self):
         """Test that Google Sheets upload is disabled in test settings"""

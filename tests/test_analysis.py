@@ -12,7 +12,7 @@ import sys
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from test_helpers import TestDataGenerator, TestFileManager
+from tests.test_helpers import TestDataGenerator, TestFileManager
 
 
 class TestAnalysisFiltering(unittest.TestCase):
@@ -21,17 +21,16 @@ class TestAnalysisFiltering(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_analysis_data.json"
-        self.test_settings_file = "test_analysis_settings.json"
-
-        # Create test settings
-        self.file_manager.create_test_file(
-            self.test_settings_file, TestDataGenerator.create_settings_data()
-        )
 
         # Create test data with sessions
         test_data = TestDataGenerator.create_session_data()
-        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_analysis_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_analysis_settings.json", TestDataGenerator.create_settings_data()
+        )
 
     def tearDown(self):
         """Clean up test files"""

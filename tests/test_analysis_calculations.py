@@ -16,8 +16,8 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from analysis_frame import AnalysisFrame
-from test_helpers import TestFileManager, TestDataGenerator
+from src.analysis_frame import AnalysisFrame
+from tests.test_helpers import TestFileManager, TestDataGenerator
 
 
 class TestAnalysisDurationCalculations(unittest.TestCase):
@@ -30,10 +30,8 @@ class TestAnalysisDurationCalculations(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_analysis_calc_data.json"
-        self.test_settings_file = "test_analysis_calc_settings.json"
-
         # Create settings with multiple spheres and projects
+        test_data = {}
         settings = {
             "idle_settings": {
                 "idle_tracking_enabled": True,
@@ -53,7 +51,13 @@ class TestAnalysisDurationCalculations(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_analysis_calc_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_analysis_calc_settings.json", settings
+        )
 
     def test_total_duration_equals_sum_of_sessions(self):
         """Test that total duration equals sum of all session durations"""
@@ -88,7 +92,6 @@ class TestAnalysisDurationCalculations(unittest.TestCase):
                 "idle_periods": [],
             },
         }
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -335,11 +338,15 @@ class TestAnalysisDateRangeFiltering(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_analysis_date_data.json"
-        self.test_settings_file = "test_analysis_date_settings.json"
-
+        test_data = {}
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_analysis_date_data.json", test_data
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_analysis_date_settings.json", settings
+        )
 
     def test_last_7_days_filter(self):
         """Test that Last 7 Days shows only last 7 days of data"""
@@ -357,8 +364,6 @@ class TestAnalysisDateRangeFiltering(unittest.TestCase):
                 "breaks": [],
                 "idle_periods": [],
             }
-
-        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -465,15 +470,17 @@ class TestAnalysisEdgeCases(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_analysis_edge_data.json"
-        self.test_settings_file = "test_analysis_edge_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_analysis_edge_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_analysis_edge_settings.json", settings
+        )
 
     def test_empty_data_returns_zero(self):
         """Test that empty data file returns zero durations"""
-        self.file_manager.create_test_file(self.test_data_file, {})
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file

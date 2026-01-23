@@ -42,8 +42,12 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.test_settings_file = self.file_manager.create_test_file("test_sphere_filter_settings.json", settings)
-        self.test_data_file = self.file_manager.create_test_file("test_sphere_filter_data.json")
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_filter_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_sphere_filter_data.json"
+        )
 
     def test_sphere_filter_work_only(self):
         """Test filtering by Work sphere"""
@@ -206,8 +210,12 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
-        self.test_settings_file = self.file_manager.create_test_file(\"test_project_filter_settings.json\", settings)
-        self.test_data_file = self.file_manager.create_test_file(\"test_project_filter_data.json\")
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_project_filter_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_project_filter_data.json"
+        )
 
     def test_project_filter_project_a(self):
         """Test filtering by specific project"""
