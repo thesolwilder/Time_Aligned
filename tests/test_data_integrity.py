@@ -27,11 +27,13 @@ class TestDurationCalculations(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_duration_data.json"
-        self.test_settings_file = "test_duration_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_duration_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_duration_data.json"
+        )
 
     @patch("time_tracker.TimeTracker.show_completion_frame")
     def test_total_equals_active_plus_break(self, mock_completion):
@@ -140,11 +142,13 @@ class TestMultipleBreaksDuration(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_multi_break_data.json"
-        self.test_settings_file = "test_multi_break_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_multi_break_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_multi_break_data.json"
+        )
 
     def test_multiple_breaks_sum_correctly(self):
         """Test that break_duration is sum of all breaks"""
@@ -191,11 +195,13 @@ class TestDataConsistency(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_consistency_data.json"
-        self.test_settings_file = "test_consistency_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_consistency_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_consistency_data.json"
+        )
 
     def test_saved_data_can_be_reloaded(self):
         """Test that saved data can be loaded back correctly"""
@@ -311,11 +317,13 @@ class TestNonNegativeDurations(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_nonneg_data.json"
-        self.test_settings_file = "test_nonneg_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_nonneg_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_nonneg_data.json"
+        )
 
     def test_all_durations_nonnegative(self):
         """Test that all duration values are >= 0"""

@@ -21,6 +21,7 @@ screenshots/
 # Test files
 test_settings.json
 test_data.json
+tests/test_data/
 
 # Logs and backups
 *.log

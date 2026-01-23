@@ -55,7 +55,7 @@ class TestCSVExportImports(unittest.TestCase):
     def test_settings_frame_can_be_imported(self):
         """Test that settings_frame module can be imported without errors"""
         try:
-            import settings_frame
+            from src import settings_frame
 
             # If we get here, import succeeded
             self.assertTrue(True)

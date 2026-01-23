@@ -26,11 +26,13 @@ class TestBreakRecording(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_breaks_data.json"
-        self.test_settings_file = "test_breaks_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_breaks_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_breaks_data.json"
+        )
 
     def test_start_break_creates_break_period(self):
         """Test that starting a break creates a break period in session data"""
@@ -118,11 +120,13 @@ class TestBreakTimerDisplay(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_break_timer_data.json"
-        self.test_settings_file = "test_break_timer_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_timer_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_break_timer_data.json"
+        )
 
     def test_break_timer_shows_during_break(self):
         """Test that break timer is visible during a break"""
@@ -167,11 +171,13 @@ class TestBreakDataPersistence(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_break_persist_data.json"
-        self.test_settings_file = "test_break_persist_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_persist_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_break_persist_data.json"
+        )
 
     def test_break_data_saved_on_session_end(self):
         """Test that break data is included when session ends"""
@@ -216,11 +222,13 @@ class TestBreakDurationAccuracy(unittest.TestCase):
         self.addCleanup(self.file_manager.cleanup)
         self.addCleanup(self.root.destroy)
 
-        self.test_data_file = "test_break_accuracy_data.json"
-        self.test_settings_file = "test_break_accuracy_settings.json"
-
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_accuracy_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_break_accuracy_data.json"
+        )
 
     def test_break_duration_approximately_correct(self):
         """Test that recorded break duration matches actual time"""

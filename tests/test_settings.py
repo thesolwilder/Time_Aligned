@@ -21,11 +21,10 @@ class TestSettingsDefaults(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_default_settings.json"
 
         # Create test settings
-        self.file_manager.create_test_file(
-            self.test_settings_file, TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_default_settings.json", TestDataGenerator.create_settings_data()
         )
 
     def tearDown(self):

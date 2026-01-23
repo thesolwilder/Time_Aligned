@@ -352,10 +352,11 @@ class TestSettingsFrameAddSphere(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_add_sphere.json"
 
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_add_sphere.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -844,10 +845,11 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_accuracy.json"
 
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_accuracy.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)

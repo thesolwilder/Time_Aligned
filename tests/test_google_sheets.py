@@ -23,7 +23,6 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)  # Ensures cleanup even if test fails
-        self.test_settings_file = "test_google_settings.json"
 
         # Create settings with Google Sheets config
         settings = TestDataGenerator.create_settings_data()
@@ -34,7 +33,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             "credentials_file": "credentials.json",
         }
 
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_google_settings.json", settings
+        )
 
     def tearDown(self):
         """Clean up test files"""
@@ -756,4 +757,3 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

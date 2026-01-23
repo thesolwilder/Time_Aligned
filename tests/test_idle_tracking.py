@@ -24,16 +24,18 @@ class TestIdleTracking(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures before each test"""
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_idle_data.json"
-        self.test_settings_file = "test_idle_settings.json"
 
         # Create test settings with short thresholds
         settings = TestDataGenerator.create_settings_data()
         settings["idle_settings"]["idle_threshold"] = 2  # 2 seconds
         settings["idle_settings"]["idle_break_threshold"] = 10  # 10 seconds
 
-        self.file_manager.create_test_file(self.test_data_file, {})
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_idle_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_idle_settings.json", settings
+        )
 
         # Create root window for TimeTracker
         self.root = tk.Tk()

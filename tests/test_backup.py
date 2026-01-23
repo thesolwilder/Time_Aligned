@@ -22,13 +22,13 @@ class TestBackupSaveFunctionality(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_data_file = "test_backup_data.json"
-        self.test_settings_file = "test_backup_settings.json"
 
-        # Create test files
-        self.file_manager.create_test_file(self.test_data_file, {})
-        self.file_manager.create_test_file(
-            self.test_settings_file, TestDataGenerator.create_settings_data()
+        # Create test files and get full paths
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_backup_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_backup_settings.json", TestDataGenerator.create_settings_data()
         )
 
     def tearDown(self):

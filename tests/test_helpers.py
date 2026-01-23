@@ -197,18 +197,21 @@ class TestFileManager:
         self.test_dirs = []
         # Get the tests directory path
         self.tests_dir = os.path.dirname(os.path.abspath(__file__))
+        # Use test_data subdirectory for all test files
+        self.test_data_dir = os.path.join(self.tests_dir, "test_data")
+        os.makedirs(self.test_data_dir, exist_ok=True)
 
     def create_test_file(self, filepath, content=None):
         """
         Create a test file and track it for cleanup
 
         Args:
-            filepath: Path to test file (relative paths will be created in tests/ directory)
+            filepath: Path to test file (relative paths will be created in tests/test_data/ directory)
             content: Content to write (dict will be JSON encoded)
         """
-        # If filepath is relative, create it in the tests directory
+        # If filepath is relative, create it in the test_data directory
         if not os.path.isabs(filepath):
-            filepath = os.path.join(self.tests_dir, filepath)
+            filepath = os.path.join(self.test_data_dir, filepath)
 
         # Ensure directory exists (only if filepath has a directory component)
         dirpath = os.path.dirname(filepath)
