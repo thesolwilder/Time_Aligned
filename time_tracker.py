@@ -36,11 +36,11 @@ traceback.print_exception = _patched_print_exception
 
 from pynput import mouse, keyboard
 
-from ui_helpers import ScrollableFrame
-from frames.completion_frame import CompletionFrame
-from settings_frame import SettingsFrame
-from analysis_frame import AnalysisFrame
-from screenshot_capture import ScreenshotCapture
+from src.ui_helpers import ScrollableFrame
+from src.completion_frame import CompletionFrame
+from src.settings_frame import SettingsFrame
+from src.analysis_frame import AnalysisFrame
+from src.screenshot_capture import ScreenshotCapture
 
 
 class TimeTracker:

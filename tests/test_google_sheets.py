@@ -70,12 +70,12 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
         self.assertFalse(reloaded["google_sheets"]["enabled"])
 
-    @patch("google_sheets_integration.os.path.exists")
-    @patch("google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.build")
     def test_uploader_initialization(self, mock_build, mock_exists):
         """Test GoogleSheetsUploader initialization"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             uploader = GoogleSheetsUploader(self.test_settings_file)
 
@@ -85,11 +85,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_is_enabled_check(self, mock_exists):
         """Test checking if Google Sheets upload is enabled"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             uploader = GoogleSheetsUploader(self.test_settings_file)
             self.assertTrue(uploader.is_enabled())
@@ -106,11 +106,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_get_spreadsheet_id(self, mock_exists):
         """Test retrieving spreadsheet ID from settings"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             uploader = GoogleSheetsUploader(self.test_settings_file)
             spreadsheet_id = uploader.get_spreadsheet_id()
@@ -119,11 +119,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_get_sheet_name(self, mock_exists):
         """Test retrieving sheet name from settings"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             uploader = GoogleSheetsUploader(self.test_settings_file)
             sheet_name = uploader.get_sheet_name()
@@ -132,16 +132,16 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
-    @patch("google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.build")
     @patch("builtins.open", new_callable=mock_open)
-    @patch("google_sheets_integration.pickle.load")
+    @patch("src.google_sheets_integration.pickle.load")
     def test_authenticate_with_existing_token(
         self, mock_pickle_load, mock_file, mock_build, mock_exists
     ):
         """Test authentication when valid token exists"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Mock existing valid credentials
             mock_creds = Mock()
@@ -165,11 +165,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_authentication_fails_without_credentials_file(self, mock_exists):
         """Test that authentication fails gracefully without credentials file"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Mock that no token or credentials exist
             mock_exists.return_value = False
@@ -201,11 +201,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             # Here we just verify the structure is ready
             self.assertIsInstance(session["active"], list)
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_spreadsheet_id_required(self, mock_exists):
         """Test that spreadsheet ID is required for upload"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Create settings without spreadsheet ID
             no_id_settings = TestDataGenerator.create_settings_data()
@@ -233,7 +233,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
     def test_default_sheet_name(self):
         """Test default sheet name when not specified"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Create settings without sheet_name
             settings = TestDataGenerator.create_settings_data()
@@ -280,7 +280,7 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
         """Test that app works without Google Sheets dependencies"""
         # Test that the app can handle missing Google API libraries
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # If import succeeds, verify it handles missing credentials gracefully
             settings = TestDataGenerator.create_settings_data()
@@ -308,7 +308,7 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
     def test_valid_spreadsheet_id(self):
         """Test that valid spreadsheet IDs are accepted"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -333,7 +333,7 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
     def test_malicious_spreadsheet_id_rejected(self):
         """Test that malicious spreadsheet IDs are rejected"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             malicious_ids = [
                 "../../../etc/passwd",
@@ -367,7 +367,7 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
     def test_malicious_sheet_name_sanitized(self):
         """Test that malicious sheet names are sanitized"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             malicious_names = [
                 "<script>alert('xss')</script>",
@@ -402,7 +402,7 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
     def test_path_traversal_in_credentials_blocked(self):
         """Test that path traversal in credentials file is blocked"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             dangerous_paths = [
                 "../../../etc/passwd",
@@ -435,7 +435,7 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
         """Test that environment variables take precedence over settings file"""
         try:
             import os
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Set environment variable
             os.environ["GOOGLE_SHEETS_SPREADSHEET_ID"] = "env_spreadsheet_123"
@@ -467,7 +467,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_formula_injection_equals(self):
         """Test that formulas starting with = are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         malicious = "=1+1"
         result = escape_for_sheets(malicious)
@@ -475,7 +475,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_formula_injection_plus(self):
         """Test that formulas starting with + are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         malicious = "+A1+A2"
         result = escape_for_sheets(malicious)
@@ -483,7 +483,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_formula_injection_minus(self):
         """Test that formulas starting with - are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         malicious = "-A1"
         result = escape_for_sheets(malicious)
@@ -491,7 +491,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_formula_injection_at(self):
         """Test that formulas starting with @ are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         malicious = "@IMPORTDATA('http://evil.com')"
         result = escape_for_sheets(malicious)
@@ -499,7 +499,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_formula_injection_pipe(self):
         """Test that formulas starting with | are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         malicious = "|evil"
         result = escape_for_sheets(malicious)
@@ -507,7 +507,7 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_html_characters(self):
         """Test that HTML/XML characters are escaped"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         text = "Text with <script>alert('xss')</script>"
         result = escape_for_sheets(text)
@@ -517,21 +517,21 @@ class TestEscapeForSheets(unittest.TestCase):
 
     def test_escape_empty_string(self):
         """Test that empty strings are handled"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         result = escape_for_sheets("")
         self.assertEqual(result, "")
 
     def test_escape_none(self):
         """Test that None is handled"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         result = escape_for_sheets(None)
         self.assertEqual(result, "")
 
     def test_escape_normal_text(self):
         """Test that normal text passes through"""
-        from google_sheets_integration import escape_for_sheets
+        from src.google_sheets_integration import escape_for_sheets
 
         text = "Normal project notes"
         result = escape_for_sheets(text)
@@ -546,11 +546,11 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_upload_disabled_returns_false(self, mock_exists):
         """Test that upload returns False when Google Sheets disabled"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {"enabled": False}
@@ -567,11 +567,11 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_upload_no_spreadsheet_id_returns_false(self, mock_exists):
         """Test that upload returns False without spreadsheet ID"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -594,7 +594,7 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
     def test_upload_session_data_format(self):
         """Test that session data is formatted correctly for upload"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             # Create uploader with test settings
             settings = TestDataGenerator.create_settings_data()
@@ -652,11 +652,11 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_connection_no_spreadsheet_id(self, mock_exists):
         """Test connection test fails without spreadsheet ID"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -678,7 +678,7 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
     def test_connection_success(self):
         """Test successful connection message format"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -708,11 +708,11 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_read_only_mode_uses_readonly_scopes(self, mock_exists):
         """Test that read-only mode uses readonly scopes"""
         try:
-            from google_sheets_integration import (
+            from src.google_sheets_integration import (
                 GoogleSheetsUploader,
                 SCOPES_READONLY,
             )
@@ -732,11 +732,11 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.os.path.exists")
     def test_full_mode_uses_full_scopes(self, mock_exists):
         """Test that full mode uses full scopes"""
         try:
-            from google_sheets_integration import GoogleSheetsUploader, SCOPES_FULL
+            from src.google_sheets_integration import GoogleSheetsUploader, SCOPES_FULL
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -756,3 +756,4 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

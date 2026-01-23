@@ -1,813 +1,112 @@
 {
-  "2026-01-21_1769019500": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:18:20",
-    "start_timestamp": 1769019500.0390177,
-    "breaks": [],
-    "idle_periods": []
-  },
-  "2026-01-21_1769019501": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:18:21",
-    "start_timestamp": 1769019501.0941777,
-    "breaks": [],
-    "idle_periods": []
-  },
-  "2026-01-21_1769019502": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:18:22",
-    "start_timestamp": 1769019502.2579062,
-    "breaks": [],
-    "idle_periods": []
-  },
-  "2026-01-21_1769019503": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:18:23",
-    "start_timestamp": 1769019503.4324548,
-    "breaks": [],
-    "idle_periods": []
-  },
-  "2026-01-21_1769019888": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:24:48",
-    "start_timestamp": 1769019888.8837037,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:24:48",
-        "start_timestamp": 1769019888.8837037,
-        "end": "13:24:49",
-        "end_timestamp": 1769019889.366554,
-        "duration": 0.4828503131866455
-      }
-    ]
-  },
-  "2026-01-21_1769019891": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:24:51",
-    "start_timestamp": 1769019891.0944283,
+  "2026-01-23_1769181580": {
+    "sphere": "Coding",
+    "date": "2026-01-23",
+    "start_time": "10:19:40",
+    "start_timestamp": 1769181580.4992177,
     "breaks": [
       {
-        "start": "13:24:52",
-        "start_timestamp": 1769019892.3305843,
-        "end": "13:24:52",
-        "end_timestamp": 1769019892.8168674,
-        "duration": 0.46536993980407715
+        "start": "10:19:42",
+        "start_timestamp": 1769181582.9663486,
+        "end": "10:19:43",
+        "end_timestamp": 1769181583.299855,
+        "duration": 0.30180835723876953
       }
     ],
     "idle_periods": [],
     "active": [
       {
-        "start": "13:24:51",
-        "start_timestamp": 1769019891.0944283,
-        "end": "13:24:52",
-        "end_timestamp": 1769019892.3305843,
-        "duration": 1.2361559867858887
+        "start": "10:19:40",
+        "start_timestamp": 1769181580.4992177,
+        "end": "10:19:42",
+        "end_timestamp": 1769181582.9663486,
+        "duration": 2.4671308994293213,
+        "screenshot_folder": "screenshots\\2026-01-23\\session_1769181580\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-23\\session_1769181580\\period_active_0\\20260123_101940_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-23\\session_1769181580\\period_active_0\\20260123_101940_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260123_101940",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
       }
     ]
   },
-  "2026-01-21_1769019893": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:24:53",
-    "start_timestamp": 1769019893.5344748,
+  "2026-01-23_1769181584": {
+    "sphere": "Coding",
+    "date": "2026-01-23",
+    "start_time": "10:19:44",
+    "start_timestamp": 1769181584.1680524,
     "breaks": [
       {
-        "start": "13:24:54",
-        "start_timestamp": 1769019894.0338795,
-        "end": "13:24:54",
-        "end_timestamp": 1769019894.2486002,
-        "duration": 0.18709325790405273
+        "start": "10:19:46",
+        "start_timestamp": 1769181586.551698,
+        "end": "10:19:47",
+        "end_timestamp": 1769181587.060518,
+        "duration": 0.4665656089782715
       },
       {
-        "start": "13:24:54",
-        "start_timestamp": 1769019894.3834405,
-        "end": "13:24:54",
-        "end_timestamp": 1769019894.581852,
-        "duration": 0.17039012908935547
+        "start": "10:19:47",
+        "start_timestamp": 1769181587.2236,
+        "end": "10:19:47",
+        "end_timestamp": 1769181587.5177217,
+        "duration": 0.25313901901245117
       }
     ],
     "idle_periods": [],
     "active": [
       {
-        "start": "13:24:53",
-        "start_timestamp": 1769019893.5344748,
-        "end": "13:24:54",
-        "end_timestamp": 1769019894.0338795,
-        "duration": 0.4994046688079834
+        "start": "10:19:44",
+        "start_timestamp": 1769181584.1680524,
+        "end": "10:19:46",
+        "end_timestamp": 1769181586.551698,
+        "duration": 2.383645534515381,
+        "screenshot_folder": "screenshots\\2026-01-23\\session_1769181584\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-23\\session_1769181584\\period_active_0\\20260123_101944_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-23\\session_1769181584\\period_active_0\\20260123_101944_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260123_101944",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
       },
       {
-        "start": "13:24:54",
-        "start_timestamp": 1769019894.250987,
-        "end": "13:24:54",
-        "end_timestamp": 1769019894.3834405,
-        "duration": 0.13245344161987305
+        "start": "10:19:47",
+        "start_timestamp": 1769181587.0726273,
+        "end": "10:19:47",
+        "end_timestamp": 1769181587.2236,
+        "duration": 0.15097260475158691
       }
     ]
   },
-  "2026-01-21_1769019895": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:24:55",
-    "start_timestamp": 1769019895.2416875,
+  "2026-01-23_1769181588": {
+    "sphere": "Coding",
+    "date": "2026-01-23",
+    "start_time": "10:19:48",
+    "start_timestamp": 1769181588.2091172,
     "breaks": [],
     "idle_periods": [],
     "active": [
       {
-        "start": "13:24:55",
-        "start_timestamp": 1769019895.2416875,
-        "end": "13:24:55",
-        "end_timestamp": 1769019895.7656262,
-        "duration": 0.5239386558532715
-      }
-    ]
-  },
-  "2026-01-21_1769020115": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:28:35",
-    "start_timestamp": 1769020115.9271793,
-    "breaks": [
-      {
-        "start": "13:28:36",
-        "start_timestamp": 1769020116.4927366,
-        "end": "13:28:36",
-        "end_timestamp": 1769020116.8039644,
-        "duration": 0.28347134590148926
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:28:35",
-        "start_timestamp": 1769020115.9271793,
-        "end": "13:28:36",
-        "end_timestamp": 1769020116.4927366,
-        "duration": 0.5655572414398193
-      }
-    ]
-  },
-  "2026-01-21_1769020117": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:28:37",
-    "start_timestamp": 1769020117.5256338,
-    "breaks": [
-      {
-        "start": "13:28:38",
-        "start_timestamp": 1769020118.1410341,
-        "end": "13:28:38",
-        "end_timestamp": 1769020118.3305101,
-        "duration": 0.1658773422241211
-      },
-      {
-        "start": "13:28:38",
-        "start_timestamp": 1769020118.462847,
-        "end": "13:28:38",
-        "end_timestamp": 1769020118.6590595,
-        "duration": 0.17303156852722168
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:28:37",
-        "start_timestamp": 1769020117.5256338,
-        "end": "13:28:38",
-        "end_timestamp": 1769020118.1410341,
-        "duration": 0.6154003143310547
-      },
-      {
-        "start": "13:28:38",
-        "start_timestamp": 1769020118.3377557,
-        "end": "13:28:38",
-        "end_timestamp": 1769020118.462847,
-        "duration": 0.1250913143157959
-      }
-    ]
-  },
-  "2026-01-21_1769020119": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:28:39",
-    "start_timestamp": 1769020119.2594671,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:28:39",
-        "start_timestamp": 1769020119.2594671,
-        "end": "13:28:39",
-        "end_timestamp": 1769020119.8940582,
-        "duration": 0.6345911026000977
-      }
-    ]
-  },
-  "2026-01-21_1769020205": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:30:05",
-    "start_timestamp": 1769020205.1709225,
-    "breaks": [
-      {
-        "start": "13:30:05",
-        "start_timestamp": 1769020205.7212722,
-        "end": "13:30:06",
-        "end_timestamp": 1769020206.0384793,
-        "duration": 0.2880115509033203
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:30:05",
-        "start_timestamp": 1769020205.1709225,
-        "end": "13:30:05",
-        "end_timestamp": 1769020205.7212722,
-        "duration": 0.5503497123718262
-      }
-    ]
-  },
-  "2026-01-21_1769020206": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:30:06",
-    "start_timestamp": 1769020206.687855,
-    "breaks": [
-      {
-        "start": "13:30:07",
-        "start_timestamp": 1769020207.237829,
-        "end": "13:30:07",
-        "end_timestamp": 1769020207.4363701,
-        "duration": 0.1705026626586914
-      },
-      {
-        "start": "13:30:07",
-        "start_timestamp": 1769020207.5729961,
-        "end": "13:30:07",
-        "end_timestamp": 1769020207.768977,
-        "duration": 0.16391372680664062
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:30:06",
-        "start_timestamp": 1769020206.687855,
-        "end": "13:30:07",
-        "end_timestamp": 1769020207.237829,
-        "duration": 0.5499739646911621
-      },
-      {
-        "start": "13:30:07",
-        "start_timestamp": 1769020207.4399536,
-        "end": "13:30:07",
-        "end_timestamp": 1769020207.5729961,
-        "duration": 0.133042573928833
-      }
-    ]
-  },
-  "2026-01-21_1769020208": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:30:08",
-    "start_timestamp": 1769020208.3559425,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:30:08",
-        "start_timestamp": 1769020208.3559425,
-        "end": "13:30:08",
-        "end_timestamp": 1769020208.9755847,
-        "duration": 0.6196422576904297
-      }
-    ]
-  },
-  "2026-01-21_1769020422": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:33:42",
-    "start_timestamp": 1769020422.3111863,
-    "breaks": [
-      {
-        "start": "13:33:42",
-        "start_timestamp": 1769020422.8000605,
-        "end": "13:33:43",
-        "end_timestamp": 1769020423.1177661,
-        "duration": 0.28418540954589844
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:33:42",
-        "start_timestamp": 1769020422.3111863,
-        "end": "13:33:42",
-        "end_timestamp": 1769020422.8000605,
-        "duration": 0.4888741970062256
-      }
-    ]
-  },
-  "2026-01-21_1769020423": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:33:43",
-    "start_timestamp": 1769020423.8463447,
-    "breaks": [
-      {
-        "start": "13:33:44",
-        "start_timestamp": 1769020424.34751,
-        "end": "13:33:44",
-        "end_timestamp": 1769020424.5492067,
-        "duration": 0.16719412803649902
-      },
-      {
-        "start": "13:33:44",
-        "start_timestamp": 1769020424.6921933,
-        "end": "13:33:44",
-        "end_timestamp": 1769020424.8838613,
-        "duration": 0.1548786163330078
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:33:43",
-        "start_timestamp": 1769020423.8463447,
-        "end": "13:33:44",
-        "end_timestamp": 1769020424.34751,
-        "duration": 0.5011653900146484
-      },
-      {
-        "start": "13:33:44",
-        "start_timestamp": 1769020424.5535903,
-        "end": "13:33:44",
-        "end_timestamp": 1769020424.6921933,
-        "duration": 0.13860297203063965
-      }
-    ]
-  },
-  "2026-01-21_1769020425": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "13:33:45",
-    "start_timestamp": 1769020425.4824648,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "13:33:45",
-        "start_timestamp": 1769020425.4824648,
-        "end": "13:33:46",
-        "end_timestamp": 1769020426.0330307,
-        "duration": 0.5505659580230713
-      }
-    ]
-  },
-  "2026-01-21_1769034240": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:24:00",
-    "start_timestamp": 1769034240.4584653,
-    "breaks": [
-      {
-        "start": "17:24:00",
-        "start_timestamp": 1769034240.972786,
-        "end": "17:24:01",
-        "end_timestamp": 1769034241.291846,
-        "duration": 0.2926769256591797
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:24:00",
-        "start_timestamp": 1769034240.4584653,
-        "end": "17:24:00",
-        "end_timestamp": 1769034240.972786,
-        "duration": 0.5143206119537354
-      }
-    ]
-  },
-  "2026-01-21_1769034241": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:24:01",
-    "start_timestamp": 1769034241.8490398,
-    "breaks": [
-      {
-        "start": "17:24:02",
-        "start_timestamp": 1769034242.462856,
-        "end": "17:24:02",
-        "end_timestamp": 1769034242.6773198,
-        "duration": 0.18522977828979492
-      },
-      {
-        "start": "17:24:02",
-        "start_timestamp": 1769034242.8170195,
-        "end": "17:24:03",
-        "end_timestamp": 1769034243.1591742,
-        "duration": 0.3146238327026367
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:24:01",
-        "start_timestamp": 1769034241.8490398,
-        "end": "17:24:02",
-        "end_timestamp": 1769034242.462856,
-        "duration": 0.6138162612915039
-      },
-      {
-        "start": "17:24:02",
-        "start_timestamp": 1769034242.6825867,
-        "end": "17:24:02",
-        "end_timestamp": 1769034242.8170195,
-        "duration": 0.13443279266357422
-      }
-    ]
-  },
-  "2026-01-21_1769034243": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:24:03",
-    "start_timestamp": 1769034243.3321595,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:24:03",
-        "start_timestamp": 1769034243.3321595,
-        "end": "17:24:03",
-        "end_timestamp": 1769034243.6951394,
-        "duration": 0.3629798889160156
-      }
-    ]
-  },
-  "2026-01-21_1769034244": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:24:04",
-    "start_timestamp": 1769034244.2805197,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:24:04",
-        "start_timestamp": 1769034244.2805197,
-        "end": "17:24:04",
-        "end_timestamp": 1769034244.7470102,
-        "duration": 0.4664905071258545
-      }
-    ]
-  },
-  "2026-01-21_1769034316": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:25:16",
-    "start_timestamp": 1769034316.9135664,
-    "breaks": [
-      {
-        "start": "17:25:17",
-        "start_timestamp": 1769034317.3734138,
-        "end": "17:25:17",
-        "end_timestamp": 1769034317.6985283,
-        "duration": 0.2903635501861572
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:25:16",
-        "start_timestamp": 1769034316.9135664,
-        "end": "17:25:17",
-        "end_timestamp": 1769034317.3734138,
-        "duration": 0.45984745025634766
-      }
-    ]
-  },
-  "2026-01-21_1769034318": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:25:18",
-    "start_timestamp": 1769034318.2796435,
-    "breaks": [
-      {
-        "start": "17:25:18",
-        "start_timestamp": 1769034318.8939528,
-        "end": "17:25:19",
-        "end_timestamp": 1769034319.0937881,
-        "duration": 0.18316650390625
-      },
-      {
-        "start": "17:25:19",
-        "start_timestamp": 1769034319.2238116,
-        "end": "17:25:19",
-        "end_timestamp": 1769034319.4151702,
-        "duration": 0.1584334373474121
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:25:18",
-        "start_timestamp": 1769034318.2796435,
-        "end": "17:25:18",
-        "end_timestamp": 1769034318.8939528,
-        "duration": 0.6143093109130859
-      },
-      {
-        "start": "17:25:19",
-        "start_timestamp": 1769034319.0978312,
-        "end": "17:25:19",
-        "end_timestamp": 1769034319.2238116,
-        "duration": 0.12598037719726562
-      }
-    ]
-  },
-  "2026-01-21_1769034319": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:25:19",
-    "start_timestamp": 1769034319.55789,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:25:19",
-        "start_timestamp": 1769034319.55789,
-        "end": "17:25:19",
-        "end_timestamp": 1769034319.9052978,
-        "duration": 0.34740781784057617
-      }
-    ]
-  },
-  "2026-01-21_1769034320": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:25:20",
-    "start_timestamp": 1769034320.5399132,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:25:20",
-        "start_timestamp": 1769034320.5399132,
-        "end": "17:25:20",
-        "end_timestamp": 1769034320.9771123,
-        "duration": 0.43719911575317383
-      }
-    ]
-  },
-  "2026-01-21_1769034424": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:27:04",
-    "start_timestamp": 1769034424.3871825,
-    "breaks": [
-      {
-        "start": "17:27:04",
-        "start_timestamp": 1769034424.9594119,
-        "end": "17:27:05",
-        "end_timestamp": 1769034425.2876644,
-        "duration": 0.27570390701293945
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:27:04",
-        "start_timestamp": 1769034424.3871825,
-        "end": "17:27:04",
-        "end_timestamp": 1769034424.9594119,
-        "duration": 0.5722293853759766
-      }
-    ]
-  },
-  "2026-01-21_1769034425": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:27:05",
-    "start_timestamp": 1769034425.9124227,
-    "breaks": [
-      {
-        "start": "17:27:06",
-        "start_timestamp": 1769034426.6620464,
-        "end": "17:27:06",
-        "end_timestamp": 1769034426.8748527,
-        "duration": 0.1747736930847168
-      },
-      {
-        "start": "17:27:07",
-        "start_timestamp": 1769034427.0118296,
-        "end": "17:27:07",
-        "end_timestamp": 1769034427.2254307,
-        "duration": 0.1833209991455078
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:27:05",
-        "start_timestamp": 1769034425.9124227,
-        "end": "17:27:06",
-        "end_timestamp": 1769034426.6620464,
-        "duration": 0.7496237754821777
-      },
-      {
-        "start": "17:27:06",
-        "start_timestamp": 1769034426.8858194,
-        "end": "17:27:07",
-        "end_timestamp": 1769034427.0118296,
-        "duration": 0.12601017951965332
-      }
-    ]
-  },
-  "2026-01-21_1769034427": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:27:07",
-    "start_timestamp": 1769034427.7690878,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:27:07",
-        "start_timestamp": 1769034427.7690878,
-        "end": "17:27:08",
-        "end_timestamp": 1769034428.2274282,
-        "duration": 0.4583404064178467
-      }
-    ]
-  },
-  "2026-01-21_1769034502": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:28:22",
-    "start_timestamp": 1769034502.5884225,
-    "breaks": [
-      {
-        "start": "17:28:23",
-        "start_timestamp": 1769034503.1558387,
-        "end": "17:28:23",
-        "end_timestamp": 1769034503.4672325,
-        "duration": 0.2789778709411621
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:28:22",
-        "start_timestamp": 1769034502.5884225,
-        "end": "17:28:23",
-        "end_timestamp": 1769034503.1558387,
-        "duration": 0.5674161911010742
-      }
-    ]
-  },
-  "2026-01-21_1769034503": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:28:23",
-    "start_timestamp": 1769034503.9843597,
-    "breaks": [
-      {
-        "start": "17:28:24",
-        "start_timestamp": 1769034504.8210351,
-        "end": "17:28:25",
-        "end_timestamp": 1769034505.0470827,
-        "duration": 0.20037364959716797
-      },
-      {
-        "start": "17:28:25",
-        "start_timestamp": 1769034505.1839352,
-        "end": "17:28:25",
-        "end_timestamp": 1769034505.39016,
-        "duration": 0.17462992668151855
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:28:23",
-        "start_timestamp": 1769034503.9843597,
-        "end": "17:28:24",
-        "end_timestamp": 1769034504.8210351,
-        "duration": 0.8366754055023193
-      },
-      {
-        "start": "17:28:25",
-        "start_timestamp": 1769034505.0552387,
-        "end": "17:28:25",
-        "end_timestamp": 1769034505.1839352,
-        "duration": 0.12869644165039062
-      }
-    ]
-  },
-  "2026-01-21_1769034505": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:28:25",
-    "start_timestamp": 1769034505.957544,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:28:25",
-        "start_timestamp": 1769034505.957544,
-        "end": "17:28:26",
-        "end_timestamp": 1769034506.4218314,
-        "duration": 0.46428728103637695
-      }
-    ]
-  },
-  "2026-01-21_1769034614": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:30:14",
-    "start_timestamp": 1769034614.4552252,
-    "breaks": [
-      {
-        "start": "17:30:15",
-        "start_timestamp": 1769034615.019154,
-        "end": "17:30:15",
-        "end_timestamp": 1769034615.4492917,
-        "duration": 0.3447418212890625
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:30:14",
-        "start_timestamp": 1769034614.4552252,
-        "end": "17:30:15",
-        "end_timestamp": 1769034615.019154,
-        "duration": 0.5639288425445557
-      }
-    ]
-  },
-  "2026-01-21_1769034616": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:30:16",
-    "start_timestamp": 1769034616.2176042,
-    "breaks": [
-      {
-        "start": "17:30:16",
-        "start_timestamp": 1769034616.7513592,
-        "end": "17:30:16",
-        "end_timestamp": 1769034616.9703796,
-        "duration": 0.18345212936401367
-      },
-      {
-        "start": "17:30:17",
-        "start_timestamp": 1769034617.1215596,
-        "end": "17:30:17",
-        "end_timestamp": 1769034617.3364952,
-        "duration": 0.18200397491455078
-      }
-    ],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:30:16",
-        "start_timestamp": 1769034616.2176042,
-        "end": "17:30:16",
-        "end_timestamp": 1769034616.7513592,
-        "duration": 0.5337550640106201
-      },
-      {
-        "start": "17:30:16",
-        "start_timestamp": 1769034616.9857209,
-        "end": "17:30:17",
-        "end_timestamp": 1769034617.1215596,
-        "duration": 0.13583874702453613
-      }
-    ]
-  },
-  "2026-01-21_1769034617": {
-    "sphere": "General",
-    "date": "2026-01-21",
-    "start_time": "17:30:17",
-    "start_timestamp": 1769034617.9632487,
-    "breaks": [],
-    "idle_periods": [],
-    "active": [
-      {
-        "start": "17:30:17",
-        "start_timestamp": 1769034617.9632487,
-        "end": "17:30:18",
-        "end_timestamp": 1769034618.7210157,
-        "duration": 0.7577669620513916
+        "start": "10:19:48",
+        "start_timestamp": 1769181588.2091172,
+        "end": "10:19:51",
+        "end_timestamp": 1769181591.4524179,
+        "duration": 3.243300676345825,
+        "screenshot_folder": "screenshots\\2026-01-23\\session_1769181588\\period_active_0",
+        "screenshots": [
+          {
+            "filepath": "screenshots\\2026-01-23\\session_1769181588\\period_active_0\\20260123_101949_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "relative_path": "screenshots\\2026-01-23\\session_1769181588\\period_active_0\\20260123_101949_Code.exe_time_tracker_py - time_aligned - Visual Studio Cod.png",
+            "timestamp": "20260123_101949",
+            "window_title": "time_tracker.py - time_aligned - Visual Studio Code",
+            "process_name": "Code.exe"
+          }
+        ]
       }
     ]
   }

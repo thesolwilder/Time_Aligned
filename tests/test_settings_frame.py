@@ -24,8 +24,8 @@ from unittest.mock import Mock, MagicMock, patch
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from test_helpers import TestDataGenerator, TestFileManager
-from settings_frame import SettingsFrame
-from ui_helpers import sanitize_name
+from src.settings_frame import SettingsFrame
+from src.ui_helpers import sanitize_name
 
 
 class MockTracker:

@@ -11,7 +11,7 @@ import os
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from ui_helpers import sanitize_name, escape_for_sheets, validate_folder_path
+from src.ui_helpers import sanitize_name, escape_for_sheets, validate_folder_path
 
 
 class TestSanitizeName(unittest.TestCase):

@@ -15,7 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from analysis_frame import AnalysisFrame
+from src.analysis_frame import AnalysisFrame
 from tests.test_helpers import TestFileManager
 
 

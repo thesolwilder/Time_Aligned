@@ -27,6 +27,7 @@ test_data.json
 *.pkl
 *.pickle
 *.bak
+backups/
 
 # Google API credentials and tokens - SENSITIVE
 credentials.json

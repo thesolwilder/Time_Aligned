@@ -5,7 +5,7 @@ import csv
 from datetime import datetime, timedelta
 import random
 
-from ui_helpers import ScrollableFrame
+from src.ui_helpers import ScrollableFrame
 
 
 class AnalysisFrame(ttk.Frame):

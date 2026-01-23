@@ -3,7 +3,7 @@ Quick test script to verify screenshot capture functionality
 """
 
 import time
-from screenshot_capture import ScreenshotCapture
+from src.screenshot_capture import ScreenshotCapture
 import json
 
 # Load settings

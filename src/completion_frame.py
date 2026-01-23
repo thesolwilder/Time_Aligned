@@ -1652,7 +1652,7 @@ class CompletionFrame(ttk.Frame):
             session_data: The session data dictionary to upload
         """
         try:
-            from google_sheets_integration import GoogleSheetsUploader
+            from src.google_sheets_integration import GoogleSheetsUploader
 
             uploader = GoogleSheetsUploader(self.tracker.settings_file)
 
@@ -1706,8 +1706,14 @@ class CompletionFrame(ttk.Frame):
                 # Create backup before deletion
                 import shutil
                 import datetime
+                import os
 
-                backup_file = f"{self.tracker.data_file}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                # Ensure backups directory exists
+                backup_dir = "backups"
+                os.makedirs(backup_dir, exist_ok=True)
+
+                backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                backup_file = os.path.join(backup_dir, backup_filename)
                 try:
                     shutil.copy2(self.tracker.data_file, backup_file)
                 except Exception as e:

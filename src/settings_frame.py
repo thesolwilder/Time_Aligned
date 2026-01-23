@@ -6,7 +6,7 @@ import csv
 import subprocess
 import platform
 
-from ui_helpers import ScrollableFrame, sanitize_name
+from src.ui_helpers import ScrollableFrame, sanitize_name
 
 
 class SettingsFrame(ttk.Frame):
