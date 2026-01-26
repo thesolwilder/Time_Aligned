@@ -78,6 +78,7 @@ class TestCompletionFrameSphereDropdownBehavior(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -220,6 +221,7 @@ class TestCompletionFrameDefaultProjectBehavior(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -315,6 +317,7 @@ class TestCompletionFrameDefaultBreakActionBehavior(unittest.TestCase):
                 ],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -382,13 +385,16 @@ class TestCompletionFrameCommentPersistence(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
+        self.root.update()
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
         tracker.settings = tracker.get_settings()
 
         frame = CompletionFrame(self.root, tracker, session_name)
+        self.root.update()  # Allow widgets to fully initialize
 
         # Set project and comment
         frame.project_menus[0].set("Project A")
@@ -536,6 +542,7 @@ class TestCompletionFrame12HourFormat(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -637,6 +644,7 @@ class TestCompletionFrameCommentSanitization(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file

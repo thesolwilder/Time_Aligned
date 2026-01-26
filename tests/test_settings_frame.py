@@ -73,13 +73,14 @@ class TestSettingsFrameDefaults(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_frame.json"
 
         # Create test settings with specific defaults
         settings = TestDataGenerator.create_settings_data(
             default_sphere="DefaultSphere", default_project="DefaultProject"
         )
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_frame.json", settings
+        )
 
         # Create GUI components
         self.root = tk.Tk()
@@ -122,7 +123,6 @@ class TestSettingsFrameFilters(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_filters.json"
 
         # Create settings with active and archived items
         settings = {
@@ -153,7 +153,9 @@ class TestSettingsFrameFilters(unittest.TestCase):
             "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
             "screenshot_settings": {"enabled": False},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_filters.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -448,7 +450,6 @@ class TestSettingsFrameDefaultOrdering(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_ordering.json"
 
         # Create settings with multiple items, default not first alphabetically
         settings = {
@@ -488,7 +489,9 @@ class TestSettingsFrameDefaultOrdering(unittest.TestCase):
             "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
             "screenshot_settings": {"enabled": False},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_ordering.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -561,7 +564,6 @@ class TestSettingsFrameOnlyOneDefault(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_one_default.json"
 
         settings = {
             "spheres": {
@@ -591,7 +593,9 @@ class TestSettingsFrameOnlyOneDefault(unittest.TestCase):
             "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
             "screenshot_settings": {"enabled": False},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_one_default.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -695,7 +699,6 @@ class TestSettingsFrameArchiveActivate(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_archive.json"
 
         settings = {
             "spheres": {
@@ -725,7 +728,9 @@ class TestSettingsFrameArchiveActivate(unittest.TestCase):
             "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
             "screenshot_settings": {"enabled": False},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_archive.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -812,10 +817,11 @@ class TestSettingsFrameComboboxScroll(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_combobox.json"
 
         settings = TestDataGenerator.create_settings_data()
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_combobox.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)
@@ -1062,7 +1068,6 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.file_manager = TestFileManager()
-        self.test_settings_file = "test_settings_sphere_archive.json"
 
         # Create settings with multiple spheres and projects
         settings = {
@@ -1099,7 +1104,9 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
             "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
             "screenshot_settings": {"enabled": False},
         }
-        self.file_manager.create_test_file(self.test_settings_file, settings)
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings_sphere_archive.json", settings
+        )
 
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file)

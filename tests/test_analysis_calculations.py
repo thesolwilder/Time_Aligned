@@ -92,6 +92,7 @@ class TestAnalysisDurationCalculations(unittest.TestCase):
                 "idle_periods": [],
             },
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -364,6 +365,7 @@ class TestAnalysisDateRangeFiltering(unittest.TestCase):
                 "breaks": [],
                 "idle_periods": [],
             }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -399,11 +401,13 @@ class TestAnalysisDateRangeFiltering(unittest.TestCase):
         self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
+        self.root.update()
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
         tracker.settings = tracker.get_settings()
 
         analysis = AnalysisFrame(self.content_frame(), tracker, self.root)
+        self.root.update()
         analysis.sphere_var.set("All Spheres")
         analysis.project_var.set("All Projects")
 

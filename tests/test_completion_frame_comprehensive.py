@@ -531,6 +531,7 @@ class TestCompletionFrameNoSessionCompleted(unittest.TestCase):
                 "idle_periods": [],
             },
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -580,6 +581,7 @@ class TestCompletionFrameBreakEnding(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
@@ -645,6 +647,7 @@ class TestCompletionFrameDataValidation(unittest.TestCase):
                 "idle_periods": [],
             }
         }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
 
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
