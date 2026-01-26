@@ -11,8 +11,8 @@
     "screenshot_path": "screenshots"
   },
   "google_sheets": {
-    "enabled": false,
-    "spreadsheet_id": "",
+    "enabled": true,
+    "spreadsheet_id": "1qKeL8HR_zf3XQK51n43U7oBQpLgd3e2rGPxrwR6DNNk",
     "sheet_name": "Sessions",
     "credentials_file": "credentials.json"
   },
@@ -195,10 +195,6 @@
     }
   },
   "analysis_settings": {
-    "card_ranges": [
-      "Last 7 Days",
-      "Last 14 Days",
-      "This Week (Mon-Sun)"
-    ]
+    "card_ranges": ["Last 7 Days", "Last 14 Days", "This Week (Mon-Sun)"]
   }
 }
