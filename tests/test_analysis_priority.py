@@ -76,6 +76,8 @@ class TestAnalysisCSVExport(unittest.TestCase):
             }
         }
 
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
@@ -271,7 +273,7 @@ class TestAnalysisSessionSpanningMidnight(unittest.TestCase):
                 "idle_periods": [],
             }
         }
-
+        self.file_manager.create_test_file(self.test_data_file, test_data)
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
@@ -396,6 +398,7 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
             }
         }
 
+        self.file_manager.create_test_file(self.test_data_file, test_data)
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file

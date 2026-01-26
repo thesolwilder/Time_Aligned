@@ -99,8 +99,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             disabled_settings = TestDataGenerator.create_settings_data()
             disabled_settings["google_sheets"] = {"enabled": False}
 
-            disabled_file = "test_disabled_google.json"
-            self.file_manager.create_test_file(disabled_file, disabled_settings)
+            disabled_file = self.file_manager.create_test_file(
+                "test_disabled_google.json", disabled_settings
+            )
 
             uploader2 = GoogleSheetsUploader(disabled_file)
             self.assertFalse(uploader2.is_enabled())
@@ -202,11 +203,17 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             # Here we just verify the structure is ready
             self.assertIsInstance(session["active"], list)
 
+    @patch.dict(os.environ, {}, clear=False)
     @patch("src.google_sheets_integration.os.path.exists")
     def test_spreadsheet_id_required(self, mock_exists):
         """Test that spreadsheet ID is required for upload"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Clear any Google Sheets env vars that might interfere
+            os.environ.pop("GOOGLE_SHEETS_SPREADSHEET_ID", None)
+            os.environ.pop("GOOGLE_SHEETS_CREDENTIALS_FILE", None)
+            os.environ.pop("GOOGLE_SHEETS_TOKEN_FILE", None)
 
             # Create settings without spreadsheet ID
             no_id_settings = TestDataGenerator.create_settings_data()
@@ -216,8 +223,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
                 "sheet_name": "Sessions",
             }
 
-            no_id_file = "test_no_spreadsheet_id.json"
-            self.file_manager.create_test_file(no_id_file, no_id_settings)
+            no_id_file = self.file_manager.create_test_file(
+                "test_no_spreadsheet_id.json", no_id_settings
+            )
 
             uploader = GoogleSheetsUploader(no_id_file)
             spreadsheet_id = uploader.get_spreadsheet_id()
@@ -244,8 +252,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
                 # No sheet_name specified
             }
 
-            test_file = "test_default_sheet.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_default_sheet.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             sheet_name = uploader.get_sheet_name()
@@ -287,8 +296,9 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {"enabled": False}
 
-            test_file = "test_optional.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_optional.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             self.assertFalse(uploader.is_enabled())
@@ -306,10 +316,16 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    @patch.dict(os.environ, {}, clear=False)
     def test_valid_spreadsheet_id(self):
         """Test that valid spreadsheet IDs are accepted"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Clear any Google Sheets env vars that might interfere
+            os.environ.pop("GOOGLE_SHEETS_SPREADSHEET_ID", None)
+            os.environ.pop("GOOGLE_SHEETS_CREDENTIALS_FILE", None)
+            os.environ.pop("GOOGLE_SHEETS_TOKEN_FILE", None)
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -318,8 +334,9 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
                 "sheet_name": "Sessions",
             }
 
-            test_file = "test_valid_id.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_valid_id.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             spreadsheet_id = uploader.get_spreadsheet_id()
@@ -352,8 +369,9 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
                     "sheet_name": "Sessions",
                 }
 
-                test_file = "test_malicious_id.json"
-                self.file_manager.create_test_file(test_file, settings)
+                test_file = self.file_manager.create_test_file(
+                    "test_malicious_name.json", settings
+                )
 
                 uploader = GoogleSheetsUploader(test_file)
                 spreadsheet_id = uploader.get_spreadsheet_id()
@@ -385,8 +403,9 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
                     "sheet_name": malicious_name,
                 }
 
-                test_file = "test_malicious_name.json"
-                self.file_manager.create_test_file(test_file, settings)
+                test_file = self.file_manager.create_test_file(
+                    "test_malicious_id.json", settings
+                )
 
                 uploader = GoogleSheetsUploader(test_file)
                 sheet_name = uploader.get_sheet_name()
@@ -420,8 +439,9 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
                     "credentials_file": dangerous_path,
                 }
 
-                test_file = "test_path_traversal.json"
-                self.file_manager.create_test_file(test_file, settings)
+                test_file = self.file_manager.create_test_file(
+                    "test_path_traversal.json", settings
+                )
 
                 uploader = GoogleSheetsUploader(test_file)
                 # Authentication should fail for unsafe paths
@@ -556,8 +576,9 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {"enabled": False}
 
-            test_file = "test_upload_disabled.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_upload_disabled.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             session_data = TestDataGenerator.create_session_data()
@@ -580,8 +601,9 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
                 "spreadsheet_id": "",  # No ID
             }
 
-            test_file = "test_upload_no_id.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_upload_no_id.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             session_data = TestDataGenerator.create_session_data()
@@ -605,8 +627,9 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
                 "sheet_name": "Sessions",
             }
 
-            test_file = "test_upload_format.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_upload_format.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
 
@@ -665,8 +688,9 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                 "spreadsheet_id": "",
             }
 
-            test_file = "test_connection_no_id.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_connection_no_id.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             success, message = uploader.test_connection()
@@ -676,10 +700,16 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch.dict(os.environ, {}, clear=False)
     def test_connection_success(self):
         """Test successful connection message format"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Clear any Google Sheets env vars that might interfere
+            os.environ.pop("GOOGLE_SHEETS_SPREADSHEET_ID", None)
+            os.environ.pop("GOOGLE_SHEETS_CREDENTIALS_FILE", None)
+            os.environ.pop("GOOGLE_SHEETS_TOKEN_FILE", None)
 
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
@@ -687,8 +717,9 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                 "spreadsheet_id": "test_123",
             }
 
-            test_file = "test_connection_success.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_connection_success.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file)
             success, message = uploader.test_connection()
@@ -724,8 +755,9 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
                 "spreadsheet_id": "test_123",
             }
 
-            test_file = "test_readonly.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file(
+                "test_readonly.json", settings
+            )
 
             uploader = GoogleSheetsUploader(test_file, read_only=True)
             self.assertEqual(uploader.scopes, SCOPES_READONLY)
@@ -745,8 +777,7 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
                 "spreadsheet_id": "test_123",
             }
 
-            test_file = "test_full.json"
-            self.file_manager.create_test_file(test_file, settings)
+            test_file = self.file_manager.create_test_file("test_full.json", settings)
 
             uploader = GoogleSheetsUploader(test_file, read_only=False)
             self.assertEqual(uploader.scopes, SCOPES_FULL)
