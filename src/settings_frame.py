@@ -1241,7 +1241,7 @@ class SettingsFrame(ttk.Frame):
 
             # Test connection
             try:
-                from google_sheets_integration import GoogleSheetsUploader
+                from src.google_sheets_integration import GoogleSheetsUploader
 
                 uploader = GoogleSheetsUploader(self.tracker.settings_file)
                 success, message = uploader.test_connection()
@@ -1447,7 +1447,7 @@ class SettingsFrame(ttk.Frame):
                         secondary_project = ""
                         secondary_comment = ""
                         secondary_percentage = ""
-                        
+
                         if active.get("project"):
                             # Single project case
                             primary_project = active.get("project", "")
@@ -1459,8 +1459,10 @@ class SettingsFrame(ttk.Frame):
                                 else:
                                     secondary_project = project_item.get("name", "")
                                     secondary_comment = project_item.get("comment", "")
-                                    secondary_percentage = project_item.get("percentage", "")
-                        
+                                    secondary_percentage = project_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1496,7 +1498,7 @@ class SettingsFrame(ttk.Frame):
                         secondary_action = ""
                         secondary_comment = ""
                         secondary_percentage = ""
-                        
+
                         if brk.get("action"):
                             # Single action case
                             primary_action = brk.get("action", "")
@@ -1508,8 +1510,10 @@ class SettingsFrame(ttk.Frame):
                                 else:
                                     secondary_action = action_item.get("name", "")
                                     secondary_comment = action_item.get("comment", "")
-                                    secondary_percentage = action_item.get("percentage", "")
-                        
+                                    secondary_percentage = action_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
