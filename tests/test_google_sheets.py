@@ -935,13 +935,13 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         # Check for credentials in both project root and tests directory
         self.project_root = os.path.dirname(os.path.dirname(__file__))
         self.test_dir = os.path.dirname(__file__)
-        
+
         # Try project root first, then tests directory
         if os.path.exists(os.path.join(self.project_root, "credentials.json")):
             self.credentials_path = os.path.join(self.project_root, "credentials.json")
         else:
             self.credentials_path = os.path.join(self.test_dir, "credentials.json")
-            
+
         if os.path.exists(os.path.join(self.project_root, "token.pickle")):
             self.token_path = os.path.join(self.project_root, "token.pickle")
         else:
@@ -966,7 +966,9 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
     @unittest.skipUnless(
         (
             os.path.exists(
-                os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
+                os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)), "credentials.json"
+                )
             )
             or os.path.exists(
                 os.path.join(os.path.dirname(__file__), "credentials.json")
@@ -976,9 +978,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
             os.path.exists(
                 os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
             )
-            or os.path.exists(
-                os.path.join(os.path.dirname(__file__), "token.pickle")
-            )
+            or os.path.exists(os.path.join(os.path.dirname(__file__), "token.pickle"))
         ),
         "Requires Google API credentials (credentials.json and token.pickle)",
     )
@@ -1001,7 +1001,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
                 creds_file = os.path.join(project_root, "credentials.json")
             else:
                 creds_file = os.path.join(test_dir, "credentials.json")
-            
+
             settings["google_sheets"] = {
                 "enabled": True,
                 "spreadsheet_id": os.environ.get(
@@ -1053,9 +1053,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         os.path.exists(
             os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
         )
-        or os.path.exists(
-            os.path.join(os.path.dirname(__file__), "credentials.json")
-        ),
+        or os.path.exists(os.path.join(os.path.dirname(__file__), "credentials.json")),
         "Requires Google API credentials (credentials.json)",
     )
     def test_real_authentication(self):
@@ -1070,7 +1068,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
                 creds_file = os.path.join(project_root, "credentials.json")
             else:
                 creds_file = os.path.join(test_dir, "credentials.json")
-            
+
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
                 "enabled": True,
