@@ -31,6 +31,13 @@ tests/test_config.json
 *.bak
 backups/
 
+# Coverage reports
+.coverage
+htmlcov/
+*.cover
+.hypothesis/
+.pytest_cache/
+
 # Google API credentials and tokens - SENSITIVE
 credentials.json
 token.pickle
