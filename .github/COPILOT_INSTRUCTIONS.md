@@ -99,4 +99,66 @@ If you cannot determine the correct approach:
 
 ---
 
+## Development Workflows
+
+**Shortcuts**: When user types these phrases, apply the corresponding workflow:
+
+- "bug fix" or "fix bug" or "b" → Bug Fix Workflow
+- "new feature" or "add feature" or "f" → Feature Implementation Workflow
+- "add tests" or "t" → Add Tests Workflow
+- "review" or "check code" or "r" → Code Review Checklist
+
+### Bug Fix Workflow
+
+Following DEVELOPMENT.md bug fix workflow:
+
+**Process:**
+
+1. Create a failing test that reproduces the bug
+2. Verify test fails
+3. Fix the bug with minimal changes
+4. Verify test passes
+5. Run full test suite (no regressions)
+6. Add edge case tests if needed
+
+### Feature Implementation Workflow
+
+Following DEVELOPMENT.md standards:
+
+**Requirements:**
+
+1. Read DEVELOPMENT.md testing hierarchy
+2. Create `tests/test_[feature].py`
+3. Write tests FIRST (TDD approach):
+   - Import test (smoke test)
+   - Unit tests (isolated functions)
+   - Integration tests (component interactions)
+   - E2E tests (complete workflow)
+4. Implement minimal code to pass tests
+5. Run full test suite to verify no regressions
+
+### Add Tests Workflow
+
+Add comprehensive tests following DEVELOPMENT.md:
+
+**Test progression:**
+
+1. Import test (if new module)
+2. Unit tests for each function
+3. Integration tests for interactions
+4. E2E tests for workflows
+
+### Code Review Checklist
+
+Review implementation against standards:
+
+- [ ] Test coverage (import → unit → integration → E2E)
+- [ ] Follows existing patterns
+- [ ] All tests passing
+- [ ] Docstrings present
+- [ ] No hardcoded values
+- [ ] Error handling tested
+
+---
+
 **Default assumption**: User wants TDD approach with full test coverage. If unsure, write tests first.
