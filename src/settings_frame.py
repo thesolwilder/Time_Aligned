@@ -5,8 +5,38 @@ import os
 import csv
 import subprocess
 import platform
+import re
 
 from src.ui_helpers import ScrollableFrame, sanitize_name
+
+
+def extract_spreadsheet_id_from_url(value):
+    """
+    Extract spreadsheet ID from Google Sheets URL or return value unchanged.
+
+    Args:
+        value: Either a full Google Sheets URL or a plain spreadsheet ID
+
+    Returns:
+        str: The extracted spreadsheet ID, or original value if not a URL
+
+    Examples:
+        >>> extract_spreadsheet_id_from_url("https://docs.google.com/spreadsheets/d/ABC123/edit")
+        'ABC123'
+        >>> extract_spreadsheet_id_from_url("ABC123")
+        'ABC123'
+    """
+    if not value:
+        return ""
+
+    # If it looks like a URL, extract the ID
+    if "docs.google.com/spreadsheets/d/" in value:
+        match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", value)
+        if match:
+            return match.group(1)
+
+    # Otherwise return as-is (could be plain ID or invalid input)
+    return value
 
 
 class SettingsFrame(ttk.Frame):
@@ -1149,6 +1179,18 @@ class SettingsFrame(ttk.Frame):
         spreadsheet_id_entry.grid(
             row=google_row, column=1, columnspan=2, pady=5, padx=5, sticky=(tk.W, tk.E)
         )
+
+        # Auto-extract spreadsheet ID from URL when pasted
+        def on_spreadsheet_id_change(*args):
+            """Extract spreadsheet ID from full Google Sheets URL"""
+            current_value = spreadsheet_id_var.get()
+            extracted_id = extract_spreadsheet_id_from_url(current_value)
+            if extracted_id != current_value:
+                spreadsheet_id_var.set(extracted_id)
+
+        # Bind to track changes
+        spreadsheet_id_var.trace_add("write", on_spreadsheet_id_change)
+
         google_row += 1
 
         # Help text for spreadsheet ID
