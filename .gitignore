@@ -35,3 +35,6 @@ backups/
 credentials.json
 token.pickle
 client_secret*.json
+
+#scaffold
+scaffold_project.py
