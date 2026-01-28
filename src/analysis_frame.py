@@ -24,6 +24,8 @@ class AnalysisFrame(ttk.Frame):
 
         # Date range options
         self.date_ranges = [
+            "Today",
+            "Yesterday",
             "Last 7 Days",
             "Last 14 Days",
             "Last 30 Days",
@@ -31,6 +33,7 @@ class AnalysisFrame(ttk.Frame):
             "Last Week (Mon-Sun)",
             "This Month",
             "Last Month",
+            "Custom Date",
             "All Time",
         ]
 
@@ -282,6 +285,18 @@ class AnalysisFrame(ttk.Frame):
 
     def on_range_changed(self, card_index, new_range):
         """Handle when a card's date range changes"""
+        # If "Custom Date" is selected, open date picker dialog
+        if new_range == "Custom Date":
+            custom_date = self.open_custom_date_dialog()
+            if custom_date:
+                # Format as "Custom: YYYY-MM-DD"
+                new_range = f"Custom: {custom_date}"
+            else:
+                # User cancelled, revert to previous selection
+                if hasattr(self, "cards") and card_index < len(self.cards):
+                    self.cards[card_index].range_var.set(self.card_ranges[card_index])
+                return
+
         self.card_ranges[card_index] = new_range
         self.save_card_ranges()
         self.update_card(card_index)
@@ -289,6 +304,35 @@ class AnalysisFrame(ttk.Frame):
         # If this is the selected card, update timeline
         if card_index == self.selected_card:
             self.update_timeline()
+
+    def open_custom_date_dialog(self):
+        """
+        Open a dialog for custom date selection
+
+        Returns:
+            str: Date in YYYY-MM-DD format, or None if cancelled
+        """
+        from tkinter import simpledialog
+
+        # Ask for date in YYYY-MM-DD format
+        date_str = simpledialog.askstring(
+            "Custom Date", "Enter date (YYYY-MM-DD):", parent=self.root
+        )
+
+        if date_str:
+            try:
+                # Validate date format
+                datetime.strptime(date_str, "%Y-%m-%d")
+                return date_str
+            except ValueError:
+                messagebox.showerror(
+                    "Invalid Date",
+                    "Please enter date in YYYY-MM-DD format",
+                    parent=self.root,
+                )
+                return None
+
+        return None
 
     def select_card(self, card_index):
         """Select a card and show its timeline"""
@@ -341,7 +385,25 @@ class AnalysisFrame(ttk.Frame):
         """Get start and end dates for a given range name"""
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
-        if range_name == "Last 7 Days":
+        if range_name == "Today":
+            start = today
+            end = today + timedelta(days=1)
+        elif range_name == "Yesterday":
+            yesterday = today - timedelta(days=1)
+            start = yesterday
+            end = yesterday + timedelta(days=1)
+        elif range_name.startswith("Custom:"):
+            # Parse custom date from format "Custom: YYYY-MM-DD"
+            try:
+                date_str = range_name.split(":", 1)[1].strip()
+                custom_date = datetime.strptime(date_str, "%Y-%m-%d")
+                start = custom_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end = start + timedelta(days=1)
+            except (ValueError, IndexError):
+                # If parsing fails, default to today
+                start = today
+                end = today + timedelta(days=1)
+        elif range_name == "Last 7 Days":
             start = today - timedelta(days=6)
             end = today + timedelta(days=1)
         elif range_name == "Last 14 Days":
@@ -363,11 +425,24 @@ class AnalysisFrame(ttk.Frame):
         elif range_name == "Last Month":
             end = today.replace(day=1)
             start = (end - timedelta(days=1)).replace(day=1)
+        elif range_name == "Custom Date":
+            # Open dialog to select custom date
+            start = today
+            end = today + timedelta(days=1)
         else:  # All Time
             start = datetime(2000, 1, 1)
             end = datetime(2100, 1, 1)
 
         return start, end
+
+    def get_date_range_for_filter(self, range_name):
+        """
+        Get date range for filter (alias for get_date_range for testing)
+
+        Returns:
+            tuple: (start_date, end_date) as datetime objects
+        """
+        return self.get_date_range(range_name)
 
     def calculate_totals(self, range_name):
         """Calculate total active and break time for a date range"""
