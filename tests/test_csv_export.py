@@ -697,7 +697,7 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures with secondary project/action data"""
         self.file_manager = TestFileManager()
-
+        
         # Create test data with secondary projects and actions
         self.test_data = {
             "2026-01-20_1737374400": {
@@ -715,15 +715,15 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                                 "name": "bathroom",
                                 "action_primary": True,
                                 "comment": "Primary action",
-                                "percentage": 70,
+                                "percentage": 70
                             },
                             {
                                 "name": "stretching",
                                 "action_primary": False,
                                 "comment": "Secondary action",
-                                "percentage": 30,
-                            },
-                        ],
+                                "percentage": 30
+                            }
+                        ]
                     }
                 ],
                 "active": [
@@ -738,15 +738,15 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                                 "name": "learning_to_code",
                                 "project_primary": True,
                                 "comment": "Main project work",
-                                "percentage": 80,
+                                "percentage": 80
                             },
                             {
                                 "name": "documentation",
                                 "project_primary": False,
                                 "comment": "Side documentation",
-                                "percentage": 20,
-                            },
-                        ],
+                                "percentage": 20
+                            }
+                        ]
                     }
                 ],
                 "idle_periods": [],
@@ -763,7 +763,7 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                 },
             }
         }
-
+        
         settings = TestDataGenerator.create_settings_data()
         self.test_settings_file = self.file_manager.create_test_file(
             "test_secondary_settings.json", settings
@@ -771,7 +771,7 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_secondary_data.json", self.test_data
         )
-
+        
         self.root = tk.Tk()
         self.tracker = MockTracker(self.test_settings_file, self.test_data_file)
         self.frame = SettingsFrame(self.root, self.tracker, self.root)
@@ -792,40 +792,39 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
         try:
             csv_file = os.path.join(temp_dir, "test_export.csv")
             mock_file_dialog.return_value = csv_file
-
+            
             # Execute the export
             self.frame.save_all_data_to_csv()
-
+            
             # Verify file was created
             self.assertTrue(os.path.exists(csv_file), "CSV file should be created")
-
+            
             # Read and verify content
             with open(csv_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 headers = reader.fieldnames
                 rows = list(reader)
-
+            
             # Verify headers include secondary fields
             self.assertIn("secondary_project", headers)
             self.assertIn("secondary_comment", headers)
             self.assertIn("secondary_percentage", headers)
-
+            
             # Find the active row
             active_row = None
             for row in rows:
                 if row.get("type") == "active":
                     active_row = row
                     break
-
+            
             self.assertIsNotNone(active_row, "Should have an active row")
             self.assertEqual(active_row["project"], "learning_to_code")
             self.assertEqual(active_row["secondary_project"], "documentation")
             self.assertEqual(active_row["secondary_comment"], "Side documentation")
             self.assertEqual(active_row["secondary_percentage"], "20")
-
+            
         finally:
             import shutil
-
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
@@ -837,41 +836,41 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
         try:
             csv_file = os.path.join(temp_dir, "test_export.csv")
             mock_file_dialog.return_value = csv_file
-
+            
             # Execute the export
             self.frame.save_all_data_to_csv()
-
+            
             # Verify file was created
             self.assertTrue(os.path.exists(csv_file), "CSV file should be created")
-
+            
             # Read and verify content
             with open(csv_file, "r", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
                 headers = reader.fieldnames
                 rows = list(reader)
-
+            
             # Verify headers include secondary action field
             self.assertIn("secondary_action", headers)
-
+            
             # Find the break row
             break_row = None
             for row in rows:
                 if row.get("type") == "break":
                     break_row = row
                     break
-
+            
             self.assertIsNotNone(break_row, "Should have a break row")
             self.assertEqual(break_row["break_action"], "bathroom")
             self.assertEqual(break_row["secondary_action"], "stretching")
             self.assertEqual(break_row["secondary_comment"], "Secondary action")
             self.assertEqual(break_row["secondary_percentage"], "30")
-
+            
         finally:
             import shutil
-
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
 
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -380,7 +380,7 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             mock_service.spreadsheets.return_value = mock_spreadsheets
             mock_spreadsheets.values.return_value = mock_values
             mock_values.append.return_value = mock_append
-            mock_append.execute.return_value = {"updates": {"updatedCells": 8}}
+            mock_append.execute.return_value = {"updates": {"updatedCells": 23}}
 
             mock_build.return_value = mock_service
             mock_exists.return_value = True
@@ -404,16 +404,37 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             uploader.credentials.valid = True
             uploader.service = mock_service
 
-            # Create session data
+            # Mock values.get() for header check
+            mock_get = Mock()
+            mock_values.get.return_value = mock_get
+            mock_get.execute.return_value = {"values": [["Headers"]]}
+
+            # Create session data with new detailed format
             session_data = {
                 "date": "2024-01-20",
                 "start_time": "10:00:00",
                 "end_time": "10:30:00",
                 "sphere": "Work",
-                "project": "Testing",
                 "total_duration": 1800,
                 "active_duration": 1500,
                 "break_duration": 300,
+                "session_comments": {
+                    "active_notes": "",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "",
+                },
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Testing",
+                        "comment": "Working on tests",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
             }
 
             # Upload
@@ -439,14 +460,16 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             body = call_kwargs["body"]
             self.assertIn("values", body)
             values = body["values"]
-            self.assertEqual(len(values), 1)  # One row
+            self.assertEqual(len(values), 1)  # One row for the active period
 
-            # Verify row contains expected data (escaped properly)
+            # Verify row contains expected data (detailed format)
             row = values[0]
-            self.assertIn("2024-01-20", row)  # Date
-            self.assertIn("10:00:00", row)  # Start time
-            self.assertIn("Work", row)  # Sphere
-            self.assertIn("Testing", row)  # Project
+            self.assertEqual(row[0], "test_session_123")  # session_id
+            self.assertEqual(row[1], "2024-01-20")  # date
+            self.assertEqual(row[2], "Work")  # sphere
+            self.assertEqual(row[8], "active")  # type
+            self.assertEqual(row[9], "Testing")  # project
+            self.assertEqual(row[16], "Working on tests")  # activity_comment
 
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
@@ -909,29 +932,53 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
-        # Check for credentials in project root (parent directory)
+        # Check for credentials in both project root and tests directory
         self.project_root = os.path.dirname(os.path.dirname(__file__))
-        self.credentials_path = os.path.join(self.project_root, "credentials.json")
-        self.token_path = os.path.join(self.project_root, "token.pickle")
+        self.test_dir = os.path.dirname(__file__)
         
+        # Try project root first, then tests directory
+        if os.path.exists(os.path.join(self.project_root, "credentials.json")):
+            self.credentials_path = os.path.join(self.project_root, "credentials.json")
+        else:
+            self.credentials_path = os.path.join(self.test_dir, "credentials.json")
+            
+        if os.path.exists(os.path.join(self.project_root, "token.pickle")):
+            self.token_path = os.path.join(self.project_root, "token.pickle")
+        else:
+            self.token_path = os.path.join(self.test_dir, "token.pickle")
+
         # Load test config if environment variable not set
         if not os.environ.get("TEST_GOOGLE_SHEETS_ID"):
-            test_config_path = os.path.join(os.path.dirname(__file__), "test_config.json")
+            test_config_path = os.path.join(
+                os.path.dirname(__file__), "test_config.json"
+            )
             if os.path.exists(test_config_path):
                 try:
                     with open(test_config_path, "r") as f:
                         config = json.load(f)
                         if "TEST_GOOGLE_SHEETS_ID" in config:
-                            os.environ["TEST_GOOGLE_SHEETS_ID"] = config["TEST_GOOGLE_SHEETS_ID"]
+                            os.environ["TEST_GOOGLE_SHEETS_ID"] = config[
+                                "TEST_GOOGLE_SHEETS_ID"
+                            ]
                 except Exception:
                     pass  # Silently ignore config file errors
 
     @unittest.skipUnless(
-        os.path.exists(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
+        (
+            os.path.exists(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
+            )
+            or os.path.exists(
+                os.path.join(os.path.dirname(__file__), "credentials.json")
+            )
         )
-        and os.path.exists(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
+        and (
+            os.path.exists(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "token.pickle")
+            )
+            or os.path.exists(
+                os.path.join(os.path.dirname(__file__), "token.pickle")
+            )
         ),
         "Requires Google API credentials (credentials.json and token.pickle)",
     )
@@ -947,15 +994,21 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
 
             # Use real settings
             settings = TestDataGenerator.create_settings_data()
+            # Find credentials file (check both locations)
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            test_dir = os.path.dirname(__file__)
+            if os.path.exists(os.path.join(project_root, "credentials.json")):
+                creds_file = os.path.join(project_root, "credentials.json")
+            else:
+                creds_file = os.path.join(test_dir, "credentials.json")
+            
             settings["google_sheets"] = {
                 "enabled": True,
                 "spreadsheet_id": os.environ.get(
                     "TEST_GOOGLE_SHEETS_ID", ""
                 ),  # Set in env
                 "sheet_name": "Test Sessions",
-                "credentials_file": os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)), "credentials.json"
-                ),
+                "credentials_file": creds_file,
             }
 
             if not settings["google_sheets"]["spreadsheet_id"]:
@@ -999,6 +1052,9 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
     @unittest.skipUnless(
         os.path.exists(
             os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
+        )
+        or os.path.exists(
+            os.path.join(os.path.dirname(__file__), "credentials.json")
         ),
         "Requires Google API credentials (credentials.json)",
     )
@@ -1007,13 +1063,19 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
 
+            # Find credentials file (check both locations)
+            project_root = os.path.dirname(os.path.dirname(__file__))
+            test_dir = os.path.dirname(__file__)
+            if os.path.exists(os.path.join(project_root, "credentials.json")):
+                creds_file = os.path.join(project_root, "credentials.json")
+            else:
+                creds_file = os.path.join(test_dir, "credentials.json")
+            
             settings = TestDataGenerator.create_settings_data()
             settings["google_sheets"] = {
                 "enabled": True,
                 "spreadsheet_id": "test_123",
-                "credentials_file": os.path.join(
-                    os.path.dirname(os.path.dirname(__file__)), "credentials.json"
-                ),
+                "credentials_file": creds_file,
             }
 
             test_file = self.file_manager.create_test_file(
@@ -1082,6 +1144,242 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
             uploader = GoogleSheetsUploader(test_file, read_only=False)
             self.assertEqual(uploader.scopes, SCOPES_FULL)
             self.assertFalse(uploader.read_only)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
+class TestGoogleSheetsDetailedFormat(unittest.TestCase):
+    """Test that Google Sheets upload uses detailed format matching CSV export"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_upload_detailed_format_with_active_periods(self, mock_exists, mock_build):
+        """Test that upload creates separate rows for each active period"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Mock service
+            mock_service = MagicMock()
+            mock_build.return_value = mock_service
+
+            # Mock authentication
+            mock_exists.return_value = True
+
+            # Create test settings
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_detailed_format.json", settings
+            )
+
+            # Create uploader and set authenticated service
+            uploader = GoogleSheetsUploader(test_file)
+            uploader.service = mock_service
+            uploader.credentials = MagicMock()
+
+            # Mock the header check
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [["Headers"]]
+            }
+
+            # Mock the append response
+            mock_service.spreadsheets().values().append().execute.return_value = {
+                "updates": {"updatedCells": 23}
+            }
+
+            # Create session with multiple active periods
+            session_data = {
+                "date": "2024-01-20",
+                "sphere": "Work",
+                "start_time": "10:00:00",
+                "end_time": "11:00:00",
+                "total_duration": 3600,
+                "active_duration": 3000,
+                "break_duration": 600,
+                "session_comments": {
+                    "active_notes": "Active session notes",
+                    "break_notes": "Break notes",
+                    "idle_notes": "Idle notes",
+                    "session_notes": "Overall session notes",
+                },
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Project A",
+                        "comment": "Working on feature X",
+                    },
+                    {
+                        "start": "10:35:00",
+                        "end": "11:00:00",
+                        "duration": 1500,
+                        "project": "Project B",
+                        "comment": "Code review",
+                    },
+                ],
+                "breaks": [
+                    {
+                        "start": "10:25:00",
+                        "duration": 600,
+                        "action": "Coffee",
+                        "comment": "Quick coffee break",
+                    }
+                ],
+                "idle_periods": [],
+            }
+
+            # Upload session
+            result = uploader.upload_session(session_data, "session_123")
+
+            # Verify success
+            self.assertTrue(result)
+
+            # Get the call arguments
+            append_call = mock_service.spreadsheets().values().append.call_args
+
+            # Verify append was called with correct data
+            self.assertIsNotNone(append_call)
+
+            # Get the body parameter
+            body = append_call[1]["body"]
+            rows = body["values"]
+
+            # Should have 3 rows: 2 active + 1 break
+            self.assertEqual(len(rows), 3)
+
+            # Verify first active row
+            row1 = rows[0]
+            self.assertEqual(row1[0], "session_123")  # session_id
+            self.assertEqual(row1[1], "2024-01-20")  # date
+            self.assertEqual(row1[2], "Work")  # sphere
+            self.assertEqual(row1[8], "active")  # type
+            self.assertEqual(row1[9], "Project A")  # project
+            self.assertEqual(row1[13], "10:00:00")  # activity_start
+            self.assertEqual(row1[14], "10:25:00")  # activity_end
+            self.assertEqual(row1[15], 25.0)  # activity_duration in minutes
+            self.assertEqual(row1[16], "Working on feature X")  # activity_comment
+
+            # Verify second active row
+            row2 = rows[1]
+            self.assertEqual(row2[8], "active")  # type
+            self.assertEqual(row2[9], "Project B")  # project
+            self.assertEqual(row2[16], "Code review")  # activity_comment
+
+            # Verify break row
+            row3 = rows[2]
+            self.assertEqual(row3[8], "break")  # type
+            self.assertEqual(row3[17], "Coffee")  # break_action
+            self.assertEqual(row3[16], "Quick coffee break")  # activity_comment
+
+            # Verify session comments are in all rows
+            for row in rows:
+                self.assertEqual(row[19], "Active session notes")  # active_notes
+                self.assertEqual(row[20], "Break notes")  # break_notes
+                self.assertEqual(row[21], "Idle notes")  # idle_notes
+                self.assertEqual(row[22], "Overall session notes")  # session_notes
+
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_upload_with_secondary_projects(self, mock_exists, mock_build):
+        """Test that upload handles secondary projects correctly"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Mock service
+            mock_service = MagicMock()
+            mock_build.return_value = mock_service
+            mock_exists.return_value = True
+
+            # Create test settings
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_secondary_projects.json", settings
+            )
+
+            # Create uploader
+            uploader = GoogleSheetsUploader(test_file)
+            uploader.service = mock_service
+            uploader.credentials = MagicMock()
+
+            # Mock responses
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [["Headers"]]
+            }
+            mock_service.spreadsheets().values().append().execute.return_value = {
+                "updates": {"updatedCells": 23}
+            }
+
+            # Session with secondary project
+            session_data = {
+                "date": "2024-01-20",
+                "sphere": "Work",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "total_duration": 1800,
+                "active_duration": 1800,
+                "break_duration": 0,
+                "session_comments": {},
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:30:00",
+                        "duration": 1800,
+                        "projects": [
+                            {
+                                "name": "Primary Project",
+                                "project_primary": True,
+                            },
+                            {
+                                "name": "Secondary Project",
+                                "project_primary": False,
+                                "comment": "Supporting work",
+                                "percentage": "30",
+                            },
+                        ],
+                        "comment": "Multi-project work",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+
+            # Upload
+            result = uploader.upload_session(session_data, "session_456")
+            self.assertTrue(result)
+
+            # Get uploaded data
+            body = mock_service.spreadsheets().values().append.call_args[1]["body"]
+            rows = body["values"]
+
+            # Should have 1 row
+            self.assertEqual(len(rows), 1)
+
+            row = rows[0]
+            self.assertEqual(row[9], "Primary Project")  # project
+            self.assertEqual(row[10], "Secondary Project")  # secondary_project
+            self.assertEqual(row[11], "Supporting work")  # secondary_comment
+            self.assertEqual(row[12], "30")  # secondary_percentage
+
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 

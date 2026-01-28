@@ -12,7 +12,6 @@ import csv
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-
 def create_sample_data_with_secondary():
     """Create sample data that includes secondary projects and actions"""
     return {
@@ -31,15 +30,15 @@ def create_sample_data_with_secondary():
                             "name": "bathroom",
                             "action_primary": True,
                             "comment": "Quick break",
-                            "percentage": 60,
+                            "percentage": 60
                         },
                         {
                             "name": "stretching",
                             "action_primary": False,
                             "comment": "Some stretching exercises",
-                            "percentage": 40,
-                        },
-                    ],
+                            "percentage": 40
+                        }
+                    ]
                 }
             ],
             "active": [
@@ -54,15 +53,15 @@ def create_sample_data_with_secondary():
                             "name": "learning_to_code",
                             "project_primary": True,
                             "comment": "Working on Python skills",
-                            "percentage": 70,
+                            "percentage": 70
                         },
                         {
                             "name": "documentation",
                             "project_primary": False,
                             "comment": "Writing docs for the project",
-                            "percentage": 30,
-                        },
-                    ],
+                            "percentage": 30
+                        }
+                    ]
                 }
             ],
             "idle_periods": [],
@@ -89,7 +88,7 @@ def create_sample_data_with_secondary():
                     "start_timestamp": 2000003600.0,
                     "duration": 300,
                     "action": "snack",  # Single action (old format)
-                    "comment": "Quick snack break",
+                    "comment": "Quick snack break"
                 }
             ],
             "active": [
@@ -100,7 +99,7 @@ def create_sample_data_with_secondary():
                     "end_timestamp": 2000003600.0,
                     "duration": 3600,
                     "project": "reading",  # Single project (old format)
-                    "comment": "Reading a novel",
+                    "comment": "Reading a novel"
                 }
             ],
             "idle_periods": [],
@@ -115,9 +114,8 @@ def create_sample_data_with_secondary():
                 "idle_notes": "",
                 "session_notes": "Relaxing afternoon",
             },
-        },
+        }
     }
-
 
 def export_to_csv_manual(data, file_path):
     """Export data to CSV (simulating the actual export function)"""
@@ -153,7 +151,7 @@ def export_to_csv_manual(data, file_path):
                 secondary_project = ""
                 secondary_comment = ""
                 secondary_percentage = ""
-
+                
                 if active.get("project"):
                     # Single project case
                     primary_project = active.get("project", "")
@@ -166,7 +164,7 @@ def export_to_csv_manual(data, file_path):
                             secondary_project = project_item.get("name", "")
                             secondary_comment = project_item.get("comment", "")
                             secondary_percentage = project_item.get("percentage", "")
-
+                
                 row = {
                     "session_id": session_id,
                     "date": date,
@@ -202,7 +200,7 @@ def export_to_csv_manual(data, file_path):
                 secondary_action = ""
                 secondary_comment = ""
                 secondary_percentage = ""
-
+                
                 if brk.get("action"):
                     # Single action case
                     primary_action = brk.get("action", "")
@@ -215,7 +213,7 @@ def export_to_csv_manual(data, file_path):
                             secondary_action = action_item.get("name", "")
                             secondary_comment = action_item.get("comment", "")
                             secondary_percentage = action_item.get("percentage", "")
-
+                
                 row = {
                     "session_id": session_id,
                     "date": date,
@@ -274,73 +272,63 @@ def export_to_csv_manual(data, file_path):
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(csv_rows)
-
+        
         return len(csv_rows)
     return 0
-
 
 def main():
     """Run the manual test"""
     print("=== CSV Export with Secondary Project/Action - Manual Test ===\n")
-
+    
     # Create sample data
     data = create_sample_data_with_secondary()
-
+    
     # Export to temporary CSV
-    output_file = os.path.join(
-        os.path.dirname(__file__), "sample_export_with_secondary.csv"
-    )
-
+    output_file = os.path.join(os.path.dirname(__file__), "sample_export_with_secondary.csv")
+    
     num_rows = export_to_csv_manual(data, output_file)
-
+    
     print(f"✓ Exported {num_rows} rows to CSV")
     print(f"✓ File location: {output_file}\n")
-
+    
     # Display the CSV content
     print("=== CSV Content ===\n")
     with open(output_file, "r", encoding="utf-8") as f:
         content = f.read()
         print(content)
-
+    
     print("\n=== Verification ===\n")
-
+    
     # Verify specific fields
     with open(output_file, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
-
+        
         # Check active row with secondary project
-        active_row = [
-            r for r in rows if r["type"] == "active" and r["secondary_project"]
-        ][0]
+        active_row = [r for r in rows if r["type"] == "active" and r["secondary_project"]][0]
         print(f"✓ Active period with secondary project:")
         print(f"  - Primary project: {active_row['project']}")
         print(f"  - Secondary project: {active_row['secondary_project']}")
         print(f"  - Secondary comment: {active_row['secondary_comment']}")
         print(f"  - Secondary percentage: {active_row['secondary_percentage']}%\n")
-
+        
         # Check break with secondary action
-        break_row = [r for r in rows if r["type"] == "break" and r["secondary_action"]][
-            0
-        ]
+        break_row = [r for r in rows if r["type"] == "break" and r["secondary_action"]][0]
         print(f"✓ Break period with secondary action:")
         print(f"  - Primary action: {break_row['break_action']}")
         print(f"  - Secondary action: {break_row['secondary_action']}")
         print(f"  - Secondary comment: {break_row['secondary_comment']}")
         print(f"  - Secondary percentage: {break_row['secondary_percentage']}%\n")
-
+        
         # Check backwards compatibility (single project/action)
         single_project_row = [r for r in rows if r["project"] == "reading"][0]
         print(f"✓ Backwards compatibility (single project):")
         print(f"  - Project: {single_project_row['project']}")
-        print(
-            f"  - Secondary project: '{single_project_row['secondary_project']}' (empty as expected)\n"
-        )
-
+        print(f"  - Secondary project: '{single_project_row['secondary_project']}' (empty as expected)\n")
+    
     print("=== Test Complete ===")
     print(f"\nCSV file saved at: {output_file}")
     print("You can open this file in Excel or any CSV viewer to inspect the output.")
-
 
 if __name__ == "__main__":
     main()
