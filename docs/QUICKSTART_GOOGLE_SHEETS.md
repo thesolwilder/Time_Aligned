@@ -2,6 +2,18 @@
 
 Get your Time Tracker uploading to Google Sheets in 5 minutes!
 
+## What Gets Uploaded?
+
+The tracker now uploads **detailed session data** matching the CSV export format:
+
+- **One row per activity**: Each active period, break, and idle period gets its own row
+- **Full project details**: Primary and secondary projects with comments and percentages
+- **Full action details**: Primary and secondary break actions
+- **Comprehensive notes**: Active, break, idle, and session-level notes
+- **Activity timing**: Start/end times and durations for each activity
+
+This gives you powerful analysis capabilities in Google Sheets!
+
 ## Step 1: Install Dependencies (1 min)
 
 ```bash
