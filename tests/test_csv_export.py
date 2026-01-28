@@ -406,20 +406,26 @@ class TestCSVFormatConversion(unittest.TestCase):
             "session_id",
             "date",
             "sphere",
-            "start_time",
-            "end_time",
-            "total_duration",
-            "active_duration",
-            "break_duration",
+            "session_start_time",
+            "session_end_time",
+            "session_total_duration",
+            "session_active_duration",
+            "session_break_duration",
+            "type",
             "project",
-            "project_start",
-            "project_end",
-            "project_duration",
-            "project_comment",
-            "break_start",
-            "break_duration_seconds",
+            "secondary_project",
+            "secondary_comment",
+            "secondary_percentage",
+            "activity_start",
+            "activity_end",
+            "activity_duration",
+            "activity_comment",
             "break_action",
-            "break_comment",
+            "secondary_action",
+            "active_notes",
+            "break_notes",
+            "idle_notes",
+            "session_notes",
         ]
 
         # This is the expected structure - will be implemented
@@ -683,6 +689,188 @@ class TestFileLocationHandling(unittest.TestCase):
 
         self.assertTrue(os.path.exists(csv_file))
         self.assertTrue(os.path.exists(self.temp_dir))
+
+
+class TestSecondaryProjectActionExport(unittest.TestCase):
+    """Test that secondary project and action fields are exported correctly"""
+
+    def setUp(self):
+        """Set up test fixtures with secondary project/action data"""
+        self.file_manager = TestFileManager()
+
+        # Create test data with secondary projects and actions
+        self.test_data = {
+            "2026-01-20_1737374400": {
+                "sphere": "Coding",
+                "date": "2026-01-20",
+                "start_time": "12:00:00",
+                "start_timestamp": 1737374400.0,
+                "breaks": [
+                    {
+                        "start": "13:00:00",
+                        "start_timestamp": 1737378000.0,
+                        "duration": 300,
+                        "actions": [
+                            {
+                                "name": "bathroom",
+                                "action_primary": True,
+                                "comment": "Primary action",
+                                "percentage": 70,
+                            },
+                            {
+                                "name": "stretching",
+                                "action_primary": False,
+                                "comment": "Secondary action",
+                                "percentage": 30,
+                            },
+                        ],
+                    }
+                ],
+                "active": [
+                    {
+                        "start": "12:00:00",
+                        "start_timestamp": 1737374400.0,
+                        "end": "13:00:00",
+                        "end_timestamp": 1737378000.0,
+                        "duration": 3600,
+                        "projects": [
+                            {
+                                "name": "learning_to_code",
+                                "project_primary": True,
+                                "comment": "Main project work",
+                                "percentage": 80,
+                            },
+                            {
+                                "name": "documentation",
+                                "project_primary": False,
+                                "comment": "Side documentation",
+                                "percentage": 20,
+                            },
+                        ],
+                    }
+                ],
+                "idle_periods": [],
+                "end_time": "13:05:00",
+                "end_timestamp": 1737378300.0,
+                "total_duration": 3900.0,
+                "active_duration": 3600,
+                "break_duration": 300,
+                "session_comments": {
+                    "active_notes": "Productive session",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "Good progress",
+                },
+            }
+        }
+
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_secondary_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_secondary_data.json", self.test_data
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file, self.test_data_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+        try:
+            self.root.destroy()
+        except:
+            pass
+        self.file_manager.cleanup()
+
+    @patch("tkinter.filedialog.asksaveasfilename")
+    @patch("tkinter.messagebox.showinfo")
+    def test_secondary_project_exported_to_csv(self, mock_info, mock_file_dialog):
+        """Test that secondary project information is included in CSV export"""
+        temp_dir = tempfile.mkdtemp()
+        try:
+            csv_file = os.path.join(temp_dir, "test_export.csv")
+            mock_file_dialog.return_value = csv_file
+
+            # Execute the export
+            self.frame.save_all_data_to_csv()
+
+            # Verify file was created
+            self.assertTrue(os.path.exists(csv_file), "CSV file should be created")
+
+            # Read and verify content
+            with open(csv_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames
+                rows = list(reader)
+
+            # Verify headers include secondary fields
+            self.assertIn("secondary_project", headers)
+            self.assertIn("secondary_comment", headers)
+            self.assertIn("secondary_percentage", headers)
+
+            # Find the active row
+            active_row = None
+            for row in rows:
+                if row.get("type") == "active":
+                    active_row = row
+                    break
+
+            self.assertIsNotNone(active_row, "Should have an active row")
+            self.assertEqual(active_row["project"], "learning_to_code")
+            self.assertEqual(active_row["secondary_project"], "documentation")
+            self.assertEqual(active_row["secondary_comment"], "Side documentation")
+            self.assertEqual(active_row["secondary_percentage"], "20")
+
+        finally:
+            import shutil
+
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
+
+    @patch("tkinter.filedialog.asksaveasfilename")
+    @patch("tkinter.messagebox.showinfo")
+    def test_secondary_action_exported_to_csv(self, mock_info, mock_file_dialog):
+        """Test that secondary action information is included in CSV export"""
+        temp_dir = tempfile.mkdtemp()
+        try:
+            csv_file = os.path.join(temp_dir, "test_export.csv")
+            mock_file_dialog.return_value = csv_file
+
+            # Execute the export
+            self.frame.save_all_data_to_csv()
+
+            # Verify file was created
+            self.assertTrue(os.path.exists(csv_file), "CSV file should be created")
+
+            # Read and verify content
+            with open(csv_file, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                headers = reader.fieldnames
+                rows = list(reader)
+
+            # Verify headers include secondary action field
+            self.assertIn("secondary_action", headers)
+
+            # Find the break row
+            break_row = None
+            for row in rows:
+                if row.get("type") == "break":
+                    break_row = row
+                    break
+
+            self.assertIsNotNone(break_row, "Should have a break row")
+            self.assertEqual(break_row["break_action"], "bathroom")
+            self.assertEqual(break_row["secondary_action"], "stretching")
+            self.assertEqual(break_row["secondary_comment"], "Secondary action")
+            self.assertEqual(break_row["secondary_percentage"], "30")
+
+        finally:
+            import shutil
+
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir)
 
 
 if __name__ == "__main__":

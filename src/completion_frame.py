@@ -57,6 +57,9 @@ class CompletionFrame(ttk.Frame):
                 "active_time": loaded_data.get("active_duration", 0),
                 "break_time": loaded_data.get("break_duration", 0),
             }
+
+            # Load session comments if they exist
+            self.session_comments = loaded_data.get("session_comments", {})
         else:
             # Fallback for missing session
             self.session_start_timestamp = 0
@@ -68,6 +71,7 @@ class CompletionFrame(ttk.Frame):
                 "active_time": 0,
                 "break_time": 0,
             }
+            self.session_comments = {}
         self.text_boxes = []  # Store references to text boxes for each period
         # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
@@ -1364,6 +1368,36 @@ class CompletionFrame(ttk.Frame):
             session_comments_container, width=30, height=4, font=("Arial", 10)
         )
         self.session_notes_text.grid(row=12, column=1, sticky=tk.W, pady=5)
+
+        # Populate comment fields with existing session comments
+        self._populate_session_comments()
+
+    def _populate_session_comments(self):
+        """Populate the comment fields with existing session comments"""
+        if hasattr(self, "session_comments") and self.session_comments:
+            # Populate active notes
+            active_notes = self.session_comments.get("active_notes", "")
+            if active_notes:
+                self.active_notes.delete(0, tk.END)
+                self.active_notes.insert(0, active_notes)
+
+            # Populate break notes
+            break_notes = self.session_comments.get("break_notes", "")
+            if break_notes:
+                self.break_notes.delete(0, tk.END)
+                self.break_notes.insert(0, break_notes)
+
+            # Populate idle notes
+            idle_notes = self.session_comments.get("idle_notes", "")
+            if idle_notes:
+                self.idle_notes.delete(0, tk.END)
+                self.idle_notes.insert(0, idle_notes)
+
+            # Populate session notes
+            session_notes = self.session_comments.get("session_notes", "")
+            if session_notes:
+                self.session_notes_text.delete("1.0", tk.END)
+                self.session_notes_text.insert("1.0", session_notes)
 
     def _create_buttons(self):
         """Create action buttons"""

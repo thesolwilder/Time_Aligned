@@ -1442,6 +1442,27 @@ class SettingsFrame(ttk.Frame):
                 # If there are active periods, create a row for each
                 if active_periods:
                     for active in active_periods:
+                        # Extract primary and secondary project information
+                        primary_project = ""
+                        secondary_project = ""
+                        secondary_comment = ""
+                        secondary_percentage = ""
+
+                        if active.get("project"):
+                            # Single project case
+                            primary_project = active.get("project", "")
+                        else:
+                            # Multiple projects case
+                            for project_item in active.get("projects", []):
+                                if project_item.get("project_primary", True):
+                                    primary_project = project_item.get("name", "")
+                                else:
+                                    secondary_project = project_item.get("name", "")
+                                    secondary_comment = project_item.get("comment", "")
+                                    secondary_percentage = project_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1452,12 +1473,16 @@ class SettingsFrame(ttk.Frame):
                             "session_active_duration": active_duration,
                             "session_break_duration": break_duration,
                             "type": "active",
-                            "project": active.get("project", ""),
+                            "project": primary_project,
+                            "secondary_project": secondary_project,
+                            "secondary_comment": secondary_comment,
+                            "secondary_percentage": secondary_percentage,
                             "activity_start": active.get("start", ""),
                             "activity_end": active.get("end", ""),
                             "activity_duration": active.get("duration", 0),
                             "activity_comment": active.get("comment", ""),
                             "break_action": "",
+                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1468,6 +1493,27 @@ class SettingsFrame(ttk.Frame):
                 # Process breaks
                 if breaks:
                     for brk in breaks:
+                        # Extract primary and secondary action information
+                        primary_action = ""
+                        secondary_action = ""
+                        secondary_comment = ""
+                        secondary_percentage = ""
+
+                        if brk.get("action"):
+                            # Single action case
+                            primary_action = brk.get("action", "")
+                        else:
+                            # Multiple actions case
+                            for action_item in brk.get("actions", []):
+                                if action_item.get("action_primary", True):
+                                    primary_action = action_item.get("name", "")
+                                else:
+                                    secondary_action = action_item.get("name", "")
+                                    secondary_comment = action_item.get("comment", "")
+                                    secondary_percentage = action_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1479,11 +1525,15 @@ class SettingsFrame(ttk.Frame):
                             "session_break_duration": break_duration,
                             "type": "break",
                             "project": "",
+                            "secondary_project": "",
+                            "secondary_comment": secondary_comment,
+                            "secondary_percentage": secondary_percentage,
                             "activity_start": brk.get("start", ""),
                             "activity_end": "",
                             "activity_duration": brk.get("duration", 0),
                             "activity_comment": brk.get("comment", ""),
-                            "break_action": brk.get("action", ""),
+                            "break_action": primary_action,
+                            "secondary_action": secondary_action,
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1505,11 +1555,15 @@ class SettingsFrame(ttk.Frame):
                             "session_break_duration": break_duration,
                             "type": "idle",
                             "project": "",
+                            "secondary_project": "",
+                            "secondary_comment": "",
+                            "secondary_percentage": "",
                             "activity_start": idle.get("start", ""),
                             "activity_end": idle.get("end", ""),
                             "activity_duration": idle.get("duration", 0),
                             "activity_comment": "",
                             "break_action": "",
+                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1530,11 +1584,15 @@ class SettingsFrame(ttk.Frame):
                         "session_break_duration": break_duration,
                         "type": "session_summary",
                         "project": "",
+                        "secondary_project": "",
+                        "secondary_comment": "",
+                        "secondary_percentage": "",
                         "activity_start": "",
                         "activity_end": "",
                         "activity_duration": 0,
                         "activity_comment": "",
                         "break_action": "",
+                        "secondary_action": "",
                         "active_notes": active_notes,
                         "break_notes": break_notes,
                         "idle_notes": idle_notes,
@@ -1556,11 +1614,15 @@ class SettingsFrame(ttk.Frame):
                         "session_break_duration",
                         "type",
                         "project",
+                        "secondary_project",
+                        "secondary_comment",
+                        "secondary_percentage",
                         "activity_start",
                         "activity_end",
                         "activity_duration",
                         "activity_comment",
                         "break_action",
+                        "secondary_action",
                         "active_notes",
                         "break_notes",
                         "idle_notes",
