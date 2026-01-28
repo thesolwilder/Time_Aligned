@@ -45,3 +45,13 @@ client_secret*.json
 
 #scaffold
 scaffold_project.py
+
+# Temporary debugging and test files
+check_*.py
+fix_*.py
+verify_*.py
+*_test_files.txt
+*_results.txt
+*SUMMARY.md
+*_GUIDE.md
+*_FOR_*.md
