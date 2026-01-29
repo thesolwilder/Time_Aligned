@@ -175,9 +175,43 @@ python tests/run_all_tests.py
 
 ## Testing Best Practices
 
+### TDD Red-Green-Refactor Cycle
+
+**CRITICAL: Red Phase Must Be a FAILURE, Not an ERROR**
+
+When following TDD, the "red" phase should produce a **test failure**, not a test **error**:
+
+- ✅ **FAILURE (F)**: Test runs but assertion fails - THIS IS CORRECT
+  - Example: `AssertionError: Expected 5 but got None`
+  - Means: Test logic is valid, implementation is missing/incomplete
+- ❌ **ERROR (E)**: Test crashes with exception - THIS IS WRONG
+  - Example: `ImportError`, `AttributeError`, `NameError`
+  - Means: Test has bugs or references non-existent code
+  - **Fix the test first** before implementing the feature
+
+**Proper TDD Workflow:**
+
+1. **Write test** - Should fail with assertion error (F), not exception (E)
+2. **Run test** - Verify it shows FAIL (F), not ERROR (E)
+   - If ERROR: Fix test imports, syntax, or scaffolding first
+   - If FAIL: Proceed to implementation
+3. **Implement** - Write minimal code to make test pass
+4. **Run test** - Should now show PASS (.)
+5. **Refactor** - Improve while keeping tests green
+
+**Common Causes of Errors (E) Instead of Failures (F):**
+
+- Missing imports in test file
+- Typos in function/class names
+- Missing stub/placeholder implementation
+- Incorrect test setup or mocking
+
+**Solution**: Create minimal scaffolding (empty functions, basic classes) so tests can run and fail properly.
+
 ### Do's ✅
 
 - Write tests BEFORE implementation (TDD)
+- Ensure red phase shows FAIL (F), not ERROR (E)
 - Test one thing per test function
 - Use descriptive test names
 - Keep tests fast (mock I/O, external APIs)
@@ -190,6 +224,7 @@ python tests/run_all_tests.py
 
 - Don't test implementation details
 - Don't write tests after the fact (TDD violation)
+- Don't proceed with ERROR (E) in red phase - fix the test first
 - Don't skip tests without documenting why
 - Don't use production data
 - Don't create interdependent tests

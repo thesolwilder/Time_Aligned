@@ -304,6 +304,77 @@ class TestCardFilterIntegration(unittest.TestCase):
         # Verify update_card was called
         frame.update_card.assert_called_once_with(0)
 
+    def test_today_filter_shows_timeline_data(self):
+        """Test that Today filter displays sessions in timeline"""
+        from src.analysis_frame import AnalysisFrame
+        from tests.test_helpers import TestDataGenerator
+
+        # Create mock tracker with today's session data
+        mock_tracker = Mock()
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Create realistic session data for today
+        test_data = {
+            f"{today}_session1": {
+                "sphere": "Work",
+                "date": today,
+                "start_time": "09:00:00",
+                "active": [
+                    {
+                        "start": "09:00:00",
+                        "duration": 3600,  # 1 hour
+                        "project": "Project A",
+                        "comment": "Morning work",
+                    }
+                ],
+                "breaks": [
+                    {
+                        "start": "10:00:00",
+                        "duration": 600,  # 10 minutes
+                        "action": "coffee",
+                    }
+                ],
+                "idle_periods": [],
+            }
+        }
+
+        mock_tracker.data = test_data
+        mock_tracker.settings = {
+            "analysis_settings": {"card_ranges": ["Today", "Last 7 Days", "All Time"]}
+        }
+        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.load_data = Mock(return_value=test_data)
+
+        # Create frame with real Tk parent
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, mock_tracker, self.root)
+
+        # Set card 0 to "Today" filter
+        frame.card_ranges[0] = "Today"
+        frame.selected_card = 0
+
+        # Initialize sphere and project filters to "All"
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+
+        # Update the timeline (this should populate timeline_frame with data)
+        frame.update_timeline()
+
+        # Verify timeline has content (should have at least 2 rows: 1 active + 1 break)
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(
+            len(timeline_children),
+            0,
+            "Timeline should display sessions when Today filter is active",
+        )
+
+        # Verify we have at least 2 entries (1 active + 1 break)
+        self.assertGreaterEqual(
+            len(timeline_children),
+            2,
+            "Timeline should show at least 2 periods (active + break) for today's session",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
