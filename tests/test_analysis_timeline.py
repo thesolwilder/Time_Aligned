@@ -383,9 +383,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         self.assertEqual(
             active_period["session_active_comments"], "Overall session was productive"
         )
-        self.assertEqual(
-            active_period["session_break_idle_comments"], "Needed a few breaks"
-        )
+        self.assertEqual(active_period["session_break_idle_comments"], "")
         self.assertEqual(active_period["session_notes"], "Good progress today")
 
         # Check break period
@@ -398,6 +396,12 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         self.assertEqual(break_period["primary_comment"], "Coffee break")
         self.assertEqual(break_period["secondary_project"], "")
         self.assertEqual(break_period["secondary_comment"], "")
+        # Session-level comments show contextually
+        self.assertEqual(break_period["session_active_comments"], "")
+        self.assertEqual(
+            break_period["session_break_idle_comments"], "Needed a few breaks"
+        )
+        self.assertEqual(break_period["session_notes"], "Good progress today")
 
     def test_timeline_data_with_secondary_project(self):
         """Test that secondary projects are properly separated from primary"""
@@ -581,6 +585,536 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         self.assertEqual(period["primary_comment"], "Deep thinking")
         self.assertEqual(period["secondary_project"], "Wandering")
         self.assertEqual(period["secondary_comment"], "Mind wandering")
+
+    def test_session_level_comments_appear_on_all_periods(self):
+        """Test that session-level comments appear on ALL periods from that session"""
+        date = "2026-01-28"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234574890,
+                "total_duration": 7000,
+                "active_duration": 3000,
+                "break_duration": 2000,
+                "active": [
+                    {
+                        "duration": 1500,
+                        "project": "Project A",
+                        "comment": "First active period",
+                        "start": "10:30:00",
+                        "start_timestamp": 1234567890,
+                    },
+                    {
+                        "duration": 1500,
+                        "project": "Project B",
+                        "comment": "Second active period",
+                        "start": "11:00:00",
+                        "start_timestamp": 1234569690,
+                    },
+                ],
+                "breaks": [
+                    {
+                        "duration": 1000,
+                        "action": "Coffee",
+                        "comment": "First break",
+                        "start": "10:55:00",
+                        "start_timestamp": 1234569390,
+                    },
+                    {
+                        "duration": 1000,
+                        "action": "Lunch",
+                        "comment": "Second break",
+                        "start": "12:00:00",
+                        "start_timestamp": 1234573290,
+                    },
+                ],
+                "idle_periods": [
+                    {
+                        "duration": 2000,
+                        "action": "Idle",
+                        "comment": "Idle time",
+                        "start": "11:30:00",
+                        "start_timestamp": 1234571490,
+                        "end_timestamp": 1234573490,
+                    }
+                ],
+                "session_active_comments": "Session was very productive",
+                "session_break_idle_comments": "Took good breaks",
+                "session_notes": "Great day overall",
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Explicitly set filters to show all data
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Verify we have 5 periods (2 active, 2 breaks, 1 idle)
+        self.assertEqual(len(timeline_data), 5)
+
+        # Session-level comments now show contextually:
+        # - session_active_comments: only on Active periods
+        # - session_break_idle_comments: only on Break/Idle periods
+        # - session_notes: on ALL periods
+        expected_session_notes = "Great day overall"
+
+        for period in timeline_data:
+            # Session notes should appear on ALL periods
+            self.assertEqual(
+                period["session_notes"],
+                expected_session_notes,
+                f"Period {period['primary_project']} missing session_notes",
+            )
+
+            # Active comments only on Active periods
+            if period["type"] == "Active":
+                self.assertEqual(
+                    period["session_active_comments"],
+                    "Session was very productive",
+                    f"Active period {period['primary_project']} should have session_active_comments",
+                )
+                self.assertEqual(
+                    period["session_break_idle_comments"],
+                    "",
+                    f"Active period {period['primary_project']} should NOT have session_break_idle_comments",
+                )
+            # Break/idle comments only on Break/Idle periods
+            elif period["type"] in ["Break", "Idle"]:
+                self.assertEqual(
+                    period["session_active_comments"],
+                    "",
+                    f"{period['type']} period {period['primary_project']} should NOT have session_active_comments",
+                )
+                self.assertEqual(
+                    period["session_break_idle_comments"],
+                    "Took good breaks",
+                    f"{period['type']} period {period['primary_project']} should have session_break_idle_comments",
+                )
+
+
+class TestAnalysisTimelineUIData(unittest.TestCase):
+    """Test that timeline data from actual saved sessions displays correctly"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {"Work": {"is_default": True, "active": True}},
+            "projects": {
+                "learning_to_code": {
+                    "sphere": "Work",
+                    "is_default": True,
+                    "active": True,
+                }
+            },
+            "break_actions": {"bathroom": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_ui_data_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file("test_ui_data.json")
+
+    def test_timeline_shows_session_comments_from_completion_frame_format(self):
+        """
+        BUG: Session comments saved by completion frame use different field names
+        than what analysis frame expects, so they don't show in UI
+
+        Completion frame saves as: session_comments.active_notes, etc.
+        Analysis frame expects: session_active_comments, session_break_idle_comments, session_notes
+        """
+        date = "2026-01-29"
+        # This is how completion_frame.py actually saves the data
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234571890,
+                "total_duration": 7000,
+                "active_duration": 3000,
+                "break_duration": 4000,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "learning_to_code",
+                        "comment": "developing",
+                        "start": "11:06:00",
+                        "start_timestamp": 1234567890,
+                    }
+                ],
+                "breaks": [
+                    {
+                        "duration": 4000,
+                        "action": "bathroom",
+                        "comment": "poop",
+                        "start": "11:08:00",
+                        "start_timestamp": 1234570890,
+                    }
+                ],
+                "idle_periods": [],
+                # This is how completion frame saves session comments
+                "session_comments": {
+                    "active_notes": "working hard",
+                    "break_notes": "necessary",
+                    "idle_notes": "",
+                    "session_notes": "good session",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to show all data
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Should have 2 periods (1 active, 1 break)
+        self.assertEqual(len(timeline_data), 2)
+
+        # Session comments now show contextually
+        active_period = timeline_data[0]
+        self.assertEqual(active_period["session_active_comments"], "working hard")
+        self.assertEqual(active_period["session_break_idle_comments"], "")
+        self.assertEqual(active_period["session_notes"], "good session")
+
+        break_period = timeline_data[1]
+        self.assertEqual(break_period["session_active_comments"], "")
+        self.assertEqual(break_period["session_break_idle_comments"], "necessary")
+        self.assertEqual(break_period["session_notes"], "good session")
+
+    def test_session_comments_show_contextually_by_period_type(self):
+        """
+        FEATURE: Session comments should show contextually based on period type:
+        - session_active_comments: Only show during Active periods
+        - session_break_idle_comments: Show during Break/Idle periods (break notes for break, idle notes for idle)
+        - session_notes: Show for ALL periods
+        """
+        date = "2026-01-29"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234571890,
+                "total_duration": 9000,
+                "active_duration": 3000,
+                "break_duration": 4000,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "drawing",
+                        "comment": "active period comment",
+                        "start": "11:42:00",
+                        "start_timestamp": 1234567890,
+                    }
+                ],
+                "breaks": [
+                    {
+                        "duration": 3000,
+                        "action": "bathroom",
+                        "comment": "break period comment",
+                        "start": "11:43:00",
+                        "start_timestamp": 1234570890,
+                    }
+                ],
+                "idle_periods": [
+                    {
+                        "duration": 2000,
+                        "action": "Idle",
+                        "comment": "idle period comment",
+                        "start": "11:44:00",
+                        "start_timestamp": 1234573890,
+                        "end_timestamp": 1234575890,
+                    }
+                ],
+                "session_comments": {
+                    "active_notes": "active periods comment",
+                    "break_notes": "break periods comment",
+                    "idle_notes": "idle periods comment",
+                    "session_notes": "session notes",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to show all data
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Should have 3 periods (1 active, 1 break, 1 idle)
+        self.assertEqual(len(timeline_data), 3)
+
+        # Active period: Should show active comments and session notes, but NOT break/idle comments
+        active_period = timeline_data[0]
+        self.assertEqual(active_period["type"], "Active")
+        self.assertEqual(
+            active_period["session_active_comments"],
+            "active periods comment",
+            "Active period should show session_active_comments",
+        )
+        self.assertEqual(
+            active_period["session_break_idle_comments"],
+            "",
+            "Active period should NOT show session_break_idle_comments",
+        )
+        self.assertEqual(
+            active_period["session_notes"],
+            "session notes",
+            "Active period should show session_notes",
+        )
+
+        # Break period: Should show break comments and session notes, but NOT active/idle comments
+        break_period = timeline_data[1]
+        self.assertEqual(break_period["type"], "Break")
+        self.assertEqual(
+            break_period["session_active_comments"],
+            "",
+            "Break period should NOT show session_active_comments",
+        )
+        self.assertEqual(
+            break_period["session_break_idle_comments"],
+            "break periods comment",
+            "Break period should show break notes in session_break_idle_comments",
+        )
+        self.assertEqual(
+            break_period["session_notes"],
+            "session notes",
+            "Break period should show session_notes",
+        )
+
+        # Idle period: Should show idle comments and session notes, but NOT active/break comments
+        idle_period = timeline_data[2]
+        self.assertEqual(idle_period["type"], "Idle")
+        self.assertEqual(
+            idle_period["session_active_comments"],
+            "",
+            "Idle period should NOT show session_active_comments",
+        )
+        self.assertEqual(
+            idle_period["session_break_idle_comments"],
+            "idle periods comment",
+            "Idle period should show idle notes in session_break_idle_comments",
+        )
+        self.assertEqual(
+            idle_period["session_notes"],
+            "session notes",
+            "Idle period should show session_notes",
+        )
+
+
+class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
+    """Test that timeline header columns are properly aligned with data rows"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {"Work": {"is_default": True, "active": True}},
+            "projects": {
+                "Project A": {"sphere": "Work", "is_default": True, "active": True}
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_header_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_header_data.json"
+        )
+
+    def test_header_columns_align_with_data_rows(self):
+        """
+        BUG: Timeline header columns should align with data row columns.
+        This test verifies that:
+        1. Header labels are in the correct order
+        2. Header widths match data column widths
+        3. Both use the same packing parameters
+        """
+        date = "2026-01-29"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234570890,
+                "total_duration": 3000,
+                "active_duration": 3000,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "Project A",
+                        "comment": "Working",
+                        "start": "10:30:00",
+                        "start_timestamp": 1234567890,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": "active comment",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "session note",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Update the display to create header and data rows
+        frame.update_timeline()
+
+        # Get all header labels
+        header_labels = [
+            w
+            for w in frame.timeline_header_frame.winfo_children()
+            if isinstance(w, tk.Label)
+        ]
+
+        # Get all data row labels from first row
+        data_rows = [
+            w for w in frame.timeline_frame.winfo_children() if isinstance(w, tk.Frame)
+        ]
+        self.assertGreater(len(data_rows), 0, "Should have at least one data row")
+
+        first_row = data_rows[0]
+        data_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+
+        # Verify we have 11 headers and 11 data columns
+        self.assertEqual(len(header_labels), 11, "Should have 11 header columns")
+        self.assertEqual(len(data_labels), 11, "Should have 11 data columns")
+
+        # Expected header texts and corresponding widths
+        expected_headers = [
+            ("Date", 10),
+            ("Period Start", 9),
+            ("Duration", 8),
+            ("Type", 7),
+            ("Primary Project/Action", 15),
+            ("Primary Comment", 20),
+            ("Secondary Project/Action", 15),
+            ("Secondary Comment", 20),
+            ("Session Active Comments", 20),
+            ("Session Break/Idle Comments", 20),
+            ("Session Notes", 20),
+        ]
+
+        # Verify each header has correct text and width
+        for idx, (expected_text, expected_width) in enumerate(expected_headers):
+            header_label = header_labels[idx]
+            data_label = data_labels[idx]
+
+            # Remove sort indicators from header text for comparison
+            header_text = header_label.cget("text").replace(" ▼", "").replace(" ▲", "")
+
+            # Verify header text matches expected
+            self.assertEqual(
+                header_text,
+                expected_text,
+                f"Header {idx} should be '{expected_text}' but got '{header_text}'",
+            )
+
+            # Verify header width matches data column width
+            header_width = header_label.cget("width")
+            data_width = data_label.cget("width")
+
+            self.assertEqual(
+                header_width,
+                expected_width,
+                f"Header {idx} ('{expected_text}') width should be {expected_width} but got {header_width}",
+            )
+
+            self.assertEqual(
+                data_width,
+                expected_width,
+                f"Data column {idx} width should be {expected_width} but got {data_width}",
+            )
+
+            # Verify both use same anchor
+            self.assertEqual(
+                header_label.cget("anchor"),
+                data_label.cget("anchor"),
+                f"Column {idx} header and data should have same anchor",
+            )
+
+            # Verify both use same padx
+            self.assertEqual(
+                header_label.cget("padx"),
+                data_label.cget("padx"),
+                f"Column {idx} header and data should have same padx",
+            )
+
+            # BUG: Headers should NOT have pady while data labels don't
+            # This causes visual misalignment
+            header_pady = header_label.cget("pady")
+            data_pady = data_label.cget("pady")
+
+            self.assertEqual(
+                header_pady,
+                data_pady,
+                f"Column {idx} ('{expected_text}') header pady={header_pady} should match data pady={data_pady}",
+            )
+
+            # BUG: Headers MUST use same font as data for visual alignment
+            # Headers should NOT be bold because that makes them wider than data
+            header_font = str(header_label.cget("font")).lower()
+
+            self.assertNotIn(
+                "bold",
+                header_font,
+                f"Column {idx} ('{expected_text}') header should NOT use bold font (causes visual width mismatch)",
+            )
 
 
 if __name__ == "__main__":

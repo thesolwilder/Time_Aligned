@@ -608,11 +608,26 @@ class AnalysisFrame(ttk.Frame):
                 continue
 
             # Get session-level comments
-            session_active_comments = session_data.get("session_active_comments", "")
-            session_break_idle_comments = session_data.get(
-                "session_break_idle_comments", ""
-            )
-            session_notes = session_data.get("session_notes", "")
+            # Handle both old format (direct fields) and new format (session_comments dict)
+            session_comments_dict = session_data.get("session_comments", {})
+            if session_comments_dict:
+                # New format: session comments are in a nested dict
+                session_active_comments = session_comments_dict.get("active_notes", "")
+                break_notes = session_comments_dict.get("break_notes", "")
+                idle_notes = session_comments_dict.get("idle_notes", "")
+                session_notes = session_comments_dict.get("session_notes", "")
+            else:
+                # Old format: session comments are direct fields (backwards compatibility)
+                session_active_comments = session_data.get(
+                    "session_active_comments", ""
+                )
+                # For old format, we can't separate break and idle, so use the combined field for both
+                session_break_idle_comments = session_data.get(
+                    "session_break_idle_comments", ""
+                )
+                break_notes = session_break_idle_comments
+                idle_notes = session_break_idle_comments
+                session_notes = session_data.get("session_notes", "")
 
             # Add active periods
             for period in session_data.get("active", []):
@@ -655,7 +670,7 @@ class AnalysisFrame(ttk.Frame):
                         "secondary_project": secondary_project,
                         "secondary_comment": secondary_comment,
                         "session_active_comments": session_active_comments,
-                        "session_break_idle_comments": session_break_idle_comments,
+                        "session_break_idle_comments": "",  # Don't show break/idle comments on active periods
                         "session_notes": session_notes,
                     }
                 )
@@ -692,8 +707,8 @@ class AnalysisFrame(ttk.Frame):
                         "primary_comment": primary_comment,
                         "secondary_project": secondary_action,
                         "secondary_comment": secondary_comment,
-                        "session_active_comments": session_active_comments,
-                        "session_break_idle_comments": session_break_idle_comments,
+                        "session_active_comments": "",  # Don't show active comments on break periods
+                        "session_break_idle_comments": break_notes,  # Only show break notes on break periods
                         "session_notes": session_notes,
                     }
                 )
@@ -731,8 +746,8 @@ class AnalysisFrame(ttk.Frame):
                             "primary_comment": primary_comment,
                             "secondary_project": secondary_action,
                             "secondary_comment": secondary_comment,
-                            "session_active_comments": session_active_comments,
-                            "session_break_idle_comments": session_break_idle_comments,
+                            "session_active_comments": "",  # Don't show active comments on idle periods
+                            "session_break_idle_comments": idle_notes,  # Only show idle notes on idle periods
                             "session_notes": session_notes,
                         }
                     )
@@ -856,11 +871,10 @@ class AnalysisFrame(ttk.Frame):
                         text + " ▲" if self.timeline_sort_column == column_key else text
                     )
                 ),
-                font=("Arial", 8, "bold"),
+                font=("Arial", 8),
                 width=width,
                 anchor="w",
                 padx=3,
-                pady=3,
                 bg="#d0d0d0",
                 cursor="hand2",
             )
@@ -878,11 +892,10 @@ class AnalysisFrame(ttk.Frame):
         tk.Label(
             self.timeline_header_frame,
             text="Primary Comment",
-            font=("Arial", 8, "bold"),
+            font=("Arial", 8),
             width=20,
             anchor="w",
             padx=3,
-            pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT)
         create_header_label("Secondary Project/Action", "secondary_project", 15).pack(
@@ -891,43 +904,39 @@ class AnalysisFrame(ttk.Frame):
         tk.Label(
             self.timeline_header_frame,
             text="Secondary Comment",
-            font=("Arial", 8, "bold"),
+            font=("Arial", 8),
             width=20,
             anchor="w",
             padx=3,
-            pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
             text="Session Active Comments",
-            font=("Arial", 8, "bold"),
+            font=("Arial", 8),
             width=20,
             anchor="w",
             padx=3,
-            pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
             text="Session Break/Idle Comments",
-            font=("Arial", 8, "bold"),
+            font=("Arial", 8),
             width=20,
             anchor="w",
             padx=3,
-            pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
             text="Session Notes",
-            font=("Arial", 8, "bold"),
+            font=("Arial", 8),
             width=20,
             anchor="w",
             padx=3,
-            pady=3,
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        ).pack(side=tk.LEFT)
 
     def export_to_csv(self):
         """Export timeline data to CSV"""
