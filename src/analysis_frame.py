@@ -183,10 +183,10 @@ class AnalysisFrame(ttk.Frame):
             label = tk.Label(
                 self.timeline_header_frame,
                 text=text,
-                font=("Arial", 9, "bold"),
+                font=("Arial", 8, "bold"),
                 width=width,
                 anchor="w",
-                padx=5,
+                padx=3,
                 pady=3,
                 bg="#d0d0d0",
                 cursor="hand2",
@@ -195,19 +195,60 @@ class AnalysisFrame(ttk.Frame):
             label.pack(side=tk.LEFT)
             return label
 
-        create_initial_header("Date", "date", 12)
-        create_initial_header("Type", "type", 8)
-        create_initial_header("Sphere", "sphere", 12)
-        create_initial_header("Project/Action", "project", 18)
-        create_initial_header("Start", "start", 10)
-        create_initial_header("Duration", "duration", 10)
+        # New header columns to match user request
+        create_initial_header("Date", "date", 10)
+        create_initial_header("Period Start", "start", 9)
+        create_initial_header("Duration", "duration", 8)
+        create_initial_header("Type", "type", 7)
+        create_initial_header("Primary Project/Action", "primary_project", 15)
         tk.Label(
             self.timeline_header_frame,
-            text="Comment",
-            font=("Arial", 9, "bold"),
-            width=35,
+            text="Primary Comment",
+            font=("Arial", 8, "bold"),
+            width=20,
             anchor="w",
-            padx=5,
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        create_initial_header("Secondary Project/Action", "secondary_project", 15)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Secondary Comment",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Active Comments",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Break/Idle Comments",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Notes",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
             pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
@@ -527,14 +568,23 @@ class AnalysisFrame(ttk.Frame):
         card.active_label.config(text=f"Active: {self.format_duration(active_time)}")
         card.break_label.config(text=f"Break: {self.format_duration(break_time)}")
 
-    def update_timeline(self):
-        """Update the timeline display"""
-        # Clear existing timeline
-        for widget in self.timeline_frame.winfo_children():
-            widget.destroy()
+    def get_timeline_data(self, range_name):
+        """
+        Get structured timeline data for the specified date range.
 
-        # Get data for selected card's range
-        range_name = self.card_ranges[self.selected_card]
+        Returns a list of dictionaries with the following keys:
+        - date: Date string (YYYY-MM-DD)
+        - period_start: Start time of the period
+        - duration: Duration in seconds
+        - type: Type of period (Active, Break, Idle)
+        - primary_project: Primary project/action name
+        - primary_comment: Primary comment
+        - secondary_project: Secondary project/action name
+        - secondary_comment: Secondary comment
+        - session_active_comments: Session-level active comments
+        - session_break_idle_comments: Session-level break/idle comments
+        - session_notes: Session-level notes
+        """
         start_date, end_date = self.get_date_range(range_name)
         all_data = self.tracker.load_data()
 
@@ -542,7 +592,7 @@ class AnalysisFrame(ttk.Frame):
         project_filter = self.project_var.get()
 
         # Collect all periods
-        periods = []
+        timeline_data = []
 
         for session_name, session_data in all_data.items():
             # Check if session is in date range
@@ -557,61 +607,150 @@ class AnalysisFrame(ttk.Frame):
             if sphere_filter != "All Spheres" and session_sphere != sphere_filter:
                 continue
 
+            # Get session-level comments
+            session_active_comments = session_data.get("session_active_comments", "")
+            session_break_idle_comments = session_data.get(
+                "session_break_idle_comments", ""
+            )
+            session_notes = session_data.get("session_notes", "")
+
             # Add active periods
             for period in session_data.get("active", []):
+                # Determine primary and secondary projects
+                primary_project = ""
+                primary_comment = ""
+                secondary_project = ""
+                secondary_comment = ""
+
+                if period.get("project"):
+                    # Single project case
+                    primary_project = period.get("project", "")
+                    primary_comment = period.get("comment", "")
+                else:
+                    # Multiple projects case
+                    for project_item in period.get("projects", []):
+                        if project_item.get("project_primary", True):
+                            primary_project = project_item.get("name", "")
+                            primary_comment = project_item.get("comment", "")
+                        else:
+                            secondary_project = project_item.get("name", "")
+                            secondary_comment = project_item.get("comment", "")
+
                 # Check project filter
-                project_name = period.get("project", "")
-                if project_filter != "All Projects" and project_name != project_filter:
-                    # Check multi-project
-                    found = False
-                    for proj in period.get("projects", []):
-                        if proj.get("name") == project_filter:
-                            project_name = proj.get("name")
-                            found = True
-                            break
-                    if not found:
+                if project_filter != "All Projects":
+                    if (
+                        primary_project != project_filter
+                        and secondary_project != project_filter
+                    ):
                         continue
 
-                periods.append(
+                timeline_data.append(
                     {
                         "date": session_data.get("date"),
-                        "type": "Active",
-                        "sphere": session_sphere,
-                        "project": project_name,
-                        "start": period.get("start", ""),
+                        "period_start": period.get("start", ""),
                         "duration": period.get("duration", 0),
-                        "comment": period.get("comment", ""),
+                        "type": "Active",
+                        "primary_project": primary_project,
+                        "primary_comment": primary_comment,
+                        "secondary_project": secondary_project,
+                        "secondary_comment": secondary_comment,
+                        "session_active_comments": session_active_comments,
+                        "session_break_idle_comments": session_break_idle_comments,
+                        "session_notes": session_notes,
                     }
                 )
 
             # Add break periods
             for period in session_data.get("breaks", []):
-                periods.append(
+                # Determine primary and secondary actions
+                primary_action = ""
+                primary_comment = ""
+                secondary_action = ""
+                secondary_comment = ""
+
+                if period.get("action"):
+                    # Single action case
+                    primary_action = period.get("action", "")
+                    primary_comment = period.get("comment", "")
+                else:
+                    # Multiple actions case
+                    for action_item in period.get("actions", []):
+                        if action_item.get("break_primary", True):
+                            primary_action = action_item.get("name", "")
+                            primary_comment = action_item.get("comment", "")
+                        else:
+                            secondary_action = action_item.get("name", "")
+                            secondary_comment = action_item.get("comment", "")
+
+                timeline_data.append(
                     {
                         "date": session_data.get("date"),
-                        "type": "Break",
-                        "sphere": session_sphere,
-                        "action": period.get("action", "Break"),
-                        "start": period.get("start", ""),
+                        "period_start": period.get("start", ""),
                         "duration": period.get("duration", 0),
-                        "comment": period.get("comment", ""),
+                        "type": "Break",
+                        "primary_project": primary_action,
+                        "primary_comment": primary_comment,
+                        "secondary_project": secondary_action,
+                        "secondary_comment": secondary_comment,
+                        "session_active_comments": session_active_comments,
+                        "session_break_idle_comments": session_break_idle_comments,
+                        "session_notes": session_notes,
                     }
                 )
 
             # Add idle periods
             for period in session_data.get("idle_periods", []):
                 if period.get("end_timestamp"):
-                    periods.append(
+                    # Determine primary and secondary actions
+                    primary_action = ""
+                    primary_comment = ""
+                    secondary_action = ""
+                    secondary_comment = ""
+
+                    if period.get("action"):
+                        # Single action case
+                        primary_action = period.get("action", "")
+                        primary_comment = period.get("comment", "")
+                    else:
+                        # Multiple actions case
+                        for action_item in period.get("actions", []):
+                            if action_item.get("idle_primary", True):
+                                primary_action = action_item.get("name", "")
+                                primary_comment = action_item.get("comment", "")
+                            else:
+                                secondary_action = action_item.get("name", "")
+                                secondary_comment = action_item.get("comment", "")
+
+                    timeline_data.append(
                         {
                             "date": session_data.get("date"),
-                            "type": "Idle",
-                            "sphere": session_sphere,
-                            "action": period.get("action", "Idle"),
-                            "start": period.get("start", ""),
+                            "period_start": period.get("start", ""),
                             "duration": period.get("duration", 0),
-                            "comment": period.get("comment", ""),
+                            "type": "Idle",
+                            "primary_project": primary_action,
+                            "primary_comment": primary_comment,
+                            "secondary_project": secondary_action,
+                            "secondary_comment": secondary_comment,
+                            "session_active_comments": session_active_comments,
+                            "session_break_idle_comments": session_break_idle_comments,
+                            "session_notes": session_notes,
                         }
                     )
+
+        # Sort by date and start time
+        timeline_data.sort(key=lambda x: (x["date"], x["period_start"]))
+
+        return timeline_data
+
+    def update_timeline(self):
+        """Update the timeline display"""
+        # Clear existing timeline
+        for widget in self.timeline_frame.winfo_children():
+            widget.destroy()
+
+        # Get data using new get_timeline_data method
+        range_name = self.card_ranges[self.selected_card]
+        periods = self.get_timeline_data(range_name)
 
         # Sort by date and start time (or by selected column)
         if not hasattr(self, "timeline_sort_column"):
@@ -620,11 +759,11 @@ class AnalysisFrame(ttk.Frame):
 
         # Sort by current column
         sort_key_map = {
-            "date": lambda x: (x["date"], x["start"]),
+            "date": lambda x: (x["date"], x["period_start"]),
             "type": lambda x: x["type"],
-            "sphere": lambda x: x["sphere"],
-            "project": lambda x: x.get("project") or x.get("action", ""),
-            "start": lambda x: x["start"],
+            "primary_project": lambda x: x["primary_project"],
+            "secondary_project": lambda x: x["secondary_project"],
+            "start": lambda x: x["period_start"],
             "duration": lambda x: x["duration"],
         }
         periods.sort(
@@ -655,73 +794,33 @@ class AnalysisFrame(ttk.Frame):
 
             row_frame.bind("<MouseWheel>", on_main_scroll)
 
-            date_lbl = tk.Label(
-                row_frame,
-                text=period["date"],
-                width=12,
-                anchor="w",
-                padx=5,
-                bg=bg_color,
-            )
-            date_lbl.pack(side=tk.LEFT)
-            date_lbl.bind("<MouseWheel>", on_main_scroll)
+            # Create label helper function
+            def create_label(text, width):
+                lbl = tk.Label(
+                    row_frame,
+                    text=text,
+                    width=width,
+                    anchor="w",
+                    padx=3,
+                    bg=bg_color,
+                    font=("Arial", 8),
+                )
+                lbl.pack(side=tk.LEFT)
+                lbl.bind("<MouseWheel>", on_main_scroll)
+                return lbl
 
-            type_lbl = tk.Label(
-                row_frame, text=period["type"], width=8, anchor="w", padx=5, bg=bg_color
-            )
-            type_lbl.pack(side=tk.LEFT)
-            type_lbl.bind("<MouseWheel>", on_main_scroll)
-
-            sphere_lbl = tk.Label(
-                row_frame,
-                text=period["sphere"],
-                width=12,
-                anchor="w",
-                padx=5,
-                bg=bg_color,
-            )
-            sphere_lbl.pack(side=tk.LEFT)
-            sphere_lbl.bind("<MouseWheel>", on_main_scroll)
-
-            proj_action = period.get("project") or period.get("action", "")
-            proj_lbl = tk.Label(
-                row_frame, text=proj_action, width=18, anchor="w", padx=5, bg=bg_color
-            )
-            proj_lbl.pack(side=tk.LEFT)
-            proj_lbl.bind("<MouseWheel>", on_main_scroll)
-
-            start_lbl = tk.Label(
-                row_frame,
-                text=self.format_time_12hr(period["start"]),
-                width=10,
-                anchor="w",
-                padx=5,
-                bg=bg_color,
-            )
-            start_lbl.pack(side=tk.LEFT)
-            start_lbl.bind("<MouseWheel>", on_main_scroll)
-
-            dur_lbl = tk.Label(
-                row_frame,
-                text=self.format_duration(period["duration"]),
-                width=10,
-                anchor="w",
-                padx=5,
-                bg=bg_color,
-            )
-            dur_lbl.pack(side=tk.LEFT)
-            dur_lbl.bind("<MouseWheel>", on_main_scroll)
-
-            comment_lbl = tk.Label(
-                row_frame,
-                text=period["comment"][:35],
-                width=35,
-                anchor="w",
-                padx=5,
-                bg=bg_color,
-            )
-            comment_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-            comment_lbl.bind("<MouseWheel>", on_main_scroll)
+            # Column widths (adjust as needed for all columns to fit)
+            create_label(period["date"], 10)
+            create_label(self.format_time_12hr(period["period_start"]), 9)
+            create_label(self.format_duration(period["duration"]), 8)
+            create_label(period["type"], 7)
+            create_label(period["primary_project"], 15)
+            create_label(period["primary_comment"][:20], 20)
+            create_label(period["secondary_project"], 15)
+            create_label(period["secondary_comment"][:20], 20)
+            create_label(period["session_active_comments"][:20], 20)
+            create_label(period["session_break_idle_comments"][:20], 20)
+            create_label(period["session_notes"][:20], 20)
 
         if not periods:
             ttk.Label(
@@ -757,10 +856,10 @@ class AnalysisFrame(ttk.Frame):
                         text + " ▲" if self.timeline_sort_column == column_key else text
                     )
                 ),
-                font=("Arial", 9, "bold"),
+                font=("Arial", 8, "bold"),
                 width=width,
                 anchor="w",
-                padx=5,
+                padx=3,
                 pady=3,
                 bg="#d0d0d0",
                 cursor="hand2",
@@ -768,19 +867,64 @@ class AnalysisFrame(ttk.Frame):
             label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
             return label
 
-        create_header_label("Date", "date", 12).pack(side=tk.LEFT)
-        create_header_label("Type", "type", 8).pack(side=tk.LEFT)
-        create_header_label("Sphere", "sphere", 12).pack(side=tk.LEFT)
-        create_header_label("Project/Action", "project", 18).pack(side=tk.LEFT)
-        create_header_label("Start", "start", 10).pack(side=tk.LEFT)
-        create_header_label("Duration", "duration", 10).pack(side=tk.LEFT)
+        # New header columns to match user request
+        create_header_label("Date", "date", 10).pack(side=tk.LEFT)
+        create_header_label("Period Start", "start", 9).pack(side=tk.LEFT)
+        create_header_label("Duration", "duration", 8).pack(side=tk.LEFT)
+        create_header_label("Type", "type", 7).pack(side=tk.LEFT)
+        create_header_label("Primary Project/Action", "primary_project", 15).pack(
+            side=tk.LEFT
+        )
         tk.Label(
             self.timeline_header_frame,
-            text="Comment",
-            font=("Arial", 9, "bold"),
-            width=35,
+            text="Primary Comment",
+            font=("Arial", 8, "bold"),
+            width=20,
             anchor="w",
-            padx=5,
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        create_header_label("Secondary Project/Action", "secondary_project", 15).pack(
+            side=tk.LEFT
+        )
+        tk.Label(
+            self.timeline_header_frame,
+            text="Secondary Comment",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Active Comments",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Break/Idle Comments",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Session Notes",
+            font=("Arial", 8, "bold"),
+            width=20,
+            anchor="w",
+            padx=3,
             pady=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT, fill=tk.X, expand=True)
