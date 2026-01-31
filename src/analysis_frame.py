@@ -883,10 +883,10 @@ class AnalysisFrame(ttk.Frame):
 
         # New header columns to match user request
         create_header_label("Date", "date", 10).pack(side=tk.LEFT)
-        create_header_label("Period Start", "start", 9).pack(side=tk.LEFT)
+        create_header_label("Start", "start", 9).pack(side=tk.LEFT)
         create_header_label("Duration", "duration", 8).pack(side=tk.LEFT)
         create_header_label("Type", "type", 7).pack(side=tk.LEFT)
-        create_header_label("Primary Project/Action", "primary_project", 15).pack(
+        create_header_label("Primary Action", "primary_project", 15).pack(
             side=tk.LEFT
         )
         tk.Label(
@@ -898,7 +898,7 @@ class AnalysisFrame(ttk.Frame):
             padx=3,
             bg="#d0d0d0",
         ).pack(side=tk.LEFT)
-        create_header_label("Secondary Project/Action", "secondary_project", 15).pack(
+        create_header_label("Secondary Action", "secondary_project", 15).pack(
             side=tk.LEFT
         )
         tk.Label(
@@ -912,7 +912,7 @@ class AnalysisFrame(ttk.Frame):
         ).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
-            text="Session Active Comments",
+            text="Active Comments",
             font=("Arial", 8),
             width=20,
             anchor="w",
@@ -921,7 +921,7 @@ class AnalysisFrame(ttk.Frame):
         ).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
-            text="Session Break/Idle Comments",
+            text="Break Comments",
             font=("Arial", 8),
             width=20,
             anchor="w",

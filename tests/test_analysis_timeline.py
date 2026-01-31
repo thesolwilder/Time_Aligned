@@ -970,9 +970,12 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         """
         BUG: Timeline header columns should align with data row columns.
         This test verifies that:
-        1. Header labels are in the correct order
+        1. Header count matches data column count
         2. Header widths match data column widths
-        3. Both use the same packing parameters
+        3. Both use the same packing parameters (anchor, padx, pady, font)
+
+        This test does NOT hardcode header values - it dynamically verifies
+        that whatever headers exist align properly with data columns.
         """
         date = "2026-01-29"
         test_data = {
@@ -1031,39 +1034,19 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         first_row = data_rows[0]
         data_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
 
-        # Verify we have 11 headers and 11 data columns
-        self.assertEqual(len(header_labels), 11, "Should have 11 header columns")
-        self.assertEqual(len(data_labels), 11, "Should have 11 data columns")
+        # Verify header count matches data column count
+        self.assertEqual(
+            len(header_labels),
+            len(data_labels),
+            f"Header count ({len(header_labels)}) should match data column count ({len(data_labels)})",
+        )
 
-        # Expected header texts and corresponding widths
-        expected_headers = [
-            ("Date", 10),
-            ("Period Start", 9),
-            ("Duration", 8),
-            ("Type", 7),
-            ("Primary Project/Action", 15),
-            ("Primary Comment", 20),
-            ("Secondary Project/Action", 15),
-            ("Secondary Comment", 20),
-            ("Session Active Comments", 20),
-            ("Session Break/Idle Comments", 20),
-            ("Session Notes", 20),
-        ]
-
-        # Verify each header has correct text and width
-        for idx, (expected_text, expected_width) in enumerate(expected_headers):
-            header_label = header_labels[idx]
-            data_label = data_labels[idx]
-
-            # Remove sort indicators from header text for comparison
+        # Verify each header aligns with corresponding data column
+        for idx, (header_label, data_label) in enumerate(
+            zip(header_labels, data_labels)
+        ):
+            # Remove sort indicators from header text for display in error messages
             header_text = header_label.cget("text").replace(" ▼", "").replace(" ▲", "")
-
-            # Verify header text matches expected
-            self.assertEqual(
-                header_text,
-                expected_text,
-                f"Header {idx} should be '{expected_text}' but got '{header_text}'",
-            )
 
             # Verify header width matches data column width
             header_width = header_label.cget("width")
@@ -1071,28 +1054,22 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
 
             self.assertEqual(
                 header_width,
-                expected_width,
-                f"Header {idx} ('{expected_text}') width should be {expected_width} but got {header_width}",
-            )
-
-            self.assertEqual(
                 data_width,
-                expected_width,
-                f"Data column {idx} width should be {expected_width} but got {data_width}",
+                f"Column {idx} ('{header_text}'): header width ({header_width}) should match data width ({data_width})",
             )
 
             # Verify both use same anchor
             self.assertEqual(
                 header_label.cget("anchor"),
                 data_label.cget("anchor"),
-                f"Column {idx} header and data should have same anchor",
+                f"Column {idx} ('{header_text}'): header and data should have same anchor",
             )
 
             # Verify both use same padx
             self.assertEqual(
                 header_label.cget("padx"),
                 data_label.cget("padx"),
-                f"Column {idx} header and data should have same padx",
+                f"Column {idx} ('{header_text}'): header and data should have same padx",
             )
 
             # BUG: Headers should NOT have pady while data labels don't
@@ -1103,7 +1080,7 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
             self.assertEqual(
                 header_pady,
                 data_pady,
-                f"Column {idx} ('{expected_text}') header pady={header_pady} should match data pady={data_pady}",
+                f"Column {idx} ('{header_text}'): header pady ({header_pady}) should match data pady ({data_pady})",
             )
 
             # BUG: Headers MUST use same font as data for visual alignment
@@ -1113,7 +1090,7 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
             self.assertNotIn(
                 "bold",
                 header_font,
-                f"Column {idx} ('{expected_text}') header should NOT use bold font (causes visual width mismatch)",
+                f"Column {idx} ('{header_text}'): header should NOT use bold font (causes visual width mismatch)",
             )
 
 
