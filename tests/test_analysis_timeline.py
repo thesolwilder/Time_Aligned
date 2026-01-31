@@ -1094,5 +1094,267 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
             )
 
 
+class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
+    """Test that comment fields wrap and display full text"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {
+                "Work": {"is_default": True, "active": True},
+            },
+            "projects": {
+                "Project A": {"sphere": "Work", "is_default": True, "active": True},
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_comment_wrap_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_comment_wrap_data.json"
+        )
+
+    def test_primary_comment_shows_full_text_without_truncation(self):
+        """Test that primary comment displays complete text, not truncated to 20 chars"""
+        date = "2026-01-31"
+        long_comment = "This is a very long primary comment that should be displayed in full without truncation"
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "duration": 3600,
+                        "project": "Project A",
+                        "comment": long_comment,
+                        "start_time": 1000,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update()
+
+        # Find the primary comment label (column 5)
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
+
+        row_frame = timeline_children[0]
+        labels = [
+            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
+        ]
+
+        # Primary comment is the 6th label (index 5)
+        self.assertGreaterEqual(len(labels), 6, "Should have at least 6 columns")
+        primary_comment_label = labels[5]
+
+        # Should show FULL text, not truncated
+        displayed_text = primary_comment_label.cget("text")
+        self.assertEqual(
+            displayed_text,
+            long_comment,
+            "Primary comment should display full text without truncation",
+        )
+        self.assertGreater(
+            len(displayed_text),
+            20,
+            "Comment should be longer than 20 chars to verify no truncation",
+        )
+
+    def test_comment_labels_have_wraplength_configured(self):
+        """Test that comment labels have wraplength set for text wrapping"""
+        date = "2026-01-31"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "duration": 3600,
+                        "project": "Project A",
+                        "comment": "Long comment that should wrap",
+                        "start_time": 1000,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update()
+
+        # Get first row
+        timeline_children = frame.timeline_frame.winfo_children()
+        row_frame = timeline_children[0]
+        labels = [
+            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
+        ]
+
+        # Comment columns: Primary Comment (5), Secondary Comment (7),
+        # Active Comments (8), Break Comments (9), Session Notes (10)
+        comment_indices = [5, 7, 8, 9, 10]
+
+        for idx in comment_indices:
+            if idx < len(labels):
+                label = labels[idx]
+                wraplength = label.cget("wraplength")
+                self.assertGreater(
+                    wraplength,
+                    0,
+                    f"Comment column {idx} should have wraplength > 0 for text wrapping",
+                )
+
+    def test_all_comment_fields_show_full_content(self):
+        """Test that all comment types display full text without truncation"""
+        date = "2026-01-31"
+
+        primary_comment = "Primary action comment that is quite long and detailed"
+        secondary_comment = "Secondary action comment with lots of information"
+        active_comment = "Session active comments field with comprehensive notes"
+        break_comment = "Session break comments describing the break activities"
+        session_notes_text = (
+            "Overall session notes with important contextual information"
+        )
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 2400,
+                "break_duration": 1200,
+                "session_active_comments": active_comment,
+                "session_break_idle_comments": break_comment,
+                "session_notes": session_notes_text,
+                "active": [
+                    {
+                        "duration": 2400,
+                        "project": "Project A",
+                        "comment": primary_comment,
+                        "start_time": 1000,
+                    }
+                ],
+                "breaks": [
+                    {
+                        "duration": 1200,
+                        "action": "Resting",
+                        "comment": secondary_comment,
+                        "start_time": 3400,
+                    }
+                ],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update()
+
+        # Should have multiple rows (active + break)
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(
+            len(timeline_children), 1, "Should have multiple timeline rows"
+        )
+
+        # Check active period row (first row)
+        active_row = timeline_children[0]
+        active_labels = [
+            child
+            for child in active_row.winfo_children()
+            if isinstance(child, tk.Label)
+        ]
+
+        # Verify primary comment is not truncated
+        primary_label = active_labels[5]
+        self.assertEqual(primary_label.cget("text"), primary_comment)
+
+        # Verify session comments are not truncated
+        active_comments_label = active_labels[8]
+        self.assertEqual(active_comments_label.cget("text"), active_comment)
+
+        session_notes_label = active_labels[10]
+        self.assertEqual(session_notes_label.cget("text"), session_notes_text)
+
+    def test_empty_comments_display_correctly(self):
+        """Test that empty comment fields display properly without errors"""
+        date = "2026-01-31"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "duration": 3600,
+                        "project": "Project A",
+                        "comment": "",  # Empty comment
+                        "start_time": 1000,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Should not raise exception
+        frame.update_timeline()
+        self.root.update()
+
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
+
+
 if __name__ == "__main__":
     unittest.main()

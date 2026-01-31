@@ -810,7 +810,14 @@ class AnalysisFrame(ttk.Frame):
             row_frame.bind("<MouseWheel>", on_main_scroll)
 
             # Create label helper function
-            def create_label(text, width):
+            def create_label(text, width, wraplength=0):
+                """Create a label with optional text wrapping
+                
+                Args:
+                    text: Text to display
+                    width: Width in characters
+                    wraplength: Pixel width for text wrapping (0 = no wrap)
+                """
                 lbl = tk.Label(
                     row_frame,
                     text=text,
@@ -819,23 +826,29 @@ class AnalysisFrame(ttk.Frame):
                     padx=3,
                     bg=bg_color,
                     font=("Arial", 8),
+                    wraplength=wraplength,
+                    justify="left",
                 )
                 lbl.pack(side=tk.LEFT)
                 lbl.bind("<MouseWheel>", on_main_scroll)
                 return lbl
 
             # Column widths (adjust as needed for all columns to fit)
+            # Non-comment columns (no wrapping)
             create_label(period["date"], 10)
             create_label(self.format_time_12hr(period["period_start"]), 9)
             create_label(self.format_duration(period["duration"]), 8)
             create_label(period["type"], 7)
             create_label(period["primary_project"], 15)
-            create_label(period["primary_comment"][:20], 20)
+            
+            # Comment columns with wrapping (150 pixels ~ 20 chars at font size 8)
+            # Show FULL text without truncation
+            create_label(period["primary_comment"], 20, wraplength=150)
             create_label(period["secondary_project"], 15)
-            create_label(period["secondary_comment"][:20], 20)
-            create_label(period["session_active_comments"][:20], 20)
-            create_label(period["session_break_idle_comments"][:20], 20)
-            create_label(period["session_notes"][:20], 20)
+            create_label(period["secondary_comment"], 20, wraplength=150)
+            create_label(period["session_active_comments"], 20, wraplength=150)
+            create_label(period["session_break_idle_comments"], 20, wraplength=150)
+            create_label(period["session_notes"], 20, wraplength=150)
 
         if not periods:
             ttk.Label(

@@ -129,12 +129,56 @@ tests/
 ### Before Committing
 
 ```bash
-# Run all tests
-python tests/run_all_tests.py
+# Run all tests with coverage (suppress warnings)
+python -W ignore -m coverage run tests/run_all_tests.py
 
-# Verify no regressions
-# All tests should pass or have documented reasons for skipping
+# View coverage report
+python -m coverage report
 ```
+
+### Running Full Test Suite with Coverage
+
+**RECOMMENDED METHOD**: Use `run_all_tests.py` with coverage
+
+```powershell
+python -W ignore -m coverage run tests/run_all_tests.py; python -m coverage report
+```
+
+**What this does**:
+
+- `-W ignore`: Suppresses runtime warnings (DeprecationWarning, ResourceWarning, etc.)
+- `coverage run tests/run_all_tests.py`: Runs the test runner with coverage tracking
+- Discovers and runs **all** tests in the `tests/` directory (any file matching `test_*.py`)
+- `coverage report`: Displays coverage statistics after tests complete
+
+**Alternative: Suppress specific warning types only**
+
+```powershell
+# Suppress only deprecation warnings
+python -W ignore::DeprecationWarning -m coverage run tests/run_all_tests.py; python -m coverage report
+
+# Suppress multiple specific types
+python -W ignore::DeprecationWarning -W ignore::ResourceWarning -m coverage run tests/run_all_tests.py; python -m coverage report
+```
+
+**Why use run_all_tests.py instead of unittest directly?**
+
+- ✅ Properly discovers all test files in the tests directory
+- ✅ Handles test dependencies and imports correctly
+- ✅ Provides formatted test summary output
+- ❌ Running `unittest` directly can cause import and path errors
+
+**Output**: You'll see test progress followed by a summary and coverage report.
+
+**Interpreting Results**:
+
+- `.` = Test passed
+- `E` = Error (test crashed)
+- `F` = Failure (assertion failed)
+- `s` = Test skipped
+- Coverage report shows percentage of code tested
+
+**Does run_all_tests.py run all tests?** Yes, it discovers and runs **all** test files matching `test_*.py` in the tests directory using unittest's discovery mechanism.
 
 ## Current Architecture
 
