@@ -763,6 +763,9 @@ class AnalysisFrame(ttk.Frame):
         for widget in self.timeline_frame.winfo_children():
             widget.destroy()
 
+        # Configure timeline_frame column to expand
+        self.timeline_frame.columnconfigure(0, weight=1)
+
         # Get data using new get_timeline_data method
         range_name = self.card_ranges[self.selected_card]
         periods = self.get_timeline_data(range_name)

@@ -1,6 +1,31 @@
 # Development Guide - Time Aligned
 
-**⚠️ AGENTS: Read this file BEFORE implementing any features or bug fixes.**
+**⚠️ CRITICAL: AI AGENTS MUST FOLLOW THESE DIRECTIVES**
+
+## 🧠 AGENT MEMORY SYSTEM
+
+### ⚠️ DIRECTIVE 1: READ BEFORE ANY ACTION
+
+**BEFORE making ANY code changes**, you MUST read [AGENT_MEMORY.md](AGENT_MEMORY.md) to:
+
+- Review what approaches have been tried before
+- Understand what worked and what didn't work
+- Avoid repeating failed approaches
+- Learn from past successful patterns
+
+### ⚠️ DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
+
+**AFTER completing ANY code changes**, you MUST update [AGENT_MEMORY.md](AGENT_MEMORY.md) with:
+
+- Everything you tried (all approaches, not just the final one)
+- Whether each approach worked or failed
+- WHY it worked or didn't work
+- Emphasis on what worked (so it can be reused)
+- Key learnings for future reference
+
+**This is not optional** - it builds institutional knowledge and prevents wasted effort.
+
+---
 
 ## Overview
 
@@ -108,6 +133,32 @@ tests/
 
 ## Development Workflow
 
+### Running Tests
+
+**During Development**: Run only the relevant test files
+
+```bash
+# Run specific test file
+python tests/test_<module>.py
+
+# Run multiple related test files
+python tests/test_backup.py
+python tests/test_session_tracker.py
+```
+
+**Before Major Commits**: Run full test suite with coverage
+
+```bash
+python -W ignore -m coverage run tests/run_all_tests.py; python -m coverage report
+```
+
+**Why Run Only Relevant Tests?**
+
+- ✅ Faster feedback during development
+- ✅ Focus on what you're changing
+- ✅ Reduces context switching
+- ✅ Full suite reserved for pre-commit validation
+
 ### Adding a New Feature
 
 1. **Create test file** (if doesn't exist): `tests/test_<feature>.py`
@@ -115,25 +166,27 @@ tests/
 3. **Write unit tests**: Test each function (TDD - write tests first!)
 4. **Implement feature**: Write minimal code to pass tests
 5. **Write integration tests**: Test feature with related components
-6. **Refactor**: Improve code while keeping tests green
-7. **Update documentation**: README, docstrings, etc.
+6. **Run relevant test file(s)**: `python tests/test_<feature>.py`
+7. **Refactor**: Improve code while keeping tests green
+8. **Update documentation**: README, docstrings, etc.
 
 ### Fixing a Bug
 
 1. **Create failing test**: Reproduce the bug in a test
 2. **Verify test fails**: Confirms bug exists
 3. **Fix the bug**: Minimal change to make test pass
-4. **Run full test suite**: Ensure no regressions
+4. **Run relevant test file(s)**: `python tests/test_<affected_module>.py`
 5. **Add edge case tests**: Prevent similar bugs
 
 ### Before Committing
 
 ```bash
-# Run all tests with coverage (suppress warnings)
-python -W ignore -m coverage run tests/run_all_tests.py
+# Run only relevant test files for your changes
+python tests/test_<module>.py
+python tests/test_<related_module>.py
 
-# View coverage report
-python -m coverage report
+# Or run full test suite with coverage (only before major commits/PRs)
+python -W ignore -m coverage run tests/run_all_tests.py; python -m coverage report
 ```
 
 ### Running Full Test Suite with Coverage
@@ -240,7 +293,7 @@ When following TDD, the "red" phase should produce a **test failure**, not a tes
    - If ERROR: Fix test imports, syntax, or scaffolding first
    - If FAIL: Proceed to implementation
 3. **Implement** - Write minimal code to make test pass
-4. **Run test** - Should now show PASS (.)
+4. **Run relevant test file** - `python tests/test_<module>.py` - Should now show PASS (.)
 5. **Refactor** - Improve while keeping tests green
 
 **Common Causes of Errors (E) Instead of Failures (F):**

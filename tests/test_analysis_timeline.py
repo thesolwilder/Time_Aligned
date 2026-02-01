@@ -1356,5 +1356,140 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
 
 
+class TestTimelineRowStretching(unittest.TestCase):
+    """Test that timeline rows stretch to full screen width"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {"Work": {"is_default": True, "active": True}},
+            "projects": {
+                "Project A": {"sphere": "Work", "is_default": True, "active": True}
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_timeline_stretch_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_timeline_stretch_data.json"
+        )
+
+    def test_timeline_rows_have_sticky_we_grid(self):
+        """Test that timeline row frames use sticky=(W,E) to stretch horizontally"""
+        # Use today's date to ensure it's in the "Last 7 Days" range
+        from datetime import datetime
+
+        date = datetime.now().strftime("%Y-%m-%d")
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 3000,
+                "break_duration": 600,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "Project A",
+                        "comment": "Test comment",
+                        "start": "10:00:00",
+                    }
+                ],
+                "breaks": [
+                    {"duration": 600, "comment": "Test break", "start": "11:00:00"}
+                ],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Update timeline to create rows
+        frame.update_timeline()
+        self.root.update()
+
+        # Get timeline row frames
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
+
+        # Check first row frame
+        first_row = timeline_children[0]
+
+        # Verify row is gridded with sticky=(W,E) to allow horizontal stretching
+        grid_info = first_row.grid_info()
+        self.assertIn("sticky", grid_info, "Row should have grid sticky configuration")
+
+        # Sticky should include 'w' and 'e' for horizontal stretching
+        sticky = grid_info["sticky"]
+        self.assertIn(
+            "w", sticky.lower(), "Row should have west (w) sticky to stretch left"
+        )
+        self.assertIn(
+            "e", sticky.lower(), "Row should have east (e) sticky to stretch right"
+        )
+
+    def test_timeline_frame_has_column_weight(self):
+        """Test that timeline_frame has column weight configured for stretching"""
+        # Use today's date to ensure it's in the "Last 7 Days" range
+        from datetime import datetime
+
+        date = datetime.now().strftime("%Y-%m-%d")
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 3600,
+                "active_duration": 3000,
+                "break_duration": 600,
+                "active": [
+                    {"duration": 3000, "project": "Project A", "start": "10:00:00"}
+                ],
+                "breaks": [{"duration": 600, "start": "11:00:00"}],
+                "idle_periods": [],
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Update timeline to create rows
+        frame.update_timeline()
+        self.root.update()
+
+        # Check that timeline_frame has column 0 configured with weight
+        # This allows the row frames to expand horizontally
+        col_config = frame.timeline_frame.grid_columnconfigure(0)
+
+        # Column should have weight > 0 to allow expansion
+        weight = (
+            col_config.get("weight", 0) if isinstance(col_config, dict) else col_config
+        )
+        self.assertGreater(
+            weight, 0, "Timeline frame column 0 should have weight > 0 for stretching"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
