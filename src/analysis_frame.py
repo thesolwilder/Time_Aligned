@@ -43,6 +43,9 @@ class AnalysisFrame(ttk.Frame):
         # Currently selected card for timeline
         self.selected_card = 0
 
+        # Status filter (active, all, archived) - controls both sphere and project dropdowns
+        self.status_filter = tk.StringVar(value="active")
+
         self.create_widgets()
 
     def load_card_ranges(self):
@@ -111,13 +114,15 @@ class AnalysisFrame(ttk.Frame):
             row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
 
+        # Sphere label and dropdown
         ttk.Label(filter_frame, text="Sphere:").pack(side=tk.LEFT, padx=5)
 
         # Get default sphere using tracker's method
         default_sphere = self.tracker._get_default_sphere()
-        spheres = ["All Spheres"] + list(
-            self.tracker.settings.get("spheres", {}).keys()
-        )
+
+        # Build sphere list based on filter (default is active)
+        spheres = self.get_filtered_spheres()
+
         self.sphere_var = tk.StringVar(value=default_sphere)
         self.sphere_filter = ttk.Combobox(
             filter_frame,
@@ -129,6 +134,7 @@ class AnalysisFrame(ttk.Frame):
         self.sphere_filter.pack(side=tk.LEFT, padx=5)
         self.sphere_filter.bind("<<ComboboxSelected>>", self.on_filter_changed)
 
+        # Project label and dropdown
         ttk.Label(filter_frame, text="Project:").pack(side=tk.LEFT, padx=5)
 
         # Get default project for the default sphere
@@ -140,6 +146,34 @@ class AnalysisFrame(ttk.Frame):
         self.project_filter.pack(side=tk.LEFT, padx=5)
         self.project_filter.bind("<<ComboboxSelected>>", self.on_filter_changed)
         self.update_project_filter(set_default=True)
+
+        # Radio buttons for status filter (controls both sphere and project)
+        radio_frame = ttk.Frame(filter_frame)
+        radio_frame.pack(side=tk.LEFT, padx=5)
+
+        ttk.Radiobutton(
+            radio_frame,
+            text="Active",
+            variable=self.status_filter,
+            value="active",
+            command=self.refresh_dropdowns,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Radiobutton(
+            radio_frame,
+            text="All",
+            variable=self.status_filter,
+            value="all",
+            command=self.refresh_dropdowns,
+        ).pack(side=tk.LEFT, padx=2)
+
+        ttk.Radiobutton(
+            radio_frame,
+            text="Archived",
+            variable=self.status_filter,
+            value="archived",
+            command=self.refresh_dropdowns,
+        ).pack(side=tk.LEFT, padx=2)
 
         # Three cards
         cards_frame = ttk.Frame(content_frame)
@@ -382,8 +416,9 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_title.config(text=f"Timeline: {self.card_ranges[card_index]}")
 
     def update_project_filter(self, set_default=False):
-        """Update project filter based on selected sphere"""
+        """Update project filter based on selected sphere and project status filter"""
         sphere = self.sphere_var.get()
+        filter_status = self.status_filter.get()
         projects = ["All Projects"]
 
         if sphere == "All Spheres":
@@ -391,11 +426,18 @@ class AnalysisFrame(ttk.Frame):
             self.project_filter.config(state="disabled")
             self.project_var.set("All Projects")
         else:
-            # Get projects for selected sphere
+            # Get projects for selected sphere based on filter status
             self.project_filter.config(state="readonly")
             for proj, data in self.tracker.settings.get("projects", {}).items():
-                if data.get("sphere") == sphere and data.get("active", True):
-                    projects.append(proj)
+                if data.get("sphere") == sphere:
+                    is_active = data.get("active", True)
+
+                    if filter_status == "active" and is_active:
+                        projects.append(proj)
+                    elif filter_status == "archived" and not is_active:
+                        projects.append(proj)
+                    elif filter_status == "all":
+                        projects.append(proj)
 
             self.project_filter["values"] = projects
 
@@ -414,6 +456,56 @@ class AnalysisFrame(ttk.Frame):
         if event and event.widget == self.sphere_filter:
             self.update_project_filter()
 
+        self.refresh_all()
+
+    def get_filtered_spheres(self):
+        """
+        Get list of spheres based on current filter status (active/all/archived)
+
+        Returns:
+            list: List of sphere names including "All Spheres" option
+        """
+        filter_status = self.status_filter.get()
+        spheres = ["All Spheres"]
+
+        for sphere, data in self.tracker.settings.get("spheres", {}).items():
+            is_active = data.get("active", True)
+
+            if filter_status == "active" and is_active:
+                spheres.append(sphere)
+            elif filter_status == "archived" and not is_active:
+                spheres.append(sphere)
+            elif filter_status == "all":
+                spheres.append(sphere)
+
+        return spheres
+
+    def refresh_dropdowns(self):
+        """
+        Refresh both sphere and project dropdowns based on the current filter status
+        Updates the dropdown values and resets selections if needed
+        """
+        # Get filtered spheres
+        spheres = self.get_filtered_spheres()
+
+        # Update sphere dropdown values
+        self.sphere_filter["values"] = spheres
+
+        # If current sphere selection is not in the new list, reset to "All Spheres"
+        current_sphere = self.sphere_var.get()
+        if current_sphere not in spheres:
+            self.sphere_var.set("All Spheres")
+
+        # Update project filter with current sphere and status filter
+        self.update_project_filter()
+
+        # If current project selection is not in the new list, reset to "All Projects"
+        current_project = self.project_var.get()
+        current_values = list(self.project_filter["values"])
+        if current_project not in current_values:
+            self.project_var.set("All Projects")
+
+        # Refresh the data display
         self.refresh_all()
 
     def refresh_all(self):
@@ -815,7 +907,7 @@ class AnalysisFrame(ttk.Frame):
             # Create label helper function
             def create_label(text, width, wraplength=0):
                 """Create a label with optional text wrapping
-                
+
                 Args:
                     text: Text to display
                     width: Width in characters
@@ -843,7 +935,7 @@ class AnalysisFrame(ttk.Frame):
             create_label(self.format_duration(period["duration"]), 8)
             create_label(period["type"], 7)
             create_label(period["primary_project"], 15)
-            
+
             # Comment columns with wrapping (150 pixels ~ 20 chars at font size 8)
             # Show FULL text without truncation
             create_label(period["primary_comment"], 20, wraplength=150)
@@ -902,9 +994,7 @@ class AnalysisFrame(ttk.Frame):
         create_header_label("Start", "start", 9).pack(side=tk.LEFT)
         create_header_label("Duration", "duration", 8).pack(side=tk.LEFT)
         create_header_label("Type", "type", 7).pack(side=tk.LEFT)
-        create_header_label("Primary Action", "primary_project", 15).pack(
-            side=tk.LEFT
-        )
+        create_header_label("Primary Action", "primary_project", 15).pack(side=tk.LEFT)
         tk.Label(
             self.timeline_header_frame,
             text="Primary Comment",

@@ -127,8 +127,7 @@ tests/
 ### Test Data
 
 - Use `tests/test_data/` for sample files
-- Create fixtures in `conftest.py` if using pytest
-- Clean up test artifacts in teardown
+- Clean up test artifacts in teardown (use `TestFileManager` helper)
 - Never modify production data files in tests
 
 ## Development Workflow

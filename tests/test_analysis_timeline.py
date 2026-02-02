@@ -1491,5 +1491,331 @@ class TestTimelineRowStretching(unittest.TestCase):
         )
 
 
+class TestAnalysisFrameProjectRadioButtons(unittest.TestCase):
+    """Test project filter radio buttons (Active/All/Archived)"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {
+                "Work": {"is_default": True, "active": True},
+                "Personal": {"is_default": False, "active": True},
+            },
+            "projects": {
+                "Active Project": {
+                    "sphere": "Work",
+                    "is_default": True,
+                    "active": True,
+                },
+                "Another Active": {
+                    "sphere": "Work",
+                    "is_default": False,
+                    "active": True,
+                },
+                "Archived Project": {
+                    "sphere": "Work",
+                    "is_default": False,
+                    "active": False,
+                },
+                "Personal Active": {
+                    "sphere": "Personal",
+                    "is_default": True,
+                    "active": True,
+                },
+                "Personal Archived": {
+                    "sphere": "Personal",
+                    "is_default": False,
+                    "active": False,
+                },
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_project_radio_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_project_radio_data.json"
+        )
+
+    def test_project_filter_variable_exists(self):
+        """Test that status_filter variable is created"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Check that filter variable exists and defaults to 'active'
+        self.assertTrue(hasattr(frame, "status_filter"))
+        self.assertEqual(frame.status_filter.get(), "active")
+
+    def test_project_filter_radio_buttons_exist(self):
+        """Test that radio buttons for project filtering are created"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Should have radio buttons for active, all, and archived
+        # Check they are bound to status_filter variable
+        self.assertTrue(hasattr(frame, "status_filter"))
+        self.assertIsInstance(frame.status_filter, tk.StringVar)
+
+    def test_active_filter_shows_only_active_projects(self):
+        """Test that active filter shows only active projects in dropdown"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Select Work sphere so we can see projects
+        frame.sphere_var.set("Work")
+        frame.status_filter.set("active")
+        frame.update_project_filter()
+
+        # Get dropdown values
+        dropdown_values = list(frame.project_filter["values"])
+
+        # Should include "All Projects", active projects but NOT archived
+        self.assertIn("All Projects", dropdown_values)
+        self.assertIn("Active Project", dropdown_values)
+        self.assertIn("Another Active", dropdown_values)
+        self.assertNotIn("Archived Project", dropdown_values)
+
+    def test_all_filter_shows_all_projects(self):
+        """Test that all filter shows both active and archived projects"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Select Work sphere
+        frame.sphere_var.set("Work")
+        frame.status_filter.set("all")
+        frame.update_project_filter()
+
+        # Get dropdown values
+        dropdown_values = list(frame.project_filter["values"])
+
+        # Should include all projects
+        self.assertIn("All Projects", dropdown_values)
+        self.assertIn("Active Project", dropdown_values)
+        self.assertIn("Another Active", dropdown_values)
+        self.assertIn("Archived Project", dropdown_values)
+
+    def test_archived_filter_shows_only_archived_projects(self):
+        """Test that archived filter shows only archived projects"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Select Work sphere
+        frame.sphere_var.set("Work")
+        frame.status_filter.set("archived")
+        frame.update_project_filter()
+
+        # Get dropdown values
+        dropdown_values = list(frame.project_filter["values"])
+
+        # Should include "All Projects" and archived projects but NOT active
+        self.assertIn("All Projects", dropdown_values)
+        self.assertNotIn("Active Project", dropdown_values)
+        self.assertNotIn("Another Active", dropdown_values)
+        self.assertIn("Archived Project", dropdown_values)
+
+    def test_default_filter_is_active(self):
+        """Test that the default project filter is set to active on initialization"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Default should be active
+        self.assertEqual(frame.status_filter.get(), "active")
+
+        # Select Work sphere
+        frame.sphere_var.set("Work")
+        frame.update_project_filter()
+
+        # Dropdown should show only active projects by default
+        dropdown_values = list(frame.project_filter["values"])
+        self.assertIn("Active Project", dropdown_values)
+        self.assertIn("Another Active", dropdown_values)
+        self.assertNotIn("Archived Project", dropdown_values)
+
+
+class TestAnalysisFrameSphereRadioButtons(unittest.TestCase):
+    """Test sphere filter radio buttons (Active/All/Archived)"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {
+                "Work": {"is_default": True, "active": True},
+                "Personal": {"is_default": False, "active": True},
+                "Hobby": {"is_default": False, "active": False},
+            },
+            "projects": {
+                "Project A": {"sphere": "Work", "is_default": True, "active": True},
+                "Exercise": {"sphere": "Personal", "is_default": True, "active": True},
+                "Gaming": {"sphere": "Hobby", "is_default": True, "active": True},
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_radio_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_sphere_radio_data.json"
+        )
+
+    def test_sphere_filter_variable_exists(self):
+        """Test that status_filter variable is created"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Check that filter variable exists and defaults to 'active'
+        self.assertTrue(hasattr(frame, "status_filter"))
+        self.assertEqual(frame.status_filter.get(), "active")
+
+    def test_sphere_filter_radio_buttons_exist(self):
+        """Test that radio buttons for sphere filtering are created"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Should have radio buttons for active, all, and archived
+        # Check they are bound to status_filter variable
+        self.assertTrue(hasattr(frame, "status_filter"))
+        self.assertIsInstance(frame.status_filter, tk.StringVar)
+
+    def test_active_filter_shows_only_active_spheres(self):
+        """Test that active filter shows only active spheres in dropdown"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filter to active
+        frame.status_filter.set("active")
+        frame.refresh_dropdowns()
+
+        # Get dropdown values
+        dropdown_values = list(frame.sphere_filter["values"])
+
+        # Should include "All Spheres", "Work", and "Personal" but NOT "Hobby"
+        self.assertIn("All Spheres", dropdown_values)
+        self.assertIn("Work", dropdown_values)
+        self.assertIn("Personal", dropdown_values)
+        self.assertNotIn("Hobby", dropdown_values)
+
+    def test_all_filter_shows_all_spheres(self):
+        """Test that all filter shows both active and archived spheres"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filter to all
+        frame.status_filter.set("all")
+        frame.refresh_dropdowns()
+
+        # Get dropdown values
+        dropdown_values = list(frame.sphere_filter["values"])
+
+        # Should include all spheres
+        self.assertIn("All Spheres", dropdown_values)
+        self.assertIn("Work", dropdown_values)
+        self.assertIn("Personal", dropdown_values)
+        self.assertIn("Hobby", dropdown_values)
+
+    def test_archived_filter_shows_only_archived_spheres(self):
+        """Test that archived filter shows only archived spheres"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filter to archived
+        frame.status_filter.set("archived")
+        frame.refresh_dropdowns()
+
+        # Get dropdown values
+        dropdown_values = list(frame.sphere_filter["values"])
+
+        # Should include "All Spheres" and "Hobby" but NOT "Work" or "Personal"
+        self.assertIn("All Spheres", dropdown_values)
+        self.assertNotIn("Work", dropdown_values)
+        self.assertNotIn("Personal", dropdown_values)
+        self.assertIn("Hobby", dropdown_values)
+
+    def test_default_filter_is_active(self):
+        """Test that the default sphere filter is set to active on initialization"""
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Default should be active
+        self.assertEqual(frame.status_filter.get(), "active")
+
+        # Dropdown should show only active spheres by default
+        dropdown_values = list(frame.sphere_filter["values"])
+        self.assertIn("Work", dropdown_values)
+        self.assertIn("Personal", dropdown_values)
+        self.assertNotIn("Hobby", dropdown_values)
+
+
 if __name__ == "__main__":
     unittest.main()
