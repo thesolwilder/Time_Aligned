@@ -233,6 +233,27 @@ class AnalysisFrame(ttk.Frame):
         create_initial_header("Date", "date", 10)
         create_initial_header("Period Start", "start", 9)
         create_initial_header("Duration", "duration", 8)
+        create_initial_header("Sphere", "sphere", 12)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Sphere Active",
+            font=("Arial", 8),
+            width=5,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
+        tk.Label(
+            self.timeline_header_frame,
+            text="Project Active",
+            font=("Arial", 8),
+            width=5,
+            anchor="w",
+            padx=3,
+            pady=3,
+            bg="#d0d0d0",
+        ).pack(side=tk.LEFT)
         create_initial_header("Type", "type", 7)
         create_initial_header("Primary Project/Action", "primary_project", 15)
         tk.Label(
@@ -416,7 +437,14 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_title.config(text=f"Timeline: {self.card_ranges[card_index]}")
 
     def update_project_filter(self, set_default=False):
-        """Update project filter based on selected sphere and project status filter"""
+        """
+        Update project filter based on selected sphere and project status filter
+
+        Filter behavior:
+        - active: Only active projects from selected sphere
+        - archived: For active spheres show inactive projects; for inactive spheres show all projects
+        - all: All projects from selected sphere
+        """
         sphere = self.sphere_var.get()
         filter_status = self.status_filter.get()
         projects = ["All Projects"]
@@ -428,15 +456,32 @@ class AnalysisFrame(ttk.Frame):
         else:
             # Get projects for selected sphere based on filter status
             self.project_filter.config(state="readonly")
+
+            # Check if the selected sphere is active or inactive
+            sphere_is_active = (
+                self.tracker.settings.get("spheres", {})
+                .get(sphere, {})
+                .get("active", True)
+            )
+
             for proj, data in self.tracker.settings.get("projects", {}).items():
                 if data.get("sphere") == sphere:
                     is_active = data.get("active", True)
 
-                    if filter_status == "active" and is_active:
-                        projects.append(proj)
-                    elif filter_status == "archived" and not is_active:
-                        projects.append(proj)
+                    if filter_status == "active":
+                        # Only show active projects
+                        if is_active:
+                            projects.append(proj)
+                    elif filter_status == "archived":
+                        # If sphere is active, show only inactive projects
+                        # If sphere is inactive, show all projects
+                        if sphere_is_active:
+                            if not is_active:
+                                projects.append(proj)
+                        else:
+                            projects.append(proj)
                     elif filter_status == "all":
+                        # Show all projects
                         projects.append(proj)
 
             self.project_filter["values"] = projects
@@ -462,6 +507,11 @@ class AnalysisFrame(ttk.Frame):
         """
         Get list of spheres based on current filter status (active/all/archived)
 
+        Filter behavior:
+        - active: Only active spheres (with active projects)
+        - archived: Both active spheres (for their inactive projects) and inactive spheres
+        - all: All spheres
+
         Returns:
             list: List of sphere names including "All Spheres" option
         """
@@ -471,11 +521,17 @@ class AnalysisFrame(ttk.Frame):
         for sphere, data in self.tracker.settings.get("spheres", {}).items():
             is_active = data.get("active", True)
 
-            if filter_status == "active" and is_active:
-                spheres.append(sphere)
-            elif filter_status == "archived" and not is_active:
+            if filter_status == "active":
+                # Only show active spheres
+                if is_active:
+                    spheres.append(sphere)
+            elif filter_status == "archived":
+                # Show ALL spheres (both active and inactive)
+                # Active spheres will show their inactive projects
+                # Inactive spheres will show all their projects
                 spheres.append(sphere)
             elif filter_status == "all":
+                # Show all spheres
                 spheres.append(sphere)
 
         return spheres
@@ -699,6 +755,14 @@ class AnalysisFrame(ttk.Frame):
             if sphere_filter != "All Spheres" and session_sphere != sphere_filter:
                 continue
 
+            # Get sphere active status for this session (used by all period types)
+            sphere_name = session_data.get("sphere", "")
+            sphere_active = (
+                self.tracker.settings.get("spheres", {})
+                .get(sphere_name, {})
+                .get("active", True)
+            )
+
             # Get session-level comments
             # Handle both old format (direct fields) and new format (session_comments dict)
             session_comments_dict = session_data.get("session_comments", {})
@@ -751,11 +815,22 @@ class AnalysisFrame(ttk.Frame):
                     ):
                         continue
 
+                # Get project active status
+                project_active = (
+                    self.tracker.settings.get("projects", {})
+                    .get(primary_project, {})
+                    .get("active", True)
+                )
+
                 timeline_data.append(
                     {
                         "date": session_data.get("date"),
                         "period_start": period.get("start", ""),
                         "duration": period.get("duration", 0),
+                        "sphere": sphere_name,
+                        "sphere_active": sphere_active,
+                        "project": primary_project,
+                        "project_active": project_active,
                         "type": "Active",
                         "primary_project": primary_project,
                         "primary_comment": primary_comment,
@@ -794,6 +869,10 @@ class AnalysisFrame(ttk.Frame):
                         "date": session_data.get("date"),
                         "period_start": period.get("start", ""),
                         "duration": period.get("duration", 0),
+                        "sphere": sphere_name,
+                        "sphere_active": sphere_active,
+                        "project": primary_action,
+                        "project_active": True,  # Break actions don't have active status
                         "type": "Break",
                         "primary_project": primary_action,
                         "primary_comment": primary_comment,
@@ -833,6 +912,10 @@ class AnalysisFrame(ttk.Frame):
                             "date": session_data.get("date"),
                             "period_start": period.get("start", ""),
                             "duration": period.get("duration", 0),
+                            "sphere": sphere_name,
+                            "sphere_active": sphere_active,
+                            "project": primary_action,
+                            "project_active": True,  # Idle actions don't have active status
                             "type": "Idle",
                             "primary_project": primary_action,
                             "primary_comment": primary_comment,
@@ -933,17 +1016,21 @@ class AnalysisFrame(ttk.Frame):
             create_label(period["date"], 10)
             create_label(self.format_time_12hr(period["period_start"]), 9)
             create_label(self.format_duration(period["duration"]), 8)
+            create_label(period.get("sphere", ""), 12)
+            create_label("✓" if period.get("sphere_active", True) else "", 5)
+            create_label("✓" if period.get("project_active", True) else "", 5)
             create_label(period["type"], 7)
             create_label(period["primary_project"], 15)
 
-            # Comment columns with wrapping (150 pixels ~ 20 chars at font size 8)
-            # Show FULL text without truncation
-            create_label(period["primary_comment"], 20, wraplength=150)
+            # Comment columns with wrapping
+            # Use width=21 (matching wraplength~150px) + wraplength for text wrapping
+            # Width provides consistent column sizing, wraplength handles text overflow
+            create_label(period["primary_comment"], 21, wraplength=150)
             create_label(period["secondary_project"], 15)
-            create_label(period["secondary_comment"], 20, wraplength=150)
-            create_label(period["session_active_comments"], 20, wraplength=150)
-            create_label(period["session_break_idle_comments"], 20, wraplength=150)
-            create_label(period["session_notes"], 20, wraplength=150)
+            create_label(period["secondary_comment"], 21, wraplength=150)
+            create_label(period["session_active_comments"], 21, wraplength=150)
+            create_label(period["session_break_idle_comments"], 21, wraplength=150)
+            create_label(period["session_notes"], 21, wraplength=150)
 
         if not periods:
             ttk.Label(
@@ -967,10 +1054,13 @@ class AnalysisFrame(ttk.Frame):
         for widget in self.timeline_header_frame.winfo_children():
             widget.destroy()
 
-        def create_header_label(text, column_key, width):
-            """Create clickable header label for sorting"""
+        def create_single_row_header(text, column_key, width):
+            """Create single-row header with vertical centering for alignment with two-row headers"""
+            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
+            container.pack(side=tk.LEFT)
+
             label = tk.Label(
-                self.timeline_header_frame,
+                container,
                 text=(
                     text + " ▼"
                     if self.timeline_sort_column == column_key
@@ -983,66 +1073,76 @@ class AnalysisFrame(ttk.Frame):
                 width=width,
                 anchor="w",
                 padx=3,
+                pady=6,  # Vertical padding to center with two-row headers
                 bg="#d0d0d0",
                 cursor="hand2",
             )
+            label.pack()
             label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
-            return label
+            return container
 
-        # New header columns to match user request
-        create_header_label("Date", "date", 10).pack(side=tk.LEFT)
-        create_header_label("Start", "start", 9).pack(side=tk.LEFT)
-        create_header_label("Duration", "duration", 8).pack(side=tk.LEFT)
-        create_header_label("Type", "type", 7).pack(side=tk.LEFT)
-        create_header_label("Primary Action", "primary_project", 15).pack(side=tk.LEFT)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Primary Comment",
-            font=("Arial", 8),
-            width=20,
-            anchor="w",
-            padx=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        create_header_label("Secondary Action", "secondary_project", 15).pack(
-            side=tk.LEFT
-        )
-        tk.Label(
-            self.timeline_header_frame,
-            text="Secondary Comment",
-            font=("Arial", 8),
-            width=20,
-            anchor="w",
-            padx=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Active Comments",
-            font=("Arial", 8),
-            width=20,
-            anchor="w",
-            padx=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Break Comments",
-            font=("Arial", 8),
-            width=20,
-            anchor="w",
-            padx=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Session Notes",
-            font=("Arial", 8),
-            width=20,
-            anchor="w",
-            padx=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
+        def create_two_row_header(top_text, bottom_text, width):
+            """Create two-row header with stacked labels for clearer column meaning"""
+            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
+            container.pack(side=tk.LEFT)
+
+            # Top row label
+            tk.Label(
+                container,
+                text=top_text,
+                font=("Arial", 8),
+                width=width,
+                anchor="w",
+                padx=3,
+                bg="#d0d0d0",
+            ).pack()
+
+            # Bottom row label (slightly smaller font)
+            tk.Label(
+                container,
+                text=bottom_text,
+                font=("Arial", 7),
+                width=width,
+                anchor="w",
+                padx=3,
+                bg="#d0d0d0",
+            ).pack()
+
+            return container
+
+        def create_non_sortable_single_row_header(text, width):
+            """Create non-sortable single-row header with vertical centering"""
+            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
+            container.pack(side=tk.LEFT)
+
+            tk.Label(
+                container,
+                text=text,
+                font=("Arial", 8),
+                width=width,
+                anchor="w",
+                padx=3,
+                pady=6,  # Vertical padding to center with two-row headers
+                bg="#d0d0d0",
+            ).pack()
+
+            return container
+
+        # Header columns with new two-row design for "Active" columns
+        create_single_row_header("Date", "date", 10)
+        create_single_row_header("Start", "start", 9)
+        create_single_row_header("Duration", "duration", 8)
+        create_single_row_header("Sphere", "sphere", 12)
+        create_two_row_header("Sphere", "Active", 5)  # Two-row: "Sphere" / "Active"
+        create_two_row_header("Project", "Active", 5)  # Two-row: "Project" / "Active"
+        create_single_row_header("Type", "type", 7)
+        create_single_row_header("Primary Action", "primary_project", 15)
+        create_non_sortable_single_row_header("Primary Comment", 21)
+        create_single_row_header("Secondary Action", "secondary_project", 15)
+        create_non_sortable_single_row_header("Secondary Comment", 21)
+        create_non_sortable_single_row_header("Active Comments", 21)
+        create_non_sortable_single_row_header("Break Comments", 21)
+        create_non_sortable_single_row_header("Session Notes", 21)
 
     def export_to_csv(self):
         """Export timeline data to CSV"""

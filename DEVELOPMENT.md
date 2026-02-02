@@ -13,6 +13,32 @@
 - Avoid repeating failed approaches
 - Learn from past successful patterns
 
+**🔍 CRITICAL: Search for Related Entries**
+
+When working on a specific task (bug fix, feature, or test), you MUST:
+
+1. **Search AGENT_MEMORY.md for keywords related to your task**
+   - Module names (e.g., "analysis_frame", "timeline", "backup")
+   - Technology/library names (e.g., "tkinter", "pandas", "CSV")
+   - Error patterns (e.g., "geometry manager", "headless", "width")
+   - Feature areas (e.g., "columns", "filtering", "export")
+
+2. **Review ALL related entries before starting**
+   - Check "What Didn't Work" sections for past failures
+   - Note specific error messages and their causes
+   - Review "Key Learnings" for best practices
+   - Apply successful patterns from "What Worked" sections
+
+3. **Common pitfalls to search for:**
+   - **Tkinter tests**: Search "tkinter", "headless", "geometry", "winfo"
+     - Example: Mixing `pack()` and `grid()` causes TclError
+     - Example: `winfo_width()` returns 1px in headless tests, use `winfo_reqwidth()`
+   - **File operations**: Search "file", "backup", "JSON", "CSV"
+   - **UI components**: Search specific widgets, "frame", "canvas", "label"
+   - **Data processing**: Search "filtering", "sorting", "aggregation"
+
+**Why this matters**: AGENT_MEMORY.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
+
 ### ⚠️ DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
 
 **AFTER completing ANY code changes**, you MUST update [AGENT_MEMORY.md](AGENT_MEMORY.md) with:
