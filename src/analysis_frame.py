@@ -256,57 +256,107 @@ class AnalysisFrame(ttk.Frame):
         ).pack(side=tk.LEFT)
         create_initial_header("Type", "type", 7)
         create_initial_header("Primary Project/Action", "primary_project", 15)
-        tk.Label(
+        header_txt = tk.Text(
             self.timeline_header_frame,
-            text="Primary Comment",
-            font=("Arial", 8, "bold"),
-            width=20,
-            anchor="w",
-            padx=3,
-            pady=3,
+            width=21,
+            height=1,
+            wrap="word",
+            font=("Arial", 8),  # Remove bold to match data rows
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
+            relief="flat",
+            padx=3,
+            pady=0,  # Match data row padding
+            borderwidth=0,
+            highlightthickness=0,
+            insertwidth=0,
+            spacing1=0,
+            spacing2=0,
+            spacing3=0,
+        )
+        header_txt.insert("1.0", "Primary Comment")
+        header_txt.config(state="disabled")
+        header_txt.pack(side=tk.LEFT)
         create_initial_header("Secondary Project/Action", "secondary_project", 15)
-        tk.Label(
+        header_txt = tk.Text(
             self.timeline_header_frame,
-            text="Secondary Comment",
-            font=("Arial", 8, "bold"),
-            width=20,
-            anchor="w",
-            padx=3,
-            pady=3,
+            width=21,
+            height=1,
+            wrap="word",
+            font=("Arial", 8),  # Match data rows
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
+            relief="flat",
+            padx=3,
+            pady=0,  # Match data row padding
+            borderwidth=0,
+            highlightthickness=0,
+            insertwidth=0,
+            spacing1=0,
+            spacing2=0,
+            spacing3=0,
+        )
+        header_txt.insert("1.0", "Secondary Comment")
+        header_txt.config(state="disabled")
+        header_txt.pack(side=tk.LEFT)
+        header_txt = tk.Text(
             self.timeline_header_frame,
-            text="Session Active Comments",
-            font=("Arial", 8, "bold"),
-            width=20,
-            anchor="w",
-            padx=3,
-            pady=3,
+            width=21,
+            height=1,
+            wrap="word",
+            font=("Arial", 8),
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
+            relief="flat",
+            padx=3,
+            pady=0,
+            borderwidth=0,
+            highlightthickness=0,
+            insertwidth=0,
+            spacing1=0,
+            spacing2=0,
+            spacing3=0,
+        )
+        header_txt.insert("1.0", "Session Active Comments")
+        header_txt.config(state="disabled")
+        header_txt.pack(side=tk.LEFT)
+        header_txt = tk.Text(
             self.timeline_header_frame,
-            text="Session Break/Idle Comments",
-            font=("Arial", 8, "bold"),
-            width=20,
-            anchor="w",
-            padx=3,
-            pady=3,
+            width=21,
+            height=1,
+            wrap="word",
+            font=("Arial", 8),
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
+            relief="flat",
+            padx=3,
+            pady=0,
+            borderwidth=0,
+            highlightthickness=0,
+            insertwidth=0,
+            spacing1=0,
+            spacing2=0,
+            spacing3=0,
+        )
+        header_txt.insert("1.0", "Session Break/Idle Comments")
+        header_txt.config(state="disabled")
+        header_txt.pack(side=tk.LEFT)
+        header_txt = tk.Text(
             self.timeline_header_frame,
-            text="Session Notes",
-            font=("Arial", 8, "bold"),
-            width=20,
-            anchor="w",
-            padx=3,
-            pady=3,
+            width=21,
+            height=1,
+            wrap="word",
+            font=("Arial", 8),
             bg="#d0d0d0",
-        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+            relief="flat",
+            padx=3,
+            pady=0,
+            borderwidth=0,
+            highlightthickness=0,
+            insertwidth=0,
+            spacing1=0,
+            spacing2=0,
+            spacing3=0,
+        )
+        header_txt.insert("1.0", "Session Notes")
+        header_txt.config(state="disabled")
+        header_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Timeline with scrollbar
         timeline_container = ttk.Frame(content_frame)
@@ -988,33 +1038,71 @@ class AnalysisFrame(ttk.Frame):
             row_frame.bind("<MouseWheel>", on_main_scroll)
 
             # Create label helper function
-            def create_label(text, width, wraplength=0, expand=False):
-                """Create a label with optional text wrapping
+            def create_label(
+                text, width, wraplength=0, expand=False, use_text_widget=False
+            ):
+                """Create a label or text widget with optional text wrapping
 
                 Args:
                     text: Text to display
                     width: Width in characters
-                    wraplength: Pixel width for text wrapping (0 = no wrap)
+                    wraplength: Pixel width for text wrapping (0 = no wrap) - only for Label
                     expand: Whether to expand to fill remaining space
+                    use_text_widget: If True, use Text widget with word-wrap instead of Label
                 """
-                lbl = tk.Label(
-                    row_frame,
-                    text=text,
-                    width=width,
-                    anchor="w",
-                    padx=3,
-                    bg=bg_color,
-                    font=("Arial", 8),
-                    wraplength=wraplength,
-                    justify="left",
-                )
-                if expand:
-                    # For expandable columns (like Session Notes), fill remaining horizontal space
-                    lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                if use_text_widget:
+                    # Use Text widget for proper word-boundary wrapping
+                    # Calculate height needed (1 line per ~40 chars, min 1, max 5)
+                    estimated_lines = min(5, max(1, len(str(text)) // 40 + 1))
+
+                    txt = tk.Text(
+                        row_frame,
+                        width=width,
+                        height=estimated_lines,  # Dynamic height for multi-line wrapping
+                        wrap="word",  # Wrap at word boundaries
+                        font=("Arial", 8),
+                        bg=bg_color,
+                        relief="flat",
+                        padx=5,  # Slightly increased padding to match header width
+                        pady=0,
+                        borderwidth=0,
+                        highlightthickness=0,
+                        insertwidth=0,  # Hide cursor (read-only widget)
+                        spacing1=0,  # No extra space before lines
+                        spacing2=0,  # No extra space between wrapped lines
+                        spacing3=0,  # No extra space after lines
+                    )
+                    txt.insert("1.0", str(text))
+                    txt.config(state="disabled")  # Make read-only
+
+                    if expand:
+                        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    else:
+                        txt.pack(
+                            side=tk.LEFT
+                        )  # Add 2px internal padding to match header width
+                    txt.bind("<MouseWheel>", on_main_scroll)
+                    return txt
                 else:
-                    lbl.pack(side=tk.LEFT)
-                lbl.bind("<MouseWheel>", on_main_scroll)
-                return lbl
+                    # Use Label for non-wrapping columns
+                    lbl = tk.Label(
+                        row_frame,
+                        text=text,
+                        width=width,
+                        anchor="w",
+                        padx=3,
+                        bg=bg_color,
+                        font=("Arial", 8),
+                        wraplength=wraplength,
+                        justify="left",
+                    )
+                    if expand:
+                        # For expandable columns (like Session Notes), fill remaining horizontal space
+                        lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                    else:
+                        lbl.pack(side=tk.LEFT)
+                    lbl.bind("<MouseWheel>", on_main_scroll)
+                    return lbl
 
             # Column widths (adjust as needed for all columns to fit)
             # Non-comment columns (no wrapping)
@@ -1027,16 +1115,18 @@ class AnalysisFrame(ttk.Frame):
             create_label(period["type"], 7)
             create_label(period["primary_project"], 15)
 
-            # Comment columns with wrapping
-            # Use width=21 (matching wraplength~150px) + wraplength for text wrapping
-            # Width provides consistent column sizing, wraplength handles text overflow
-            create_label(period["primary_comment"], 21, wraplength=150)
+            # Comment columns with wrapping - use Text widgets for proper word-boundary wrapping
+            # Text widgets support wrap="word" which prevents mid-word breaks
+            # Note: Data rows use ipadx=2 in pack() to compensate for 4px rendering difference with headers
+            create_label(period["primary_comment"], 21, use_text_widget=True)
             create_label(period["secondary_project"], 15)
-            create_label(period["secondary_comment"], 21, wraplength=150)
-            create_label(period["session_active_comments"], 21, wraplength=150)
-            create_label(period["session_break_idle_comments"], 21, wraplength=150)
+            create_label(period["secondary_comment"], 21, use_text_widget=True)
+            create_label(period["session_active_comments"], 21, use_text_widget=True)
+            create_label(
+                period["session_break_idle_comments"], 21, use_text_widget=True
+            )
             # Session Notes expands to fill remaining space (most text)
-            create_label(period["session_notes"], 21, wraplength=150, expand=True)
+            create_label(period["session_notes"], 21, use_text_widget=True, expand=True)
 
         if not periods:
             ttk.Label(

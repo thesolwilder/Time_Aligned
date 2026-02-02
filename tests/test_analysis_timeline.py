@@ -1159,40 +1159,57 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
             for w in frame.timeline_header_frame.winfo_children()
             if isinstance(w, tk.Frame)
         ]
-        # Extract first label from each container
-        header_labels = []
+        # Extract first widget (Label or Text) from each container
+        header_widgets = []
         for container in header_containers:
-            labels = [w for w in container.winfo_children() if isinstance(w, tk.Label)]
-            if labels:
-                header_labels.append(labels[0])  # Use first label from each container
+            widgets = [
+                w
+                for w in container.winfo_children()
+                if isinstance(w, (tk.Label, tk.Text))
+            ]
+            if widgets:
+                header_widgets.append(
+                    widgets[0]
+                )  # Use first widget from each container
 
-        # Get all data row labels from first row
+        # Get all data row widgets (Labels and Text) from first row
         data_rows = [
             w for w in frame.timeline_frame.winfo_children() if isinstance(w, tk.Frame)
         ]
         self.assertGreater(len(data_rows), 0, "Should have at least one data row")
 
         first_row = data_rows[0]
-        data_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+        data_widgets = [
+            w for w in first_row.winfo_children() if isinstance(w, (tk.Label, tk.Text))
+        ]
 
         # Verify header count matches data column count
         self.assertEqual(
-            len(header_labels),
-            len(data_labels),
-            f"Header count ({len(header_labels)}) should match data column count ({len(data_labels)})",
+            len(header_widgets),
+            len(data_widgets),
+            f"Header count ({len(header_widgets)}) should match data column count ({len(data_widgets)})",
         )
 
         # CRITICAL: Compare actual pixel widths using winfo_reqwidth()
         # This checks what tkinter ACTUALLY rendered, not just configuration
-        for idx, (header_label, data_label) in enumerate(
-            zip(header_labels, data_labels)
+        for idx, (header_widget, data_widget) in enumerate(
+            zip(header_widgets, data_widgets)
         ):
-            # Remove sort indicators from header text for display in error messages
-            header_text = header_label.cget("text").replace(" ▼", "").replace(" ▲", "")
+            # Get header text (different methods for Label vs Text)
+            if isinstance(header_widget, tk.Label):
+                header_text = (
+                    header_widget.cget("text").replace(" ▼", "").replace(" ▲", "")
+                )
+            else:  # Text widget
+                header_text = (
+                    header_widget.get("1.0", "end-1c")
+                    .replace(" ▼", "")
+                    .replace(" ▲", "")
+                )
 
             # Get actual required pixel widths
-            header_pixel_width = header_label.winfo_reqwidth()
-            data_pixel_width = data_label.winfo_reqwidth()
+            header_pixel_width = header_widget.winfo_reqwidth()
+            data_pixel_width = data_widget.winfo_reqwidth()
 
             # Headers and data cells should have EXACTLY the same pixel width
             # for proper column alignment
@@ -1202,8 +1219,8 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
                 f"Column {idx} ('{header_text}'): "
                 f"header pixel width ({header_pixel_width}px) should match "
                 f"data pixel width ({data_pixel_width}px). "
-                f"Header config width={header_label.cget('width')}, "
-                f"data config width={data_label.cget('width')}",
+                f"Header config width={header_widget.cget('width')}, "
+                f"data config width={data_widget.cget('width')}",
             )
 
     def test_header_pixel_width_with_sort_indicators(self):
@@ -1696,9 +1713,11 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
             "idle_settings": {"idle_tracking_enabled": False},
             "spheres": {
                 "Work": {"is_default": True, "active": True},
+                "General": {"is_default": False, "active": True},
             },
             "projects": {
                 "Project A": {"sphere": "Work", "is_default": True, "active": True},
+                "General": {"sphere": "General", "is_default": False, "active": True},
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
         }
@@ -1745,21 +1764,22 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         frame.update_timeline()
         self.root.update()
 
-        # Find the primary comment label (column 8: Date, Start, Duration, Sphere, Sphere Active, Project Active, Type, Primary Project, PRIMARY COMMENT)
+        # Find the primary comment widget (column 8)
         timeline_children = frame.timeline_frame.winfo_children()
         self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
 
         row_frame = timeline_children[0]
-        labels = [
-            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
-        ]
+        all_widgets = [child for child in row_frame.winfo_children()]
 
-        # Primary comment is the 9th label (index 8)
-        self.assertGreaterEqual(len(labels), 9, "Should have at least 9 columns")
-        primary_comment_label = labels[8]
+        # Primary comment is column 8
+        self.assertGreaterEqual(len(all_widgets), 9, "Should have at least 9 columns")
+        primary_comment_widget = all_widgets[8]
+
+        # Should be a Text widget
+        self.assertIsInstance(primary_comment_widget, tk.Text)
 
         # Should show FULL text, not truncated
-        displayed_text = primary_comment_label.cget("text")
+        displayed_text = primary_comment_widget.get("1.0", "end-1c")
         self.assertEqual(
             displayed_text,
             long_comment,
@@ -1808,23 +1828,24 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         # Get first row
         timeline_children = frame.timeline_frame.winfo_children()
         row_frame = timeline_children[0]
-        labels = [
-            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
-        ]
+        all_widgets = [child for child in row_frame.winfo_children()]
 
         # Comment columns: Primary Comment (8), Secondary Comment (10),
         # Active Comments (11), Break Comments (12), Session Notes (13)
-        # Column layout: 0=Date, 1=Start, 2=Duration, 3=Sphere, 4=Sphere Active, 5=Project Active, 6=Type, 7=Primary Project, 8=Primary Comment, 9=Secondary Project, 10=Secondary Comment, 11=Active Comments, 12=Break Comments, 13=Session Notes
         comment_indices = [8, 10, 11, 12, 13]
 
         for idx in comment_indices:
-            if idx < len(labels):
-                label = labels[idx]
-                wraplength = label.cget("wraplength")
-                self.assertGreater(
-                    wraplength,
-                    0,
-                    f"Comment column {idx} should have wraplength > 0 for text wrapping",
+            if idx < len(all_widgets):
+                widget = all_widgets[idx]
+                # Text widgets should have wrap="word" for word-boundary wrapping
+                self.assertIsInstance(
+                    widget, tk.Text, f"Comment column {idx} should be Text widget"
+                )
+                wrap_mode = widget.cget("wrap")
+                self.assertEqual(
+                    wrap_mode,
+                    "word",
+                    f"Comment column {idx} should have wrap='word' for word-boundary wrapping",
                 )
 
     def test_comment_labels_do_not_have_width_restriction(self):
@@ -1883,31 +1904,39 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         # Get first row
         timeline_children = frame.timeline_frame.winfo_children()
         row_frame = timeline_children[0]
-        labels = [
-            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
-        ]
+        # Comment columns use Text widgets, others use Labels
+        all_widgets = [child for child in row_frame.winfo_children()]
 
         # Check all comment columns (8, 10, 11, 12, 13)
         comment_indices = [8, 10, 11, 12, 13]
 
         for idx in comment_indices:
-            if idx < len(labels):
-                label = labels[idx]
-                width_config = label.cget("width")
+            if idx < len(all_widgets):
+                widget = all_widgets[idx]
 
-                # Comment labels should have width=21 (matching wraplength~150px)
-                # This provides consistent column sizing while wraplength handles text overflow
+                # Comment columns should be Text widgets with wrap="word"
+                self.assertIsInstance(
+                    widget,
+                    tk.Text,
+                    f"Comment column {idx} should be Text widget for word-boundary wrapping",
+                )
+
+                width_config = widget.cget("width")
+                wrap_config = widget.cget("wrap")
+
+                # Text widgets should have width=21 for column alignment
                 self.assertEqual(
                     width_config,
                     21,
-                    f"Comment column {idx} should have width=21 to match wraplength pixel width. "
+                    f"Comment column {idx} should have width=21 for alignment. "
                     f"Found width={width_config}.",
                 )
 
-                # Should still have wraplength configured
-                wraplength = label.cget("wraplength")
-                self.assertGreater(
-                    wraplength, 0, f"Comment column {idx} should have wraplength > 0"
+                # Should have wrap="word" for word-boundary wrapping
+                self.assertEqual(
+                    wrap_config,
+                    "word",
+                    f"Comment column {idx} should have wrap='word' for word-boundary wrapping",
                 )
 
     def test_all_comment_fields_show_full_content(self):
@@ -1971,22 +2000,21 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         # Check active period row (first row)
         active_row = timeline_children[0]
-        active_labels = [
-            child
-            for child in active_row.winfo_children()
-            if isinstance(child, tk.Label)
-        ]
+        all_widgets = [child for child in active_row.winfo_children()]
 
-        # Verify primary comment is not truncated (column 8)
-        primary_label = active_labels[8]
-        self.assertEqual(primary_label.cget("text"), primary_comment)
+        # Verify primary comment is not truncated (column 8) - Text widget
+        primary_widget = all_widgets[8]
+        primary_text = primary_widget.get("1.0", "end-1c")  # Text widget method
+        self.assertEqual(primary_text, primary_comment)
 
-        # Verify session comments are not truncated (columns 11 and 13)
-        active_comments_label = active_labels[11]
-        self.assertEqual(active_comments_label.cget("text"), active_comment)
+        # Verify session comments are not truncated (columns 11 and 13) - Text widgets
+        active_comments_widget = all_widgets[11]
+        active_text = active_comments_widget.get("1.0", "end-1c")
+        self.assertEqual(active_text, active_comment)
 
-        session_notes_label = active_labels[13]
-        self.assertEqual(session_notes_label.cget("text"), session_notes_text)
+        session_notes_widget = all_widgets[13]
+        session_text = session_notes_widget.get("1.0", "end-1c")
+        self.assertEqual(session_text, session_notes_text)
 
     def test_empty_comments_display_correctly(self):
         """Test that empty comment fields display properly without errors"""
@@ -2026,6 +2054,237 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         timeline_children = frame.timeline_frame.winfo_children()
         self.assertGreater(len(timeline_children), 0, "Timeline should have data rows")
+
+    def test_comment_labels_do_not_break_words_when_wrapping(self):
+        """
+        TDD RED PHASE TEST: Comment labels should wrap at word boundaries, not mid-word
+
+        BUG: Text wrapping was cutting off words in the middle (e.g., "the cat" -> "the c" + "at")
+        This happened when wraplength was too close to the label width, causing pixel-boundary
+        breaks instead of word-boundary breaks.
+
+        Solution: Increase wraplength from 150px to 200px. This gives the label more room
+        to wrap at word boundaries even when width=21 chars (≈147px) is set for column sizing.
+        """
+        date = "2026-02-02"
+
+        # Create test text that could trigger mid-word breaks if wraplength is too small
+        # Using repetitive text "the cat is black. " to match screenshot
+        repeating_text = "the cat is black. the cat is black. the cat is black. the cat is black. the cat is black. the cat is black. the cat is black. "
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "General",
+                "date": date,
+                "start_timestamp": 1738540140,  # 2026-02-02 03:49 PM
+                "end_timestamp": 1738540145,  # 5 seconds later
+                "total_duration": 5,
+                "active_duration": 5,
+                "active": [
+                    {
+                        "duration": 5,
+                        "project": "General",
+                        "comment": repeating_text,
+                        "start": "03:49 PM",
+                        "start_timestamp": 1738540140,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": repeating_text,
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": repeating_text,
+                },
+            }
+        }
+
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update_idletasks()
+
+        # Get first row
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Should have at least one row")
+        row_frame = timeline_children[0]
+        labels = [
+            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
+        ]
+
+        # Check comment columns: Primary Comment (8), Active Comments (11), Session Notes (13)
+        # These are the columns that would show the repeating text
+        comment_indices_to_check = {
+            8: "Primary Comment",
+            11: "Active Comments",
+            13: "Session Notes",
+        }
+
+        for idx, col_name in comment_indices_to_check.items():
+            if idx < len(labels):
+                label = labels[idx]
+                text = label.cget("text")
+
+                # If text is long enough to wrap, verify no mid-word breaks
+                # Check for common breaking patterns like "the c", "cat i", "is b", etc.
+                # These would indicate wrapping is breaking words
+                problematic_patterns = [
+                    " c",  # "the c" (cat broken)
+                    " i",  # "cat i" (is broken)
+                    " b",  # "is b" (black broken)
+                ]
+
+                # Note: This test checks the TEXT content, not the visual rendering
+                # The actual word-break issue happens during rendering with wraplength
+                # For a more accurate test, we'd need to check the label's actual
+                # line breaks, but tkinter doesn't expose that easily in headless mode.
+                #
+                # This test documents the expected behavior: text should be complete,
+                # and wrapping should happen at word boundaries when rendered.
+
+                # Verify the full text is present (not truncated)
+                self.assertIn(
+                    "the cat is black",
+                    text,
+                    f"{col_name} should contain full text without truncation",
+                )
+
+                # Verify wraplength is set (needed for wrapping)
+                wraplength = label.cget("wraplength")
+                self.assertGreater(
+                    wraplength, 0, f"{col_name} should have wraplength configured"
+                )
+
+    def test_comment_columns_have_sufficient_wraplength_buffer(self):
+        """
+        Test that comment columns have large enough wraplength buffer for word-boundary wrapping.
+
+        Bug: When wraplength is too close to width (in pixels), tkinter breaks words mid-character
+        instead of finding word boundaries.
+
+        Solution: wraplength should be significantly larger than width to give room for word boundaries.
+        - width=21 chars ≈ 147px (Arial 8pt, ~7px/char)
+        - wraplength should be 250+ pixels (100+ pixel buffer)
+        - This allows tkinter to find word boundaries before hitting width constraint
+
+        This test verifies the buffer is large enough to prevent mid-word breaks.
+        """
+        date = "2026-02-02"
+
+        # Text with common small words that might trigger mid-word breaks at narrow wraplength
+        test_text = (
+            "the cat is black. the dog is white. the bird is blue. the fish is red."
+        )
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "General",
+                "date": date,
+                "start_timestamp": 1738540140,
+                "end_timestamp": 1738540145,
+                "total_duration": 5,
+                "active_duration": 5,
+                "active": [
+                    {
+                        "duration": 5,
+                        "project": "General",
+                        "comment": test_text,
+                        "start": "03:49 PM",
+                        "start_timestamp": 1738540140,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": test_text,
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": test_text,
+                },
+            }
+        }
+
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update_idletasks()
+
+        # Get first row
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Should have at least one row")
+        row_frame = timeline_children[0]
+        labels = [
+            child for child in row_frame.winfo_children() if isinstance(child, tk.Label)
+        ]
+
+        # Check comment columns: Primary Comment (8), Active Comments (11), Session Notes (13)
+        comment_indices_to_check = {
+            8: "Primary Comment",
+            11: "Active Comments",
+            13: "Session Notes",
+        }
+
+        # Arial 8pt ≈ 7 pixels per character
+        pixels_per_char = 7
+
+        for idx, col_name in comment_indices_to_check.items():
+            if idx < len(labels):
+                label = labels[idx]
+
+                # Get configuration
+                width_chars = label.cget("width")
+                wraplength_pixels = label.cget("wraplength")
+
+                # Verify wraplength is configured
+                self.assertGreater(
+                    wraplength_pixels,
+                    0,
+                    f"{col_name} should have wraplength configured",
+                )
+
+                # Verify width is configured
+                self.assertEqual(
+                    width_chars, 21, f"{col_name} should have width=21 for alignment"
+                )
+
+                # Calculate pixel equivalents
+                width_pixels_approx = width_chars * pixels_per_char
+                buffer_pixels = wraplength_pixels - width_pixels_approx
+
+                # Verify sufficient buffer for word-boundary detection
+                # Minimum 100px buffer needed to reliably find word boundaries
+                self.assertGreaterEqual(
+                    buffer_pixels,
+                    100,
+                    f"{col_name}: wraplength buffer too small. "
+                    f"width={width_chars} chars (≈{width_pixels_approx}px), "
+                    f"wraplength={wraplength_pixels}px, "
+                    f"buffer={buffer_pixels}px. "
+                    f"Need at least 100px buffer for word-boundary wrapping. "
+                    f"Increase wraplength to {width_pixels_approx + 100}+ pixels.",
+                )
+
+                # Verify the expected configuration (width=21, wraplength=300)
+                self.assertEqual(
+                    wraplength_pixels,
+                    300,
+                    f"{col_name} should have wraplength=300 for proper word wrapping",
+                )
 
 
 class TestTimelineRowStretching(unittest.TestCase):

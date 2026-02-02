@@ -49,6 +49,8 @@ class CompletionFrame(ttk.Frame):
             self.session_start_timestamp = loaded_data.get("start_timestamp", 0)
             self.session_end_timestamp = loaded_data.get("end_timestamp", 0)
             self.session_duration = loaded_data.get("total_duration", 0)
+            # Store session sphere from saved data
+            self.session_sphere = loaded_data.get("sphere", None)
 
             # Build session_data dict for compatibility with existing code
             self.session_data = {
@@ -65,6 +67,7 @@ class CompletionFrame(ttk.Frame):
             self.session_start_timestamp = 0
             self.session_end_timestamp = 0
             self.session_duration = 0
+            self.session_sphere = None
             self.session_data = {
                 "session_name": session_name,
                 "total_elapsed": 0,
@@ -146,15 +149,20 @@ class CompletionFrame(ttk.Frame):
         self.current_row += 1
         active_spheres, default_sphere = self._get_active_spheres()
 
-        # Add "Add New Sphere..." option to the list
-        sphere_options = list(active_spheres) + ["Add New Sphere..."]
+        # If session has a sphere (even if inactive), include it in options
+        sphere_options = list(active_spheres)
+        if self.session_sphere and self.session_sphere not in sphere_options:
+            # Add inactive session sphere to options so historical sessions display correctly
+            sphere_options.append(self.session_sphere)
+        sphere_options.append("Add New Sphere...")
 
-        # Set initial value
-        initial_value = (
-            default_sphere
-            if default_sphere in active_spheres
-            else active_spheres[0] if active_spheres else ""
-        )
+        # Set initial value - prioritize session sphere (even if inactive) over default
+        if self.session_sphere:
+            initial_value = self.session_sphere
+        elif default_sphere and default_sphere in active_spheres:
+            initial_value = default_sphere
+        else:
+            initial_value = active_spheres[0] if active_spheres else ""
         self.selected_sphere = initial_value
 
         self.sphere_menu = ttk.Combobox(
@@ -199,7 +207,8 @@ class CompletionFrame(ttk.Frame):
             default_container, values=active_projects, state="readonly", width=20
         )
         self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
-        self.default_project_menu.set(default_project)
+        if default_project:
+            self.default_project_menu.set(default_project)
         disable_combobox_scroll(self.default_project_menu)
         ttk.Label(default_container, text="Default Break/Idle Action:").grid(
             row=0, column=2, sticky=tk.W, padx=5
@@ -309,6 +318,8 @@ class CompletionFrame(ttk.Frame):
                 self.session_start_timestamp = loaded_data.get("start_timestamp", 0)
                 self.session_end_timestamp = loaded_data.get("end_timestamp", 0)
                 self.session_duration = loaded_data.get("total_duration", 0)
+                # Store session sphere from saved data (CRITICAL for correct sphere display)
+                self.session_sphere = loaded_data.get("sphere", None)
 
                 # Build session_data dict for compatibility
                 self.session_data = {
