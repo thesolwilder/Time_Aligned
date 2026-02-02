@@ -321,6 +321,9 @@ class CompletionFrame(ttk.Frame):
                 # Store session sphere from saved data (CRITICAL for correct sphere display)
                 self.session_sphere = loaded_data.get("sphere", None)
 
+                # Load session comments if they exist (CRITICAL for populating comment fields)
+                self.session_comments = loaded_data.get("session_comments", {})
+
                 # Build session_data dict for compatibility
                 self.session_data = {
                     "session_name": selected_session,

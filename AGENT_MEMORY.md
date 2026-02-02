@@ -54,6 +54,90 @@ FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
 
 ## Memory Log
 
+### [2026-02-02] - Session Comments Don't Update When Changing Sessions (Bug Fix)
+
+**Bug Reported**: When changing sessions via the session dropdown, the session comments (active notes, break notes, idle notes, session notes) stayed with the most recent session instead of updating to show the selected session's comments.
+
+**User Report**: "change sessions doesn't update the session comments. it just stays with the most recent. make it so it populates with data.json"
+
+**Root Cause**: In `completion_frame.py`, the `_on_session_selected()` method (lines 286-333) was loading session data when switching sessions but was NOT loading `session_comments`. It loaded:
+
+- ✓ `session_start_timestamp`
+- ✓ `session_end_timestamp`
+- ✓ `session_duration`
+- ✓ `session_sphere`
+- ✓ `session_data`
+- ✗ `session_comments` (MISSING!)
+
+This meant when you switched to a different session, the UI would continue displaying the previous session's comments.
+
+**What Worked - TDD Approach**:
+
+1. **Wrote failing test first** (`test_completion_comments_populate.py`):
+   - Created `test_session_comments_update_when_session_changes`
+   - Created two sessions on same date with different comments
+   - Loaded first session, verified comments displayed correctly
+   - Simulated changing to second session via dropdown
+   - Verified second session's comments should display
+   - Test FAILED: `AssertionError: 'First session active notes' != 'Second session active notes'`
+   - Red phase achieved with FAILURE (F), not ERROR (E) ✓
+
+2. **Fixed the bug** in `completion_frame.py` line 324 (after `session_sphere`):
+
+   ```python
+   # Load session comments if they exist (CRITICAL for populating comment fields)
+   self.session_comments = loaded_data.get("session_comments", {})
+   ```
+
+3. **Test passed** after fix - all 4 tests in module pass
+
+**Key Learnings**:
+
+1. **Session data must be fully reloaded on session change**: When `_on_session_selected()` is called, ALL session attributes must be updated, not just some. Missing any attribute causes stale data to display.
+
+2. **Pattern for session switching**: When switching sessions in `_on_session_selected()`:
+   - Destroy all widgets
+   - Clear all widget lists
+   - Update `self.session_name`
+   - Load ALL session data from JSON (not just timestamps/duration)
+   - Recreate widgets with `create_widgets()`
+   - `_populate_session_comments()` is called during widget creation
+
+3. **Comment population flow**:
+   - `__init__`: Loads `session_comments` from JSON → line 64
+   - `create_widgets()`: Creates comment widgets → calls `_create_session_notes()`
+   - `_create_session_notes()`: Creates widgets → calls `_populate_session_comments()`
+   - `_populate_session_comments()`: Reads `self.session_comments` → populates UI fields
+   - **CRITICAL**: `self.session_comments` must be set BEFORE `create_widgets()` is called
+
+4. **Why the bug occurred**: The `_on_session_selected()` method was originally copied from similar code in `__init__`, but the developer forgot to include the `session_comments` loading line. This is why code review and comprehensive tests are essential.
+
+**Files Changed**:
+
+1. `src/completion_frame.py` (line ~324):
+   - Added `self.session_comments = loaded_data.get("session_comments", {})` in `_on_session_selected()`
+   - Ensures session comments are loaded when switching sessions via dropdown
+
+2. `tests/test_completion_comments_populate.py`:
+   - Added `test_session_comments_update_when_session_changes` test
+   - Creates two sessions with different comments
+   - Simulates session change via dropdown
+   - Verifies all 4 comment fields update to new session's values
+
+**Test Results**: ✅ All 4 tests pass (7.453s)
+
+**Similar Bugs to Watch For**: Any time session data is reloaded (date change, session change), verify ALL session attributes are updated:
+
+- `session_name`
+- `session_start_timestamp`
+- `session_end_timestamp`
+- `session_duration`
+- `session_sphere`
+- `session_comments` ← This one was missing
+- `session_data` dict
+
+---
+
 ### [2026-02-02] - Fixed Timeline Header/Data Alignment for Text Widgets
 
 **Bug**: After switching to Text widgets, headers and data columns were misaligned by 4px (header 136px vs data 132px).

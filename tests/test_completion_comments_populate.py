@@ -139,6 +139,95 @@ class TestCompletionCommentsPopulate(unittest.TestCase):
             completion_frame.session_notes_text.get("1.0", tk.END).strip(), ""
         )
 
+    def test_session_comments_update_when_session_changes(self):
+        """Test that session comments are updated when changing to a different session"""
+        # Create two sessions with different comments on the same date
+        date = "2026-01-28"
+        session1_name = f"{date}_10-30-00"
+        session2_name = f"{date}_14-00-00"
+
+        test_data = {
+            session1_name: {
+                "start_timestamp": 1706438400.0,
+                "end_timestamp": 1706442000.0,
+                "total_duration": 3600,
+                "active_duration": 2400,
+                "break_duration": 600,
+                "sphere": "Work",
+                "date": date,
+                "session_comments": {
+                    "active_notes": "First session active notes",
+                    "break_notes": "First session break notes",
+                    "idle_notes": "First session idle notes",
+                    "session_notes": "First session notes",
+                },
+                "active": [],
+                "breaks": [],
+                "idle_periods": [],
+            },
+            session2_name: {
+                "start_timestamp": 1706450400.0,
+                "end_timestamp": 1706454000.0,
+                "total_duration": 3600,
+                "active_duration": 2400,
+                "break_duration": 600,
+                "sphere": "Work",
+                "date": date,
+                "session_comments": {
+                    "active_notes": "Second session active notes",
+                    "break_notes": "Second session break notes",
+                    "idle_notes": "Second session idle notes",
+                    "session_notes": "Second session notes",
+                },
+                "active": [],
+                "breaks": [],
+                "idle_periods": [],
+            },
+        }
+
+        # Write test data
+        with open(self.test_data_file, "w") as f:
+            json.dump(test_data, f)
+
+        # Reload tracker data
+        self.tracker = TimeTracker(self.root)
+        self.tracker.data_file = self.test_data_file
+
+        # Create completion frame with first session
+        completion_frame = CompletionFrame(self.root, self.tracker, session1_name)
+        self.root.update()
+
+        # Verify first session comments are displayed
+        self.assertEqual(
+            completion_frame.active_notes.get(), "First session active notes"
+        )
+        self.assertEqual(
+            completion_frame.break_notes.get(), "First session break notes"
+        )
+        self.assertEqual(completion_frame.idle_notes.get(), "First session idle notes")
+        self.assertEqual(
+            completion_frame.session_notes_text.get("1.0", tk.END).strip(),
+            "First session notes",
+        )
+
+        # Simulate changing to session 2 via dropdown
+        completion_frame.session_selector.set("Session 2")
+        completion_frame._on_session_selected(None)
+        self.root.update()
+
+        # Verify second session comments are NOW displayed
+        self.assertEqual(
+            completion_frame.active_notes.get(), "Second session active notes"
+        )
+        self.assertEqual(
+            completion_frame.break_notes.get(), "Second session break notes"
+        )
+        self.assertEqual(completion_frame.idle_notes.get(), "Second session idle notes")
+        self.assertEqual(
+            completion_frame.session_notes_text.get("1.0", tk.END).strip(),
+            "Second session notes",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
