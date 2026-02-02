@@ -988,13 +988,14 @@ class AnalysisFrame(ttk.Frame):
             row_frame.bind("<MouseWheel>", on_main_scroll)
 
             # Create label helper function
-            def create_label(text, width, wraplength=0):
+            def create_label(text, width, wraplength=0, expand=False):
                 """Create a label with optional text wrapping
 
                 Args:
                     text: Text to display
                     width: Width in characters
                     wraplength: Pixel width for text wrapping (0 = no wrap)
+                    expand: Whether to expand to fill remaining space
                 """
                 lbl = tk.Label(
                     row_frame,
@@ -1007,7 +1008,11 @@ class AnalysisFrame(ttk.Frame):
                     wraplength=wraplength,
                     justify="left",
                 )
-                lbl.pack(side=tk.LEFT)
+                if expand:
+                    # For expandable columns (like Session Notes), fill remaining horizontal space
+                    lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                else:
+                    lbl.pack(side=tk.LEFT)
                 lbl.bind("<MouseWheel>", on_main_scroll)
                 return lbl
 
@@ -1030,7 +1035,8 @@ class AnalysisFrame(ttk.Frame):
             create_label(period["secondary_comment"], 21, wraplength=150)
             create_label(period["session_active_comments"], 21, wraplength=150)
             create_label(period["session_break_idle_comments"], 21, wraplength=150)
-            create_label(period["session_notes"], 21, wraplength=150)
+            # Session Notes expands to fill remaining space (most text)
+            create_label(period["session_notes"], 21, wraplength=150, expand=True)
 
         if not periods:
             ttk.Label(
@@ -1110,12 +1116,12 @@ class AnalysisFrame(ttk.Frame):
 
             return container
 
-        def create_non_sortable_single_row_header(text, width):
+        def create_non_sortable_single_row_header(text, width, expand=False):
             """Create non-sortable single-row header with vertical centering"""
             container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
             container.pack(side=tk.LEFT)
 
-            tk.Label(
+            label = tk.Label(
                 container,
                 text=text,
                 font=("Arial", 8),
@@ -1124,7 +1130,12 @@ class AnalysisFrame(ttk.Frame):
                 padx=3,
                 pady=6,  # Vertical padding to center with two-row headers
                 bg="#d0d0d0",
-            ).pack()
+            )
+            if expand:
+                # For expandable headers (like Session Notes), fill horizontally
+                label.pack(fill=tk.X, expand=True)
+            else:
+                label.pack()
 
             return container
 
@@ -1142,7 +1153,7 @@ class AnalysisFrame(ttk.Frame):
         create_non_sortable_single_row_header("Secondary Comment", 21)
         create_non_sortable_single_row_header("Active Comments", 21)
         create_non_sortable_single_row_header("Break Comments", 21)
-        create_non_sortable_single_row_header("Session Notes", 21)
+        create_non_sortable_single_row_header("Session Notes", 21, expand=True)
 
     def export_to_csv(self):
         """Export timeline data to CSV"""

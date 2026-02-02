@@ -54,6 +54,117 @@ FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
 
 ## Memory Log
 
+### [2026-02-02] - Settings Frame Sphere Filter Updates Project List (Bug Fix)
+
+**Bug Reported**: When changing sphere filter radio buttons (Active/All/Inactive), the sphere dropdown updates but the project list doesn't refresh to show projects from the newly selected sphere.
+
+**What Worked**:
+
+1. **TDD Approach for Bug Fix**:
+   - Wrote test `test_sphere_filter_change_updates_project_list` that verified the bug
+   - Test FAILED (correct red phase) - confirmed ActiveProject still visible after switching to ArchivedSphere
+   - Fixed by adding `self.refresh_project_section()` call in `refresh_sphere_dropdown()`
+   - Test PASSED - project list now updates correctly
+
+2. **Careful Initialization Order Check**:
+   - Added `hasattr(self, 'projects_list_frame')` check before calling `refresh_project_section()`
+   - Prevents AttributeError during initialization (sphere section created before project section)
+   - Used defensive programming pattern to handle widget creation order
+
+**What Didn't Work**:
+
+- **Initial attempt without hasattr check**: Caused AttributeError during SettingsFrame initialization
+  - `refresh_sphere_dropdown()` is called at end of `create_sphere_section()`
+  - `projects_list_frame` doesn't exist until `create_project_section()` runs (which is after sphere section)
+  - **Solution**: Add conditional check `if hasattr(self, 'projects_list_frame'):`
+
+**Key Learnings**:
+
+1. **Radio button command callbacks need to update dependent UI**: When sphere filter changes, both dropdown AND project list must refresh
+2. **Widget initialization order matters**: Check for widget existence before calling methods that depend on it
+3. **TDD for bugs is powerful**: Writing failing test first confirmed the bug and verified the fix
+4. **Defensive programming**: Use `hasattr()` when calling methods that depend on widgets that may not exist yet
+
+**Files Changed**:
+
+1. `src/settings_frame.py`:
+   - Modified `refresh_sphere_dropdown()` to call `self.refresh_project_section()` after updating sphere
+   - Added `hasattr(self, 'projects_list_frame')` guard to prevent initialization errors
+
+2. `tests/test_settings_frame.py`:
+   - Added `test_sphere_filter_change_updates_project_list` test
+   - Verifies that changing sphere filter radio button updates project list
+   - Test sets sphere to ActiveSphere, verifies ActiveProject visible
+   - Changes filter to inactive (selects ArchivedSphere), verifies ActiveProject NOT visible
+
+**Test Results**: All 9 tests in TestSettingsFrameFilters pass (34.4s)
+
+---
+
+### [2026-02-02] - Session Notes Column Expands to Fill Screen Width
+
+**Change Requested**: Make the 13th column (Session Notes) expand all the way to the end of the screen since it will contain the most amount of text.
+
+**What Worked**:
+
+- **TDD approach**: Wrote test first (`test_session_notes_column_expands_to_fill_space`)
+  - Test verified red phase: pack_info["fill"] was 'none' instead of 'x'
+  - Test checks both header and data row Session Notes labels use `fill=tk.X, expand=True`
+- **Header modification**: Updated `create_non_sortable_single_row_header()` function:
+  - Added `expand=False` parameter (default False for backward compatibility)
+  - When `expand=True`, label uses `.pack(fill=tk.X, expand=True)` instead of `.pack()`
+  - Called with `create_non_sortable_single_row_header("Session Notes", 21, expand=True)`
+- **Data row modification**: Updated `create_label()` function in `update_timeline()`:
+  - Added `expand=False` parameter (default False)
+  - When `expand=True`, label uses `.pack(side=tk.LEFT, fill=tk.X, expand=True)`
+  - Session Notes label called with `create_label(period["session_notes"], 21, wraplength=150, expand=True)`
+- **Result**: Session Notes column now stretches to edge of screen horizontally
+  - Still maintains `width=21` for minimum size
+  - Still uses `wraplength=150` for text wrapping
+  - Now fills remaining horizontal space after other columns
+
+**What Didn't Work**:
+
+- **N/A**: Implementation successful on first attempt using TDD
+
+**Key Learnings**:
+
+1. **Tkinter pack() expansion**: Use `fill=tk.X, expand=True` to make widgets stretch horizontally to fill available space
+   - `fill=tk.X`: Widget expands horizontally to fill allocated space
+   - `expand=True`: Widget gets allocated extra space when parent expands
+   - Both needed for proper horizontal stretching
+2. **Selective column expansion**: Can make one column expandable while keeping others fixed width
+   - Other columns use `.pack(side=tk.LEFT)` (no fill/expand)
+   - Last column uses `.pack(side=tk.LEFT, fill=tk.X, expand=True)`
+   - This creates "fixed columns + one expanding column" layout
+3. **Backward compatibility**: Adding optional parameters with defaults preserves existing behavior
+   - `expand=False` default means existing calls still work
+   - Only Session Notes explicitly sets `expand=True`
+4. **TDD validation**: Test verified exact pack configuration, not just visual appearance
+   - Checked `pack_info["fill"] == "x"` 
+   - Checked `pack_info["expand"] == True`
+   - More reliable than visual inspection
+
+**Files Changed**:
+
+1. `src/analysis_frame.py`:
+   - **Line 1113**: Modified `create_non_sortable_single_row_header()` to accept `expand` parameter
+   - **Line 1120**: Added conditional pack: `label.pack(fill=tk.X, expand=True)` if expand, else `label.pack()`
+   - **Line 1143**: Called with `expand=True` for Session Notes header
+   - **Line 991**: Modified `create_label()` to accept `expand` parameter  
+   - **Line 1008**: Added conditional pack: `lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)` if expand
+   - **Line 1035**: Called with `expand=True` for Session Notes data label
+   - Added comment: "Session Notes expands to fill remaining space (most text)"
+
+2. `tests/test_analysis_timeline.py`:
+   - Added `test_session_notes_column_expands_to_fill_space` to TestAnalysisTimelineSessionNotesContent class
+   - Verifies Session Notes label (column 13) in data rows has `fill='x'` and `expand=True`
+   - Verifies Session Notes header label has `fill='x'` and `expand=True`
+
+**Test Results**: All 53 timeline tests pass ✅
+
+---
+
 ### [2026-02-02] - Enhanced AGENT_MEMORY.md Search Guidance
 
 **Change Requested**: Update DEVELOPMENT.md to emphasize searching AGENT_MEMORY.md for task-related entries to avoid repeating past mistakes

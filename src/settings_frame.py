@@ -264,6 +264,10 @@ class SettingsFrame(ttk.Frame):
             else:
                 self.sphere_var.set(filtered_spheres[0])
             self.load_selected_sphere()
+            # Update project list to reflect the newly selected sphere
+            # Only call if projects_list_frame exists (it's created after sphere section)
+            if hasattr(self, "projects_list_frame"):
+                self.refresh_project_section()
 
     def on_sphere_selected(self):
         """Handle sphere selection or create new sphere"""

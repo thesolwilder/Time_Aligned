@@ -203,6 +203,48 @@ class TestSettingsFrameFilters(unittest.TestCase):
         self.assertIn("ActiveSphere", sphere_values)
         self.assertIn("ArchivedSphere", sphere_values)
 
+    def test_sphere_filter_change_updates_project_list(self):
+        """Test that changing sphere filter radio button updates project list"""
+        # Set sphere to ActiveSphere
+        self.frame.sphere_var.set("ActiveSphere")
+        self.frame.on_sphere_selected()
+
+        # Verify project list shows ActiveSphere's projects
+        found_active_project = False
+
+        def search_for_active_project(widget):
+            nonlocal found_active_project
+            if isinstance(widget, (ttk.Entry, tk.Entry)):
+                try:
+                    if "ActiveProject" in str(widget.get()):
+                        found_active_project = True
+                except:
+                    pass
+            for child in widget.winfo_children():
+                search_for_active_project(child)
+
+        search_for_active_project(self.frame.projects_list_frame)
+        self.assertTrue(
+            found_active_project, "ActiveProject should be visible initially"
+        )
+
+        # Change sphere filter to inactive (this should select ArchivedSphere)
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        # The sphere dropdown should now show ArchivedSphere
+        current_sphere = self.frame.sphere_var.get()
+        self.assertEqual(current_sphere, "ArchivedSphere")
+
+        # Verify project list was updated to show ArchivedSphere's projects (no projects in this case)
+        # Clear found flag
+        found_active_project = False
+        search_for_active_project(self.frame.projects_list_frame)
+        self.assertFalse(
+            found_active_project,
+            "ActiveProject should NOT be visible after sphere filter change",
+        )
+
     def test_project_filter_active(self):
         """Test project filter shows only active projects"""
         self.frame.sphere_var.set("ActiveSphere")

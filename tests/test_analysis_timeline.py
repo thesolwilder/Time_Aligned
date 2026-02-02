@@ -3363,3 +3363,110 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
             expected_session_notes,
             f"Session Notes should NOT appear in Secondary Action column (9), but it does: '{secondary_action_text}'",
         )
+
+    def test_session_notes_column_expands_to_fill_space(self):
+        """
+        Test that Session Notes column (column 13) expands to fill remaining space
+
+        The Session Notes column should use fill=tk.X and expand=True when packed
+        to stretch to the end of the screen, as it will contain the most text.
+        """
+        date = "2026-01-29"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234570890,
+                "total_duration": 3000,
+                "active_duration": 3000,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "Project A",
+                        "comment": "Primary comment",
+                        "start": "10:00:00",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "session_notes": "Long session notes that should expand to edge of screen with lots of text"
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update_idletasks()
+
+        # Get timeline rows
+        timeline_rows = [
+            w for w in frame.timeline_frame.winfo_children() if isinstance(w, tk.Frame)
+        ]
+        self.assertGreater(
+            len(timeline_rows), 0, "Should have at least one timeline row"
+        )
+
+        # Check first data row
+        first_row = timeline_rows[0]
+        row_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+
+        # Column 13 is Session Notes (last column)
+        session_notes_label = row_labels[13]
+
+        # Check pack configuration - should have fill=X and expand=True
+        pack_info = session_notes_label.pack_info()
+
+        self.assertIn(
+            "fill", pack_info, "Session Notes label should have pack fill configuration"
+        )
+        self.assertEqual(
+            pack_info["fill"],
+            "x",
+            "Session Notes label should use fill='x' to expand horizontally",
+        )
+
+        self.assertIn(
+            "expand",
+            pack_info,
+            "Session Notes label should have pack expand configuration",
+        )
+        self.assertTrue(
+            pack_info["expand"],
+            "Session Notes label should have expand=True to fill remaining space",
+        )
+
+        # Also check header Session Notes column
+        header_containers = [
+            w
+            for w in frame.timeline_header_frame.winfo_children()
+            if isinstance(w, tk.Frame)
+        ]
+        # Session Notes is the last header (index 13)
+        session_notes_header_container = header_containers[13]
+        session_notes_header_labels = [
+            w
+            for w in session_notes_header_container.winfo_children()
+            if isinstance(w, tk.Label)
+        ]
+        session_notes_header_label = session_notes_header_labels[0]
+
+        # Check header pack configuration
+        header_pack_info = session_notes_header_label.pack_info()
+        self.assertEqual(
+            header_pack_info.get("fill"),
+            "x",
+            "Session Notes header should use fill='x' to expand horizontally",
+        )
+        self.assertTrue(
+            header_pack_info.get("expand"),
+            "Session Notes header should have expand=True to fill remaining space",
+        )
