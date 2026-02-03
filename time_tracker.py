@@ -442,6 +442,62 @@ class TimeTracker:
                                 last_idle["end_timestamp"]
                                 - last_idle["start_timestamp"]
                             )
+
+                            # CRITICAL FIX: Save the active period that ended when idle started
+                            # Then start a new active period from when idle ended
+                            all_data[self.session_name]["active"] = all_data[
+                                self.session_name
+                            ].get("active", [])
+
+                            # Build active period from last active_period_start_time to idle start
+                            idle_start_time = last_idle["start_timestamp"]
+                            pre_idle_active_period = {
+                                "start": datetime.fromtimestamp(
+                                    self.active_period_start_time
+                                ).strftime("%H:%M:%S"),
+                                "start_timestamp": self.active_period_start_time,
+                                "end": datetime.fromtimestamp(idle_start_time).strftime(
+                                    "%H:%M:%S"
+                                ),
+                                "end_timestamp": idle_start_time,
+                                "duration": idle_start_time
+                                - self.active_period_start_time,
+                            }
+
+                            # Add screenshot info if any were captured
+                            current_screenshots = (
+                                self.screenshot_capture.get_current_period_screenshots()
+                            )
+                            if self.screenshot_capture.enabled and current_screenshots:
+                                screenshot_folder = (
+                                    self.screenshot_capture.get_screenshot_folder_path()
+                                )
+                                if screenshot_folder:
+                                    pre_idle_active_period["screenshot_folder"] = (
+                                        os.path.relpath(
+                                            screenshot_folder,
+                                            os.path.dirname(self.data_file),
+                                        )
+                                    )
+                                    pre_idle_active_period["screenshots"] = (
+                                        current_screenshots
+                                    )
+
+                            all_data[self.session_name]["active"].append(
+                                pre_idle_active_period
+                            )
+
+                            # Start new active period from when idle ended (NOW)
+                            self.active_period_start_time = self.last_user_input
+
+                            # Start fresh screenshot capture for new active period
+                            active_period_count = len(
+                                all_data[self.session_name]["active"]
+                            )
+                            self.screenshot_capture.set_current_session(
+                                self.session_name, "active", active_period_count
+                            )
+
                             self.save_data(all_data)
             except Exception:
                 # Suppress harmless pynput Python 3.13 compatibility exceptions
@@ -818,7 +874,9 @@ class TimeTracker:
             and idle_time >= self.settings["idle_settings"]["idle_threshold"]
         ):
             self.session_idle = True
-            self.idle_start_time = self.last_user_input
+            # CRITICAL: Idle starts NOW (when detected), not retroactively from last input
+            # The threshold period counts as active time
+            self.idle_start_time = time.time()
             self.status_label.config(text="Idle detected")
 
             # Save idle period start

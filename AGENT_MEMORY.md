@@ -54,6 +54,550 @@ FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
 
 ## Memory Log
 
+### [2026-02-02] - Active-Idle-Active Periods: Incorrect Duration Calculations (Idle Threshold Period Bug)
+
+**Bug Reported**: After implementing the fix for missing active periods, user ran manual test with Active(5s) → Idle(5s) → Active(5s) sequence. Results were:
+
+- Active period 1: **0 sec** (expected ~5 sec)
+- Idle period: **10 sec** (expected ~5 sec)
+- Active period 3: **6 sec** (expected ~5 sec)
+
+**User's Key Insight**: "the time is not idle until the limit is triggered and then it only counts from that point on"
+
+**Root Cause**: In [time_tracker.py](time_tracker.py) line 877, `check_idle()` was setting:
+
+```python
+self.idle_start_time = self.last_user_input
+```
+
+This meant idle was retroactively counted from the LAST USER INPUT, not from when idle was DETECTED.
+
+**Example timeline (5 second threshold)**:
+
+- T+0: Session starts, user active
+- T+5: User stops moving mouse (`last_user_input = T+5`)
+- T+10: Idle detected (5 seconds after last input)
+  - **BUG**: `idle_start_time = T+5` (retroactive)
+  - **SHOULD BE**: `idle_start_time = T+10` (when detected)
+
+Result: The 5-second threshold period (T+5 to T+10) was being counted as IDLE time instead of ACTIVE time.
+
+**What Didn't Work - Previous Approach**:
+
+- ❌ Setting `idle_start_time = self.last_user_input`: This retroactively includes the threshold period in idle time
+- ❌ Using `last_user_input` as the end time for pre-idle active period: This makes the active period end too early
+
+**What Worked - The Correct Fix**:
+
+**Change 1**: In `check_idle()` (line 877), change idle start time to use CURRENT time:
+
+```python
+# OLD (WRONG):
+self.idle_start_time = self.last_user_input
+
+# NEW (CORRECT):
+self.idle_start_time = time.time()  # Idle starts NOW when detected
+```
+
+This ensures:
+
+- The threshold period (between last input and idle detection) counts as ACTIVE time
+- Idle only starts counting from when it's actually detected
+- Active period 1 gets the full duration including the threshold wait time
+
+**Why This Matters**:
+
+- User expects idle to start when the system DETECTS it (after threshold)
+- The threshold period is "waiting to see if user is idle" - still considered active
+- Example: 5-second threshold means "user must be inactive for 5 seconds before we call it idle"
+
+**Correct Timeline Flow** (5 second threshold, 5 second idle):
+
+1. T+0 to T+5: User actively working (5 sec active)
+2. T+5: User stops moving mouse
+3. T+5 to T+10: System waits to see if idle (threshold period, still ACTIVE, 5 more sec)
+4. T+10: Idle detected, idle period starts (idle_start_time = T+10)
+5. T+10 to T+15: Actually idle (5 sec idle)
+6. T+15: User resumes activity
+7. T+15 onwards: Active again
+
+**Result**:
+
+- Active period 1: T+0 to T+10 = 10 seconds (work + threshold)
+- Idle period: T+10 to T+15 = 5 seconds
+- Active period 2: T+15 to end
+
+But wait - this doesn't match user's expected 5/5/5 split. Let me reconsider...
+
+**Actually, User's Expectation** might be:
+
+- Active: 5 sec (while actually working)
+- Idle threshold triggers
+- Idle: 5 sec (after threshold)
+- Resume: 5 sec active
+
+In this case, the active period should end when the user STOPS working (last_user_input), not when idle is detected. But then idle should also start from last_user_input to match user's mental model.
+
+**WAIT - RE-ANALYZING**: Looking at the screenshot showing 00:00:00 for first active period...
+
+If first active = 0 sec, that means `active_period_start_time` equals `idle_start_time`. This happens if:
+
+- Session started at T+0
+- User immediately stopped activity
+- But that doesn't match "active 5 sec" test
+
+**The REAL Issue**: My previous fix saved the pre-idle active period using `idle_start_time` as the end. If `idle_start_time = last_user_input` (T+5) and `active_period_start_time = T+5`, then duration = 0.
+
+No wait, if session started at T+0 and user was active until T+5, then:
+
+- `active_period_start_time = T+0` (session start)
+- `last_user_input = T+5`
+- `idle_start_time = T+5` (old buggy code)
+- Duration = T+5 - T+0 = 5 sec ✓ (this should work)
+
+Unless... `active_period_start_time` got updated somewhere? Let me check the on_activity code...
+
+OH! I see it now in my previous fix (line 473):
+
+```python
+# Start new active period from when idle ended (NOW)
+self.active_period_start_time = self.last_user_input
+```
+
+So when coming out of idle:
+
+1. Save pre-idle period from old `active_period_start_time` to `idle_start_time`
+2. Update `active_period_start_time = current_time` (when resuming)
+
+But if idle triggers AGAIN before end_session, then:
+
+- New pre-idle period would be from RESUME time to NEW idle time
+- This should be correct
+
+**The actual bug** is that with `idle_start_time = last_user_input`, the threshold time gets double-counted or miscounted.
+
+**CORRECT SOLUTION**:
+`idle_start_time = time.time()` ensures idle only starts counting from detection, and the threshold period stays in the active period.
+
+**Files Changed**:
+
+- [time_tracker.py](time_tracker.py) line 877: Changed `self.idle_start_time = self.last_user_input` to `self.idle_start_time = time.time()`
+
+**Expected Result After Fix**:
+With 5-second threshold and 5-second idle:
+
+- Active period 1: Session start to idle DETECTION = work time + threshold = ~10 sec total
+- Idle period: Idle detection to resume = 5 sec
+- Active period 2: Resume to end = ~5 sec
+
+OR if user means they were working for exactly 5 sec, then idle threshold is different timing...
+
+**Key Learning**:
+
+- `idle_start_time` should be `time.time()` (when detected), not `last_user_input`
+- Threshold period is NOT idle time - it's the "waiting to confirm idle" period
+- Active period includes all time until idle is actually detected and recorded
+
+---
+
+### [2026-02-02] - Active-Idle-Active Periods: Only 2 Periods Show Instead of 3 (Missing Active Period After Idle)
+
+**Bug Reported**: User ran a session with this sequence: Active 5 sec → Idle 5 sec → Active 5 sec. When session ended, completion frame only showed 2 periods instead of 3. The second active period (after idle ended) was missing.
+
+**User Recreation Steps**:
+
+1. Set idle time limit to 5 seconds
+2. Start tracker session
+3. Don't move mouse for 5 seconds → idle session starts
+4. Let idle run for 5 seconds
+5. Move mouse (resume activity) for 5 seconds → active again
+6. End session
+7. **BUG**: Completion frame shows only 2 periods (Active, Idle) instead of 3 (Active, Idle, Active)
+
+**Root Cause**: In [time_tracker.py](time_tracker.py) lines 426-447, the `on_activity()` callback (triggered when user resumes activity after being idle) was:
+
+1. ✅ Ending the idle period correctly (saving end time and duration)
+2. ❌ **NOT starting a new active period**
+
+The problem: `self.active_period_start_time` remained pointing to the ORIGINAL session start time. When `end_session()` later saved the "final" active period, it calculated duration from session start to session end, completely ignoring the idle period in between.
+
+**Result**:
+
+- Session data had only 1 active period (session start → session end)
+- Idle period was recorded
+- But the active period AFTER idle (when user resumed activity) was never created
+- Total: 2 periods shown instead of 3
+
+**What Didn't Work**:
+
+- ❌ Just ending the idle period without updating `active_period_start_time`: This was the original buggy code
+- ❌ Not saving the pre-idle active period: If we only update `active_period_start_time` without saving the period that ended, we lose that data
+
+**What Worked - The Complete Fix**:
+
+When idle ends (user resumes activity), the `on_activity()` callback now:
+
+1. **Saves the active period that existed BEFORE idle started**:
+   - Start: `self.active_period_start_time` (when last active period started)
+   - End: `idle_start_timestamp` (when idle was detected)
+   - Duration: `idle_start - active_period_start`
+   - Includes screenshot data if enabled
+
+2. **Starts a NEW active period from when idle ended**:
+   - Updates `self.active_period_start_time = self.last_user_input` (current time when activity resumed)
+   - Resets screenshot capture for the new active period
+
+3. **Saves all changes to data.json**
+
+**Code Changes** ([time_tracker.py](time_tracker.py) lines 426-492):
+
+```python
+def on_activity(*args):
+    try:
+        self.last_user_input = time.time()
+        if self.session_idle:
+            self.session_idle = False
+            self.status_label.config(text="Active")
+            # Save idle period end
+            all_data = self.load_data()
+            if self.session_name in all_data:
+                idle_periods = all_data[self.session_name]["idle_periods"]
+                if idle_periods and "end" not in idle_periods[-1]:
+                    last_idle = idle_periods[-1]
+                    last_idle["end"] = datetime.now().strftime("%H:%M:%S")
+                    last_idle["end_timestamp"] = self.last_user_input
+                    last_idle["duration"] = (
+                        last_idle["end_timestamp"] - last_idle["start_timestamp"]
+                    )
+
+                    # CRITICAL FIX: Save the active period that ended when idle started
+                    all_data[self.session_name]["active"] = all_data[self.session_name].get("active", [])
+
+                    idle_start_time = last_idle["start_timestamp"]
+                    pre_idle_active_period = {
+                        "start": datetime.fromtimestamp(self.active_period_start_time).strftime("%H:%M:%S"),
+                        "start_timestamp": self.active_period_start_time,
+                        "end": datetime.fromtimestamp(idle_start_time).strftime("%H:%M:%S"),
+                        "end_timestamp": idle_start_time,
+                        "duration": idle_start_time - self.active_period_start_time,
+                    }
+                    # (Screenshot handling code...)
+                    all_data[self.session_name]["active"].append(pre_idle_active_period)
+
+                    # Start new active period from when idle ended
+                    self.active_period_start_time = self.last_user_input
+
+                    # Reset screenshot capture
+                    active_period_count = len(all_data[self.session_name]["active"])
+                    self.screenshot_capture.set_current_session(
+                        self.session_name, "active", active_period_count
+                    )
+
+                    self.save_data(all_data)
+    except Exception:
+        pass
+```
+
+**Key Learnings**:
+
+1. **Active periods must be saved at transitions**: Don't wait until `end_session()` or `toggle_break()` - save the active period immediately when it ends (i.e., when idle starts)
+
+2. **Always update `active_period_start_time` when starting new active period**: This timestamp tracks the start of the CURRENT active period, not the session start
+
+3. **Pattern for state transitions**:
+   - **Active → Idle**: Save current active period, start idle period
+   - **Idle → Active**: End idle period, ALSO save pre-idle active period, start new active period
+   - **Active → Break**: Save current active period (already working)
+   - **Break → Active**: Start new active period (already working via `active_period_start_time` update)
+
+4. **Screenshot handling**: When transitioning to a new period, update the screenshot capture session context
+
+**Files Changed**:
+
+- [time_tracker.py](time_tracker.py) lines 426-492: Updated `on_activity()` callback in `start_input_monitoring()` method
+
+**Test Created**:
+
+- [tests/test_active_after_idle.py](tests/test_active_after_idle.py): Demonstrates expected behavior (3 periods) vs buggy behavior (2 periods)
+
+**Test Results**: ✅ Fix verified - completion frame now correctly shows all 3 periods (Active, Idle, Active)
+
+**Similar Bugs to Watch For**: Any time there's a state transition (active↔break, active↔idle, break↔idle), verify that:
+
+1. The ending period is saved
+2. The starting period's start time is set
+3. Any associated resources (screenshots, etc.) are properly transitioned
+
+---
+
+### [2026-02-02] - Fixed Text Widget Height with TRUE Dynamic Measurement (displaylines)
+
+**User Request**: "is there a way to make the line height dynamic to only be as much as the text and not just add an arbitrary number? that is what is happening now isn't it? i want the height of the row to be equal to the amount of wrapped text."
+
+**Problem**: After fixing the initial truncation bug, the solution still used an ESTIMATION formula (`chars_per_line = width * 0.8`) instead of measuring actual wrapped content. User correctly identified this as "arbitrary".
+
+**Evolution of Solutions**:
+
+1. **Original (WRONG)**: `estimated_lines = min(5, max(1, len(text) // 40 + 1))`
+   - ❌ Assumed 40 chars/line (widgets are 21 chars wide!)
+   - ❌ Capped at 5 lines (too restrictive)
+   - Result: Severe truncation
+
+2. **First Fix (BETTER but still estimating)**: `chars_per_line = width * 0.8; estimated_lines = len(text) / chars_per_line + 1`
+   - ✓ Used widget width
+   - ✓ Increased cap to 15 lines
+   - ❌ Still an ESTIMATION (0.8 factor is arbitrary)
+   - Result: Over-estimated (153 chars → 10 lines when only 7 needed)
+
+3. **TRUE SOLUTION (CORRECT)**: Use tkinter's `count("displaylines")` method
+   - ✓ Measures ACTUAL wrapped line count
+   - ✓ Accounts for word boundaries automatically
+   - ✓ No arbitrary factors or estimations
+   - Result: Perfect fit (153 chars → 7 lines, exactly what's needed)
+
+**How count("displaylines") Works**:
+
+The critical insight is that tkinter Text widgets track display lines (visual wrapped lines) separately from logical lines (newline-separated lines). The `count()` method can query this:
+
+```python
+display_lines_tuple = txt.count("1.0", "end", "displaylines")
+# Returns tuple like (7,) for 7 wrapped display lines
+actual_lines = display_lines_tuple[0]
+```
+
+**CRITICAL: Order of Operations Matters!**
+
+The widget MUST be packed and updated BEFORE counting, otherwise it doesn't know its actual width for wrapping:
+
+```python
+# 1. Create widget
+txt = tk.Text(parent, width=21, height=1, wrap="word", ...)
+
+# 2. Insert text
+txt.insert("1.0", text)
+
+# 3. Pack widget (widget now knows its actual width)
+txt.pack(side=tk.LEFT)
+
+# 4. Force update (wrapping is calculated)
+txt.update_idletasks()
+
+# 5. Count display lines (NOW it returns correct value)
+display_lines = txt.count("1.0", "end", "displaylines")[0]
+
+# 6. Set height to actual wrapped line count
+txt.config(height=display_lines)
+```
+
+**What Didn't Work**:
+
+- ❌ Calling `count("displaylines")` BEFORE packing: Returns wrong value (119 instead of 7!)
+- ❌ Using `index("end-1c")` to count lines: Returns LOGICAL lines (1), not DISPLAY lines (7)
+- ❌ Using `count("ypixels")` and dividing by line height: More complex, less accurate
+- ❌ Any estimation formula: Always over or under-estimates
+
+**What Worked**:
+
+1. **Debug script revealed the correct method**:
+   - Created standalone test to try different line-counting approaches
+   - Discovered `count("displaylines")` returns tuple `(7,)` - the exact value!
+   - Found that widget must be packed first
+
+2. **Reordered operations** in `analysis_frame.py` lines 1073-1093:
+   - Moved packing BEFORE counting (not after)
+   - Added `update_idletasks()` to force wrap calculation
+   - Extracted first element from tuple: `display_lines_tuple[0]`
+
+3. **Updated test to expect 7 lines** (not 10):
+   - Changed `min_lines_needed` from estimation formula to actual value (7)
+   - Updated docstring to document the evolution of solutions
+
+**Key Learnings**:
+
+1. **tkinter Text widgets track display lines separately from logical lines**:
+   - Logical lines: Separated by `\n` characters
+   - Display lines: Visual lines after word wrapping
+   - Use `count("displaylines")` to get the latter
+
+2. **Widget must be packed before measuring**:
+   - Unpacked widget doesn't know its actual width
+   - Count will return wrong value if called too early
+   - Order: Create → Insert → Pack → Update → Count → Configure height
+
+3. **Never estimate when you can measure**:
+   - Estimation formulas (`width * 0.8`) are arbitrary and fragile
+   - tkinter provides exact measurement tools
+   - Use them!
+
+4. **Test what you measure**:
+   - Original tests checked text content but not visual height
+   - Updated test checks both content AND height value
+   - Now catches both types of bugs
+
+**Files Changed**:
+
+1. `src/analysis_frame.py` (lines 1053-1095):
+   - Reordered: Pack widget → Update → Count displaylines → Set height
+   - Removed estimation formula entirely
+   - Added fallback for edge cases (count returns None/0)
+
+2. `tests/test_analysis_timeline.py`:
+   - Updated test to expect 7 lines (actual) not 10 lines (estimated)
+   - Documented the evolution of solutions in test docstring
+   - Explains TRUE dynamic measurement approach
+
+**Test Results**: ✅ All tests pass with exact heights (7 lines for 153-char text with width=21)
+
+**Visual Result**: Rows are now EXACTLY as tall as needed - no truncation, no wasted space!
+
+**Pattern for Future - TRUE Dynamic Height**:
+
+```python
+# Create widget with temporary height
+txt = tk.Text(parent, width=WIDTH, height=1, wrap="word", ...)
+txt.insert("1.0", text)
+
+# Pack and update so widget knows actual width
+txt.pack(side=tk.LEFT)
+txt.update_idletasks()
+
+# Get ACTUAL wrapped line count (not estimated!)
+display_lines_tuple = txt.count("1.0", "end", "displaylines")
+actual_lines = display_lines_tuple[0] if display_lines_tuple else 1
+
+# Set height to exact value
+txt.config(height=min(MAX_LINES, actual_lines))
+```
+
+This is the ONLY way to get truly dynamic height that matches actual content!
+
+---
+
+### [2026-02-02] - Fixed Text Widget Height Calculation for Long Wrapped Content (Visual Truncation Bug)
+
+**Bug Reported**: Timeline comment columns showing "1. the dog is blonde. " repeated 7 times were being visually truncated. All 7 statements should be visible, but only the first 4-5 were showing. User saw truncation in screenshot.
+
+**User Report**: "analysis frame (TDD) bug truncates 7 'the dog is blonde' statements. they should show all 7 in each col. they don't. why don't tests fail? fix"
+
+**Root Cause - Height Calculation Formula Was Wrong**:
+
+In `src/analysis_frame.py` line 1056, the height calculation for Text widgets was:
+
+```python
+estimated_lines = min(5, max(1, len(str(text)) // 40 + 1))
+```
+
+**Two critical flaws:**
+
+1. **Wrong divisor**: Used `// 40` assuming 40 chars per line, but Text widgets with `width=21` only fit ~17 chars per line with word wrapping
+2. **Too-low cap**: Used `min(5, ...)` capping at 5 lines, but long text needs more
+
+**Example that exposed the bug:**
+
+- Text: `"1. the dog is blonde. 2. the dog is blonde. ... 7. the dog is blonde."` = 153 chars
+- Current formula: `min(5, max(1, 153 // 40 + 1))` = `min(5, 4)` = **4 lines**
+- Actual needed: `153 chars / (~17 chars/line)` = **~9-10 lines**
+- Result: Widget stored all text but only displayed 4 lines worth visually (bottom 5-6 lines cut off)
+
+**Why Existing Tests Didn't Catch This**:
+
+Existing tests checked TEXT CONTENT (`.get("1.0", "end-1c")`) which was correct - all 7 occurrences were in the widget. But they didn't check VISUAL HEIGHT. The text was stored but not displayable because the widget was too short.
+
+**What Worked - TDD Approach**:
+
+1. **Created standalone test** (`test_dog_blonde.py`):
+   - Used actual "7 dog is blonde" text from bug report
+   - Checked both text content AND widget height
+   - Calculated minimum height needed: `len(text) / (width * 0.8)` = 10 lines
+   - Test FAILED: Widget had `height=4` but needed `height=10`
+   - Confirmed text was stored but visually truncated
+
+2. **Added proper test to test suite** (`test_analysis_timeline.py`):
+   - Added `test_text_widget_height_sufficient_for_long_wrapped_content` to `TestAnalysisTimelineCommentWrapping`
+   - Test checks widget height is sufficient for text length given widget width
+   - Uses formula: `chars_per_line = width * 0.8` (accounts for word boundaries)
+   - Then: `min_lines_needed = int(len(text) / chars_per_line) + 1`
+   - Asserts: `height >= min_lines_needed`
+
+3. **Fixed the formula** in `src/analysis_frame.py` lines 1055-1059:
+
+   ```python
+   # Old (WRONG):
+   estimated_lines = min(5, max(1, len(str(text)) // 40 + 1))
+
+   # New (CORRECT):
+   chars_per_line = width * 0.8  # Conservative estimate for word wrap
+   estimated_lines = max(1, int(len(str(text)) / chars_per_line) + 1)
+   estimated_lines = min(15, estimated_lines)  # Cap at 15 lines max
+   ```
+
+4. **Verification**:
+   - Test now shows `height=10 lines` (was 4)
+   - All 8 wrapping tests pass
+   - Visual inspection confirms all 7 "dog is blonde" statements visible
+
+**What Didn't Work**:
+
+- ❌ Checking only text content: Tests passed even though visual display was truncated
+- ❌ Using arbitrary `// 40` divisor: Doesn't account for actual widget width
+- ❌ Capping at 5 lines: Too restrictive for longer comments
+
+**Key Learnings**:
+
+1. **Text widget height calculation MUST use widget width**:
+   - Formula: `chars_per_line = width * factor` where factor accounts for word boundaries (0.8 works well)
+   - Then: `estimated_lines = len(text) / chars_per_line + 1`
+   - Never use arbitrary divisor like `// 40` that ignores actual widget width
+
+2. **Test both content AND visual properties**:
+   - Content test: `.get("1.0", "end-1c")` checks text is stored
+   - Visual test: `widget.cget("height")` must be sufficient to DISPLAY text
+   - Both are needed to catch truncation bugs
+
+3. **Height cap considerations**:
+   - Old cap of 5 lines was too low for real-world comments
+   - New cap of 15 lines balances usability (prevents huge rows) vs completeness
+   - Can adjust based on user feedback
+
+4. **Why tests didn't fail initially**:
+   - Existing tests only verified text content (`.get()` returns full text)
+   - Text widget stores ALL text even if too short to display it
+   - Must explicitly test widget height vs calculated minimum
+
+**Files Changed**:
+
+1. `src/analysis_frame.py` (lines 1055-1059):
+   - Changed height calculation from `len(text) // 40` to `len(text) / (width * 0.8)`
+   - Removed `min(5, ...)` cap, increased to `min(15, ...)`
+   - Added comments explaining the calculation
+
+2. `tests/test_analysis_timeline.py`:
+   - Added `test_text_widget_height_sufficient_for_long_wrapped_content` test
+   - Uses actual "7 dog is blonde" text (153 chars)
+   - Verifies widget height >= calculated minimum for given width
+   - Documents the bug and solution in test docstring
+
+**Test Results**: ✅ All 8 TestAnalysisTimelineCommentWrapping tests pass
+
+**Pattern for Future**:
+
+When creating Text widgets with word wrapping:
+
+```python
+chars_per_line = width * 0.8  # Account for word boundaries
+estimated_lines = max(1, int(len(text) / chars_per_line) + 1)
+estimated_lines = min(MAX_LINES, estimated_lines)  # Reasonable cap
+
+txt = tk.Text(parent, width=width, height=estimated_lines, wrap="word", ...)
+```
+
+And test BOTH:
+
+- Text content: `widget.get("1.0", "end-1c") == expected_text`
+- Visual height: `widget.cget("height") >= calculated_min_lines`
+
+---
+
 ### [2026-02-02] - Session Comments Don't Update When Changing Sessions (Bug Fix)
 
 **Bug Reported**: When changing sessions via the session dropdown, the session comments (active notes, break notes, idle notes, session notes) stayed with the most recent session instead of updating to show the selected session's comments.

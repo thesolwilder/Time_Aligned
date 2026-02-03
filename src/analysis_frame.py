@@ -1052,13 +1052,11 @@ class AnalysisFrame(ttk.Frame):
                 """
                 if use_text_widget:
                     # Use Text widget for proper word-boundary wrapping
-                    # Calculate height needed (1 line per ~40 chars, min 1, max 5)
-                    estimated_lines = min(5, max(1, len(str(text)) // 40 + 1))
-
+                    # Create widget with temporary height, then calculate actual height needed
                     txt = tk.Text(
                         row_frame,
                         width=width,
-                        height=estimated_lines,  # Dynamic height for multi-line wrapping
+                        height=1,  # Temporary - will recalculate after inserting text
                         wrap="word",  # Wrap at word boundaries
                         font=("Arial", 8),
                         bg=bg_color,
@@ -1073,14 +1071,40 @@ class AnalysisFrame(ttk.Frame):
                         spacing3=0,  # No extra space after lines
                     )
                     txt.insert("1.0", str(text))
-                    txt.config(state="disabled")  # Make read-only
 
+                    # Pack widget first so it knows its actual width for wrapping calculation
                     if expand:
                         txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
                     else:
-                        txt.pack(
-                            side=tk.LEFT
-                        )  # Add 2px internal padding to match header width
+                        txt.pack(side=tk.LEFT)
+
+                    # Force update to calculate wrapping before measuring lines
+                    txt.update_idletasks()
+
+                    # Calculate actual number of DISPLAY lines (wrapped lines)
+                    # Use count method to count display lines from start to end
+                    # This accounts for word wrapping, unlike index which counts logical lines
+                    try:
+                        display_lines_tuple = txt.count("1.0", "end", "displaylines")
+                        if display_lines_tuple and display_lines_tuple[0]:
+                            actual_lines = display_lines_tuple[0]
+                        else:
+                            # Fallback if count returns None/0
+                            actual_lines = 1
+                    except:
+                        # Fallback: if count fails, estimate based on text length and width
+                        chars_per_line = width * 0.8
+                        actual_lines = max(1, int(len(str(text)) / chars_per_line) + 1)
+
+                    # Ensure at least 1 line
+                    actual_lines = max(1, actual_lines)
+
+                    # Cap at reasonable maximum (15 lines) to prevent excessive height
+                    actual_lines = min(15, actual_lines)
+
+                    # Set height to actual number of wrapped lines
+                    txt.config(height=actual_lines)
+                    txt.config(state="disabled")  # Make read-only
                     txt.bind("<MouseWheel>", on_main_scroll)
                     return txt
                 else:

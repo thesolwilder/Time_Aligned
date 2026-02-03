@@ -2286,6 +2286,135 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
                     f"{col_name} should have wraplength=300 for proper word wrapping",
                 )
 
+    def test_text_widget_height_sufficient_for_long_wrapped_content(self):
+        """
+        Test that Text widgets use TRUE dynamic height based on actual wrapped content
+
+        BUG HISTORY:
+        - Original formula: `len(text) // 40 + 1` assumed 40 chars/line (WRONG - widgets are 21 chars wide!)
+        - First fix: `len(text) / (width * 0.8) + 1` estimated based on width (BETTER but still estimating)
+        - Final solution: Use tkinter's count("displaylines") to get ACTUAL wrapped line count (CORRECT!)
+
+        Example from screenshot:
+        - Text: "1. the dog is blonde. " * 7 = 153 chars
+        - Original: 153 // 40 + 1 = 4 lines (WRONG - text truncated)
+        - Estimated: 153 / (21 * 0.8) + 1 = 10 lines (OVER-estimated)
+        - Actual displaylines: 7 lines (CORRECT - exact fit!)
+
+        Solution: TRUE dynamic height measurement
+        1. Create widget with height=1
+        2. Insert text
+        3. Pack widget (so it knows actual width)
+        4. Update widget (so wrapping is calculated)
+        5. Use count("displaylines") to get actual wrapped line count
+        6. Set height to that exact value
+
+        This gives perfect height - not too small (truncation), not too large (wasted space).
+        """
+        date = "2026-02-02"
+
+        # Use the actual "7 dog is blonde" text from the bug report
+        seven_blonde_text = (
+            "1. the dog is blonde. 2. the dog is blonde. 3. the dog is blonde. "
+            "4. the dog is blonde. 5. the dog is blonde. 6. the dog is blonde. "
+            "7. the dog is blonde."
+        )
+
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "General",
+                "date": date,
+                "start_timestamp": 1738540140,
+                "end_timestamp": 1738540145,
+                "total_duration": 5,
+                "active_duration": 5,
+                "active": [
+                    {
+                        "duration": 5,
+                        "project": "General",
+                        "comment": seven_blonde_text,
+                        "start": "03:49 PM",
+                        "start_timestamp": 1738540140,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": seven_blonde_text,
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": seven_blonde_text,
+                },
+            }
+        }
+
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.update_timeline()
+        self.root.update_idletasks()
+
+        # Get first row
+        timeline_children = frame.timeline_frame.winfo_children()
+        self.assertGreater(len(timeline_children), 0, "Should have at least one row")
+
+        row_frame = timeline_children[0]
+        all_widgets = [child for child in row_frame.winfo_children()]
+
+        # Check comment columns that use Text widgets with word wrapping
+        # Primary Comment (8), Active Comments (11), Session Notes (13)
+        comment_indices = {
+            8: "Primary Comment",
+            11: "Active Comments",
+            13: "Session Notes",
+        }
+
+        for idx, col_name in comment_indices.items():
+            if idx < len(all_widgets):
+                widget = all_widgets[idx]
+
+                # Should be Text widget
+                self.assertIsInstance(
+                    widget, tk.Text, f"{col_name} should be Text widget"
+                )
+
+                # Get widget configuration
+                width = widget.cget("width")
+                height = widget.cget("height")
+
+                # Get displayed text
+                displayed_text = widget.get("1.0", "end-1c")
+
+                # Verify all text is stored (content check)
+                self.assertEqual(
+                    len(displayed_text),
+                    len(seven_blonde_text),
+                    f"{col_name} text content length mismatch",
+                )
+
+                # Calculate minimum height needed for visual display
+                # The widget now uses tkinter's count("displaylines") to get ACTUAL wrapped line count
+                # For this text (153 chars, width=21), the actual displaylines count is 7
+                # No need to estimate - widget should have the exact height needed
+                min_lines_needed = 7  # Actual displaylines count for this specific text
+
+                # CRITICAL TEST: Widget height must be sufficient to DISPLAY all text
+                self.assertGreaterEqual(
+                    height,
+                    min_lines_needed,
+                    f"{col_name} widget height={height} lines is too small! "
+                    f"Text is {len(seven_blonde_text)} chars (7 'the dog is blonde' statements), "
+                    f"widget width={width} chars. With word wrapping, this text wraps to "
+                    f"{min_lines_needed} display lines. Widget must have height >= {min_lines_needed} "
+                    f"to display all content without truncation!",
+                )
+
 
 class TestTimelineRowStretching(unittest.TestCase):
     """Test that timeline rows stretch to full screen width"""
