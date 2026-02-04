@@ -351,3 +351,72 @@ def assert_session_structure_valid(test_case, session_data):
     assert_timestamp_order(
         test_case, session_data["start_timestamp"], session_data["end_timestamp"]
     )
+
+
+def cancel_tkinter_callbacks(root):
+    """Cancel all pending Tkinter after() callbacks before destroying root
+
+    This prevents crashes with "Tcl_AsyncDelete: async handler deleted by wrong thread"
+    that occur when root is destroyed while callbacks are still scheduled.
+
+    Args:
+        root: The Tkinter root window
+    """
+    try:
+        if not root or not root.winfo_exists():
+            return
+        root.update_idletasks()
+        after_ids = root.tk.call("after", "info")
+        if after_ids:
+            for after_id in after_ids:
+                try:
+                    root.after_cancel(after_id)
+                except:
+                    pass
+        root.update_idletasks()
+    except Exception:
+        pass
+
+
+def safe_teardown_tk_root(root):
+    """Safely tear down Tkinter root by canceling callbacks and destroying
+
+    This is the REQUIRED tearDown pattern for all Tkinter tests to prevent
+    "Tcl_AsyncDelete: async handler deleted by wrong thread" crashes.
+
+    Use this in tearDown() instead of calling root.destroy() directly:
+
+        def tearDown(self):
+            from tests.test_helpers import safe_teardown_tk_root
+            safe_teardown_tk_root(self.root)
+
+    Args:
+        root: The Tkinter root window to tear down
+    """
+    import gc
+
+    try:
+        # Cancel all pending callbacks first
+        cancel_tkinter_callbacks(root)
+
+        # Quit the mainloop if running
+        try:
+            root.quit()
+        except:
+            pass
+
+        # Destroy the root window
+        try:
+            root.destroy()
+        except:
+            pass
+
+        # Force garbage collection to clean up tkinter variables immediately
+        # This helps prevent "Variable.__del__" errors in large test suites
+        collected = gc.collect()
+        if collected > 0:
+            print(f"[GC] Collected {collected} objects after tearDown")
+
+    except Exception:
+        # Suppress all tearDown errors
+        pass

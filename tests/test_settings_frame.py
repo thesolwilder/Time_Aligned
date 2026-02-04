@@ -89,10 +89,9 @@ class TestSettingsFrameDefaults(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_default_sphere_displays(self):
@@ -163,10 +162,9 @@ class TestSettingsFrameFilters(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_sphere_filter_active(self):
@@ -408,10 +406,9 @@ class TestSettingsFrameAddSphere(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     @patch("tkinter.simpledialog.askstring")
@@ -541,10 +538,9 @@ class TestSettingsFrameDefaultOrdering(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_default_project_appears_first(self):
@@ -645,10 +641,9 @@ class TestSettingsFrameOnlyOneDefault(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_set_sphere_default_removes_old_default(self):
@@ -780,10 +775,9 @@ class TestSettingsFrameArchiveActivate(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_archive_sphere(self):
@@ -871,10 +865,9 @@ class TestSettingsFrameComboboxScroll(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_sphere_dropdown_is_readonly(self):
@@ -905,10 +898,9 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_project_sphere_association_preserved(self):
@@ -1156,10 +1148,9 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_archive_sphere_does_not_auto_archive_projects(self):

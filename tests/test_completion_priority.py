@@ -29,7 +29,6 @@ class TestCompletionFrameSaveAndClose(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
 
         # Create test data and settings
         test_data = {}
@@ -49,6 +48,12 @@ class TestCompletionFrameSaveAndClose(unittest.TestCase):
         self.test_settings_file = self.file_manager.create_test_file(
             "test_save_settings.json", settings
         )
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
 
     def test_save_single_project_writes_correctly(self):
         """Test that saving a single project writes data correctly"""
@@ -272,7 +277,6 @@ class TestCompletionFramePercentageValidation(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
 
         # Create test data and settings
         test_data = {}
@@ -292,6 +296,12 @@ class TestCompletionFramePercentageValidation(unittest.TestCase):
         self.test_settings_file = self.file_manager.create_test_file(
             "test_percentage_settings.json", settings
         )
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
 
     def test_percentage_split_50_50(self):
         """Test 50/50 percentage split"""
@@ -432,7 +442,6 @@ class TestCompletionFrameAddRemoveSecondary(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
 
         # Create test data and settings
         test_data = {}
@@ -452,6 +461,12 @@ class TestCompletionFrameAddRemoveSecondary(unittest.TestCase):
         self.test_settings_file = self.file_manager.create_test_file(
             "test_toggle_settings.json", settings
         )
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
 
     def test_toggle_shows_secondary_widgets(self):
         """Test that toggling + shows secondary widgets"""
@@ -587,7 +602,6 @@ class TestCompletionFrameCommentSpecialCharacters(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
 
         # Create test data and settings
         test_data = {}
@@ -606,6 +620,12 @@ class TestCompletionFrameCommentSpecialCharacters(unittest.TestCase):
         self.test_settings_file = self.file_manager.create_test_file(
             "test_comment_settings.json", settings
         )
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
 
     def test_comment_with_quotes(self):
         """Test that comments with quotes are saved correctly"""
@@ -797,7 +817,6 @@ class TestCompletionFrameMultipleSecondaryProjects(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
 
         # Create test data and settings
         test_data = {}
@@ -818,6 +837,12 @@ class TestCompletionFrameMultipleSecondaryProjects(unittest.TestCase):
         self.test_settings_file = self.file_manager.create_test_file(
             "test_multi_secondary_settings.json", settings
         )
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
 
     def test_multiple_periods_with_different_secondaries(self):
         """Test saving multiple periods each with different secondary projects"""

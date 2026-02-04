@@ -44,7 +44,7 @@ class AnalysisFrame(ttk.Frame):
         self.selected_card = 0
 
         # Status filter (active, all, archived) - controls both sphere and project dropdowns
-        self.status_filter = tk.StringVar(value="active")
+        self.status_filter = tk.StringVar(master=root, value="active")
 
         self.create_widgets()
 
@@ -123,7 +123,7 @@ class AnalysisFrame(ttk.Frame):
         # Build sphere list based on filter (default is active)
         spheres = self.get_filtered_spheres()
 
-        self.sphere_var = tk.StringVar(value=default_sphere)
+        self.sphere_var = tk.StringVar(master=self.root, value=default_sphere)
         self.sphere_filter = ttk.Combobox(
             filter_frame,
             textvariable=self.sphere_var,
@@ -139,7 +139,7 @@ class AnalysisFrame(ttk.Frame):
 
         # Get default project for the default sphere
         self.default_project = self.get_default_project(default_sphere)
-        self.project_var = tk.StringVar(value="All Projects")
+        self.project_var = tk.StringVar(master=self.root, value="All Projects")
         self.project_filter = ttk.Combobox(
             filter_frame, textvariable=self.project_var, state="readonly", width=15
         )
@@ -391,7 +391,7 @@ class AnalysisFrame(ttk.Frame):
         card_frame = ttk.LabelFrame(parent, relief=tk.RIDGE, borderwidth=2, padding=10)
 
         # Date range dropdown
-        range_var = tk.StringVar(value=self.card_ranges[index])
+        range_var = tk.StringVar(master=self.root, value=self.card_ranges[index])
         range_dropdown = ttk.Combobox(
             card_frame,
             textvariable=range_var,

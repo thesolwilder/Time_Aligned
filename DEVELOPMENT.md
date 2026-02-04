@@ -160,6 +160,15 @@ tests/
 
 ### Running Tests
 
+**⚠️ CRITICAL: Run tests ONCE with all needed output to avoid multiple executions**
+
+When running tests, capture comprehensive output in a single execution:
+
+```bash
+# Run with full output (stdout + stderr)
+python tests/test_<module>.py 2>&1
+```
+
 **During Development**: Run only the relevant test files
 
 ```bash

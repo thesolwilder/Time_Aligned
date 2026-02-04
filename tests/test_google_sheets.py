@@ -15,7 +15,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from test_helpers import TestDataGenerator, TestFileManager
 
+# Check if Google Sheets module can be imported
+# This must be done before @patch decorators are evaluated
+GOOGLE_SHEETS_AVAILABLE = False
+try:
+    from src import google_sheets_integration
 
+    GOOGLE_SHEETS_AVAILABLE = True
+except (ImportError, ModuleNotFoundError):
+    pass
+
+
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsIntegration(unittest.TestCase):
     """Test Google Sheets integration functionality"""
 
@@ -265,6 +278,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsUploadFlow(unittest.TestCase):
     """Test complete upload flow from completion to Google Sheets"""
 
@@ -496,6 +512,9 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             pass
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsInputValidation(unittest.TestCase):
     """Test input validation for Google Sheets integration"""
 
@@ -671,6 +690,9 @@ class TestGoogleSheetsInputValidation(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestEscapeForSheets(unittest.TestCase):
     """Test formula injection prevention"""
 
@@ -747,6 +769,9 @@ class TestEscapeForSheets(unittest.TestCase):
         self.assertEqual(result, text)
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsUploadSession(unittest.TestCase):
     """Test actual upload_session method"""
 
@@ -856,6 +881,9 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsTestConnection(unittest.TestCase):
     """Test connection testing functionality"""
 
@@ -924,6 +952,9 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
     """Integration tests with real Google Sheets API (requires credentials)"""
 
@@ -1092,6 +1123,9 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsReadOnly(unittest.TestCase):
     """Test read-only mode"""
 
@@ -1146,6 +1180,9 @@ class TestGoogleSheetsReadOnly(unittest.TestCase):
             self.skipTest("Google Sheets dependencies not installed")
 
 
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
 class TestGoogleSheetsDetailedFormat(unittest.TestCase):
     """Test that Google Sheets upload uses detailed format matching CSV export"""
 

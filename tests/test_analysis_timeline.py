@@ -27,7 +27,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -48,6 +48,13 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_sphere_filter_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_sphere_filter_work_only(self):
         """Test filtering by Work sphere"""
@@ -199,7 +206,7 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -216,6 +223,13 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_project_filter_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_project_filter_project_a(self):
         """Test filtering by specific project"""
@@ -300,7 +314,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -317,6 +331,13 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_timeline_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_timeline_data_has_all_required_fields(self):
         """Test that get_timeline_data returns all required fields for each period"""
@@ -713,7 +734,7 @@ class TestAnalysisTimelineUIData(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -731,6 +752,13 @@ class TestAnalysisTimelineUIData(unittest.TestCase):
             "test_ui_data_settings.json", settings
         )
         self.test_data_file = self.file_manager.create_test_file("test_ui_data.json")
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_timeline_shows_session_comments_from_completion_frame_format(self):
         """
@@ -949,7 +977,7 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -965,6 +993,13 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_header_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_header_columns_align_with_data_rows(self):
         """
@@ -1038,25 +1073,29 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         self.assertGreater(len(data_rows), 0, "Should have at least one data row")
 
         first_row = data_rows[0]
-        data_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+        # Get ALL widgets (includes both Label and Text widgets)
+        data_widgets = [w for w in first_row.winfo_children()]
 
         # Verify header count matches data column count
         self.assertEqual(
             len(header_labels),
-            len(data_labels),
-            f"Header count ({len(header_labels)}) should match data column count ({len(data_labels)})",
+            len(data_widgets),
+            f"Header count ({len(header_labels)}) should match data column count ({len(data_widgets)})",
         )
 
         # Verify each header aligns with corresponding data column
-        for idx, (header_label, data_label) in enumerate(
-            zip(header_labels, data_labels)
+        for idx, (header_label, data_widget) in enumerate(
+            zip(header_labels, data_widgets)
         ):
             # Remove sort indicators from header text for display in error messages
             header_text = header_label.cget("text").replace(" ▼", "").replace(" ▲", "")
 
             # Verify header width matches data column width
             header_width = header_label.cget("width")
-            data_width = data_label.cget("width")
+            # Handle both Label and Text widgets
+            data_width = (
+                data_widget.cget("width") if hasattr(data_widget, "cget") else 0
+            )
 
             self.assertEqual(
                 header_width,
@@ -1064,19 +1103,21 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
                 f"Column {idx} ('{header_text}'): header width ({header_width}) should match data width ({data_width})",
             )
 
-            # Verify both use same anchor
-            self.assertEqual(
-                header_label.cget("anchor"),
-                data_label.cget("anchor"),
-                f"Column {idx} ('{header_text}'): header and data should have same anchor",
-            )
+            # Verify both use same anchor (only for Label widgets)
+            if isinstance(data_widget, tk.Label):
+                self.assertEqual(
+                    header_label.cget("anchor"),
+                    data_widget.cget("anchor"),
+                    f"Column {idx} ('{header_text}'): header and data should have same anchor",
+                )
 
-            # Verify both use same padx
-            self.assertEqual(
-                header_label.cget("padx"),
-                data_label.cget("padx"),
-                f"Column {idx} ('{header_text}'): header and data should have same padx",
-            )
+            # Verify both use same padx (only for Label widgets)
+            if isinstance(data_widget, tk.Label):
+                self.assertEqual(
+                    header_label.cget("padx"),
+                    data_widget.cget("padx"),
+                    f"Column {idx} ('{header_text}'): header and data should have same padx",
+                )
 
             # NOTE: With two-row header design, single-row headers use pady=6 for vertical centering
             # Data labels use pady=1 (default). This is intentional design for alignment.
@@ -1336,12 +1377,11 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
             self.assertGreater(len(data_rows), 0, "Should have at least one data row")
 
             first_row = data_rows[0]
-            data_labels = [
-                w for w in first_row.winfo_children() if isinstance(w, tk.Label)
-            ]
+            # Get ALL widgets (includes both Label and Text widgets)
+            data_widgets = [w for w in first_row.winfo_children()]
 
             # Check each column's pixel width
-            for idx, (header, data) in enumerate(zip(header_labels, data_labels)):
+            for idx, (header, data) in enumerate(zip(header_labels, data_widgets)):
                 header_text = header.cget("text")
                 header_px_width = header.winfo_reqwidth()
                 data_px_width = data.winfo_reqwidth()
@@ -1363,7 +1403,7 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -1379,6 +1419,13 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_two_row_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_header_containers_exist_for_two_row_headers(self):
         """
@@ -1707,7 +1754,7 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -1727,6 +1774,13 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_comment_wrap_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_primary_comment_shows_full_text_without_truncation(self):
         """Test that primary comment displays complete text, not truncated to 20 chars"""
@@ -2424,7 +2478,7 @@ class TestTimelineRowStretching(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -2440,6 +2494,13 @@ class TestTimelineRowStretching(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_timeline_stretch_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_timeline_rows_have_sticky_we_grid(self):
         """Test that timeline row frames use sticky=(W,E) to stretch horizontally"""
@@ -2559,7 +2620,7 @@ class TestAnalysisFrameProjectRadioButtons(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -2602,6 +2663,13 @@ class TestAnalysisFrameProjectRadioButtons(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_project_radio_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_project_filter_variable_exists(self):
         """Test that status_filter variable is created"""
@@ -2736,7 +2804,7 @@ class TestAnalysisFrameSphereRadioButtons(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -2758,6 +2826,13 @@ class TestAnalysisFrameSphereRadioButtons(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_sphere_radio_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_sphere_filter_variable_exists(self):
         """Test that status_filter variable is created"""
@@ -2933,10 +3008,9 @@ class TestAnalysisFrameStatusFilterIntegration(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_active_sphere_active_project_shows_on_active_filter(self):
@@ -3261,10 +3335,9 @@ class TestAnalysisFrameTimelineColumns(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_timeline_header_has_sphere_column(self):
@@ -3561,7 +3634,7 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        #  DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = {
             "idle_settings": {"idle_tracking_enabled": False},
@@ -3579,6 +3652,13 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
         self.test_data_file = self.file_manager.create_test_file(
             "test_session_notes_data.json"
         )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
     def test_session_notes_column_shows_actual_text_value(self):
         """
@@ -3645,14 +3725,19 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
         )
 
         first_row = timeline_rows[0]
-        row_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+        # Get ALL widgets (both Label and Text) since comment columns use Text widgets
+        row_widgets = list(first_row.winfo_children())
 
         # Column indices:
         # 0=Date, 1=Start, 2=Duration, 3=Sphere, 4=Sphere Active, 5=Project Active,
-        # 6=Type, 7=Primary Project, 8=Primary Comment, 9=Secondary Project,
-        # 10=Secondary Comment, 11=Active Comments, 12=Break Comments, 13=Session Notes
-        session_notes_label = row_labels[13]
-        actual_text = session_notes_label.cget("text")
+        # 6=Type, 7=Primary Project, 8=Primary Comment (Text), 9=Secondary Project,
+        # 10=Secondary Comment (Text), 11=Active Comments (Text), 12=Break Comments (Text), 13=Session Notes (Text)
+        session_notes_widget = row_widgets[13]
+        # Text widgets use get() method instead of cget("text")
+        if isinstance(session_notes_widget, tk.Text):
+            actual_text = session_notes_widget.get("1.0", "end-1c")
+        else:
+            actual_text = session_notes_widget.cget("text")
 
         self.assertEqual(
             actual_text,
@@ -3723,20 +3808,25 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
         )
 
         first_row = timeline_rows[0]
-        row_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+        # Get ALL widgets (both Label and Text) since comment columns use Text widgets
+        row_widgets = list(first_row.winfo_children())
 
         # Column indices:
         # 0=Date, 1=Start, 2=Duration, 3=Sphere, 4=Sphere Active, 5=Project Active,
-        # 6=Type, 7=Primary Project, 8=Primary Comment, 9=Secondary Project,
-        # 10=Secondary Comment, 11=Active Comments, 12=Break Comments, 13=Session Notes
+        # 6=Type, 7=Primary Project, 8=Primary Comment (Text), 9=Secondary Project,
+        # 10=Secondary Comment (Text), 11=Active Comments (Text), 12=Break Comments (Text), 13=Session Notes (Text)
 
         # Verify Secondary Action column (index 9) is empty (no secondary project)
-        secondary_action_label = row_labels[9]
-        secondary_action_text = secondary_action_label.cget("text")
+        secondary_action_widget = row_widgets[9]
+        secondary_action_text = secondary_action_widget.cget("text")
 
         # Session notes column (index 13)
-        session_notes_label = row_labels[13]
-        session_notes_text = session_notes_label.cget("text")
+        session_notes_widget = row_widgets[13]
+        # Text widgets use get() method instead of cget("text")
+        if isinstance(session_notes_widget, tk.Text):
+            session_notes_text = session_notes_widget.get("1.0", "end-1c")
+        else:
+            session_notes_text = session_notes_widget.cget("text")
 
         # Verify session notes is in column 13, NOT column 9
         self.assertEqual(
@@ -3805,27 +3895,30 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
 
         # Check first data row
         first_row = timeline_rows[0]
-        row_labels = [w for w in first_row.winfo_children() if isinstance(w, tk.Label)]
+        # Get ALL widgets (both Label and Text) since comment columns use Text widgets
+        row_widgets = list(first_row.winfo_children())
 
         # Column 13 is Session Notes (last column)
-        session_notes_label = row_labels[13]
+        session_notes_widget = row_widgets[13]
 
         # Check pack configuration - should have fill=X and expand=True
-        pack_info = session_notes_label.pack_info()
+        pack_info = session_notes_widget.pack_info()
 
         self.assertIn(
-            "fill", pack_info, "Session Notes label should have pack fill configuration"
+            "fill",
+            pack_info,
+            "Session Notes widget should have pack fill configuration",
         )
         self.assertEqual(
             pack_info["fill"],
-            "x",
-            "Session Notes label should use fill='x' to expand horizontally",
+            "both",
+            "Session Notes widget should use fill='both' to expand in both directions",
         )
 
         self.assertIn(
             "expand",
             pack_info,
-            "Session Notes label should have pack expand configuration",
+            "Session Notes widget should have pack expand configuration",
         )
         self.assertTrue(
             pack_info["expand"],
@@ -3858,3 +3951,7 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
             header_pack_info.get("expand"),
             "Session Notes header should have expand=True to fill remaining space",
         )
+
+
+if __name__ == "__main__":
+    unittest.main()

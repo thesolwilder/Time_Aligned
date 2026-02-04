@@ -53,9 +53,9 @@ class SettingsFrame(ttk.Frame):
         self.tracker = tracker
         self.root = root
         self.current_sphere = None
-        self.sphere_filter = tk.StringVar(value="active")
-        self.project_filter = tk.StringVar(value="active")
-        self.break_action_filter = tk.StringVar(value="active")
+        self.sphere_filter = tk.StringVar(master=root, value="active")
+        self.project_filter = tk.StringVar(master=root, value="active")
+        self.break_action_filter = tk.StringVar(master=root, value="active")
 
         # Track editing states
         self.editing_projects = {}  # {project_name: {widgets}}
@@ -210,7 +210,7 @@ class SettingsFrame(ttk.Frame):
         self.row += 1
 
         # Dropdown and sphere management frame on the same row
-        self.sphere_var = tk.StringVar()
+        self.sphere_var = tk.StringVar(master=self.root)
         self.sphere_dropdown = ttk.Combobox(
             parent,
             textvariable=self.sphere_var,
@@ -577,13 +577,15 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(frame, text="Name:", font=("Arial", 10, "bold")).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
-        name_var = tk.StringVar(value=project_name)
+        name_var = tk.StringVar(master=self.root, value=project_name)
         name_entry = ttk.Entry(frame, textvariable=name_var, state="readonly", width=30)
         name_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
 
         # Sphere
         ttk.Label(frame, text="Sphere:").grid(row=0, column=2, sticky=tk.W, padx=5)
-        sphere_var = tk.StringVar(value=project_data.get("sphere", ""))
+        sphere_var = tk.StringVar(
+            master=self.root, value=project_data.get("sphere", "")
+        )
         # Get all active spheres
         active_spheres = [
             name
@@ -601,7 +603,7 @@ class SettingsFrame(ttk.Frame):
 
         # Note
         ttk.Label(frame, text="Note:").grid(row=1, column=0, sticky=tk.W, padx=5)
-        note_var = tk.StringVar(value=project_data.get("note", ""))
+        note_var = tk.StringVar(master=self.root, value=project_data.get("note", ""))
         note_entry = ttk.Entry(frame, textvariable=note_var, state="readonly", width=50)
         note_entry.grid(
             row=1, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=2
@@ -609,7 +611,7 @@ class SettingsFrame(ttk.Frame):
 
         # Goal
         ttk.Label(frame, text="Goal:").grid(row=2, column=0, sticky=tk.W, padx=5)
-        goal_var = tk.StringVar(value=project_data.get("goal", ""))
+        goal_var = tk.StringVar(master=self.root, value=project_data.get("goal", ""))
         goal_entry = ttk.Entry(frame, textvariable=goal_var, state="readonly", width=50)
         goal_entry.grid(
             row=2, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=2
@@ -749,10 +751,10 @@ class SettingsFrame(ttk.Frame):
         dialog.geometry(f"+{x}+{y}")
 
         # Variables
-        name_var = tk.StringVar()
-        sphere_var = tk.StringVar()
-        note_var = tk.StringVar()
-        goal_var = tk.StringVar()
+        name_var = tk.StringVar(master=dialog)
+        sphere_var = tk.StringVar(master=dialog)
+        note_var = tk.StringVar(master=dialog)
+        goal_var = tk.StringVar(master=dialog)
         result = {"confirmed": False}
 
         # Get selected sphere (or default if none selected)
@@ -947,7 +949,7 @@ class SettingsFrame(ttk.Frame):
 
         # Idle tracking enabled toggle
         idle_enabled_var = tk.BooleanVar(
-            value=idle_settings.get("idle_tracking_enabled", True)
+            master=self.root, value=idle_settings.get("idle_tracking_enabled", True)
         )
         ttk.Checkbutton(
             idle_frame,
@@ -960,7 +962,9 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
-        idle_threshold_var = tk.IntVar(value=idle_settings.get("idle_threshold", 60))
+        idle_threshold_var = tk.IntVar(
+            master=self.root, value=idle_settings.get("idle_threshold", 60)
+        )
         idle_threshold_spin = ttk.Spinbox(
             idle_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
         )
@@ -975,7 +979,7 @@ class SettingsFrame(ttk.Frame):
         idle_break_frame = ttk.Frame(idle_frame)
         idle_break_frame.grid(row=idle_row, column=1, pady=5, padx=5)
 
-        idle_break_var = tk.StringVar()
+        idle_break_var = tk.StringVar(master=self.root)
         current_threshold = idle_settings.get("idle_break_threshold", 300)
         if current_threshold == -1:
             idle_break_var.set("Never")
@@ -1052,7 +1056,7 @@ class SettingsFrame(ttk.Frame):
 
         # Screenshot capture enabled toggle
         screenshot_enabled_var = tk.BooleanVar(
-            value=screenshot_settings.get("enabled", False)
+            master=self.root, value=screenshot_settings.get("enabled", False)
         )
 
         # Warning label (initially hidden)
@@ -1089,7 +1093,8 @@ class SettingsFrame(ttk.Frame):
 
         # Capture on focus change
         capture_on_focus_var = tk.BooleanVar(
-            value=screenshot_settings.get("capture_on_focus_change", True)
+            master=self.root,
+            value=screenshot_settings.get("capture_on_focus_change", True),
         )
         ttk.Checkbutton(
             screenshot_frame,
@@ -1103,7 +1108,8 @@ class SettingsFrame(ttk.Frame):
             row=screenshot_row, column=0, sticky=tk.W, pady=5
         )
         min_seconds_var = tk.IntVar(
-            value=screenshot_settings.get("min_seconds_between_captures", 10)
+            master=self.root,
+            value=screenshot_settings.get("min_seconds_between_captures", 10),
         )
         min_seconds_spin = ttk.Spinbox(
             screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=10
@@ -1162,7 +1168,9 @@ class SettingsFrame(ttk.Frame):
         google_row = google_header_row
 
         # Enable toggle
-        enabled_var = tk.BooleanVar(value=google_settings.get("enabled", False))
+        enabled_var = tk.BooleanVar(
+            master=self.root, value=google_settings.get("enabled", False)
+        )
         ttk.Checkbutton(
             google_frame,
             text="Enable automatic upload to Google Sheets",
@@ -1175,7 +1183,7 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         spreadsheet_id_var = tk.StringVar(
-            value=google_settings.get("spreadsheet_id", "")
+            master=self.root, value=google_settings.get("spreadsheet_id", "")
         )
         spreadsheet_id_entry = ttk.Entry(
             google_frame, textvariable=spreadsheet_id_var, width=50
@@ -1212,7 +1220,7 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         sheet_name_var = tk.StringVar(
-            value=google_settings.get("sheet_name", "Sessions")
+            master=self.root, value=google_settings.get("sheet_name", "Sessions")
         )
         sheet_name_entry = ttk.Entry(
             google_frame, textvariable=sheet_name_var, width=30
@@ -1225,7 +1233,8 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         credentials_var = tk.StringVar(
-            value=google_settings.get("credentials_file", "credentials.json")
+            master=self.root,
+            value=google_settings.get("credentials_file", "credentials.json"),
         )
         credentials_entry = ttk.Entry(
             google_frame, textvariable=credentials_var, width=30
