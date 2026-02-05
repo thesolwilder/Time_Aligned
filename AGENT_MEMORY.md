@@ -110,6 +110,8 @@ OK
 
 ### Test tearDown Pattern for Tkinter (MANDATORY)
 
+**Search Keywords**: teardown, safe_teardown_tk_root, tkinter test, setUp, TDD template, test template, test pattern, tkinter crashes, Tcl_AsyncDelete, async handler, wrong thread
+
 **Date**: 2026-02-03
 **Issue**: Test suite crashes with "Tcl_AsyncDelete: async handler deleted by wrong thread" or "can't delete Tcl command" errors after ~30-60 seconds of running.
 
@@ -244,6 +246,81 @@ def tearDown(self):
 - ❌ Using `addCleanup(self.root.destroy)` - Cleanup runs after test, callbacks still active
 - ❌ Only calling `cancel_tkinter_callbacks()` - Doesn't suppress all tearDown errors
 - ❌ Manually destroying child widgets first - Can destroy root too early, causing other errors
+
+**✅ COMPLETE TDD TEMPLATE - USE THIS FOR ALL NEW TKINTER TESTS**:
+
+```python
+"""
+Tests for [Feature Name]
+
+Description of what this test file covers.
+"""
+
+import unittest
+import tkinter as tk
+from tkinter import ttk
+import json
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from time_tracker import TimeTracker
+from src.your_module import YourClass
+from test_helpers import TestFileManager, TestDataGenerator
+
+
+class TestYourFeature(unittest.TestCase):
+    """Test [specific aspect of feature]"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+
+        # Create test settings/data files
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_data.json"
+        )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from test_helpers import safe_teardown_tk_root
+        safe_teardown_tk_root(self.root)  # ✅ REQUIRED!
+        self.file_manager.cleanup()
+
+    def test_feature_expected_behavior(self):
+        """Test that feature does X when given Y"""
+        # Arrange
+        tracker = TimeTracker(
+            self.test_settings_file, self.test_data_file, root=self.root
+        )
+
+        # Act
+        result = tracker.some_method()
+
+        # Assert
+        self.assertEqual(result, expected_value)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+**Key Template Points**:
+
+- ✅ Import `safe_teardown_tk_root` in `tearDown()` method
+- ✅ Use `TestFileManager` for test file cleanup (via `addCleanup`)
+- ✅ Use `TestDataGenerator` for creating test data
+- ✅ **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
+- ✅ Always call `safe_teardown_tk_root(self.root)` first in tearDown
+- ✅ Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
 
 ### TDD Red Phase Rule (MANDATORY)
 
