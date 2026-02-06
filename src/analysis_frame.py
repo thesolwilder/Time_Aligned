@@ -217,152 +217,9 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_header_frame.grid(
             row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
         )
-
-        # Create initial clickable header labels
-        def create_initial_header(text, column_key, width):
-            label = tk.Label(
-                self.timeline_header_frame,
-                text=text,
-                font=("Arial", 8, "bold"),
-                width=width,
-                anchor="w",
-                padx=3,
-                pady=3,
-                bg="#d0d0d0",
-                cursor="hand2",
-            )
-            label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
-            label.pack(side=tk.LEFT)
-            return label
-
-        # New header columns to match user request
-        create_initial_header("Date", "date", 10)
-        create_initial_header("Period Start", "start", 9)
-        create_initial_header("Duration", "duration", 8)
-        create_initial_header("Sphere", "sphere", 12)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Sphere Active",
-            font=("Arial", 8),
-            width=5,
-            anchor="w",
-            padx=3,
-            pady=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        tk.Label(
-            self.timeline_header_frame,
-            text="Project Active",
-            font=("Arial", 8),
-            width=5,
-            anchor="w",
-            padx=3,
-            pady=3,
-            bg="#d0d0d0",
-        ).pack(side=tk.LEFT)
-        create_initial_header("Type", "type", 7)
-        create_initial_header("Primary Project/Action", "primary_project", 15)
-        header_txt = tk.Text(
-            self.timeline_header_frame,
-            width=21,
-            height=1,
-            wrap="word",
-            font=("Arial", 8),  # Remove bold to match data rows
-            bg="#d0d0d0",
-            relief="flat",
-            padx=3,
-            pady=0,  # Match data row padding
-            borderwidth=0,
-            highlightthickness=0,
-            insertwidth=0,
-            spacing1=0,
-            spacing2=0,
-            spacing3=0,
-        )
-        header_txt.insert("1.0", "Primary Comment")
-        header_txt.config(state="disabled")
-        header_txt.pack(side=tk.LEFT)
-        create_initial_header("Secondary Project/Action", "secondary_project", 15)
-        header_txt = tk.Text(
-            self.timeline_header_frame,
-            width=21,
-            height=1,
-            wrap="word",
-            font=("Arial", 8),  # Match data rows
-            bg="#d0d0d0",
-            relief="flat",
-            padx=3,
-            pady=0,  # Match data row padding
-            borderwidth=0,
-            highlightthickness=0,
-            insertwidth=0,
-            spacing1=0,
-            spacing2=0,
-            spacing3=0,
-        )
-        header_txt.insert("1.0", "Secondary Comment")
-        header_txt.config(state="disabled")
-        header_txt.pack(side=tk.LEFT)
-        header_txt = tk.Text(
-            self.timeline_header_frame,
-            width=21,
-            height=1,
-            wrap="word",
-            font=("Arial", 8),
-            bg="#d0d0d0",
-            relief="flat",
-            padx=3,
-            pady=0,
-            borderwidth=0,
-            highlightthickness=0,
-            insertwidth=0,
-            spacing1=0,
-            spacing2=0,
-            spacing3=0,
-        )
-        header_txt.insert("1.0", "Session Active Comments")
-        header_txt.config(state="disabled")
-        header_txt.pack(side=tk.LEFT)
-        header_txt = tk.Text(
-            self.timeline_header_frame,
-            width=21,
-            height=1,
-            wrap="word",
-            font=("Arial", 8),
-            bg="#d0d0d0",
-            relief="flat",
-            padx=3,
-            pady=0,
-            borderwidth=0,
-            highlightthickness=0,
-            insertwidth=0,
-            spacing1=0,
-            spacing2=0,
-            spacing3=0,
-        )
-        header_txt.insert("1.0", "Session Break/Idle Comments")
-        header_txt.config(state="disabled")
-        header_txt.pack(side=tk.LEFT)
-        header_txt = tk.Text(
-            self.timeline_header_frame,
-            width=21,
-            height=1,
-            wrap="word",
-            font=("Arial", 8),
-            bg="#d0d0d0",
-            relief="flat",
-            padx=3,
-            pady=0,
-            borderwidth=0,
-            highlightthickness=0,
-            insertwidth=0,
-            spacing1=0,
-            spacing2=0,
-            spacing3=0,
-        )
-        header_txt.insert("1.0", "Session Notes")
-        header_txt.config(state="disabled")
-        header_txt.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Headers will be created by update_timeline_header() using grid() layout
+        # Do NOT create initial headers with pack() here - it conflicts with grid()
 
         # Timeline with scrollbar
         timeline_container = ttk.Frame(content_frame)
@@ -1056,7 +913,16 @@ class AnalysisFrame(ttk.Frame):
 
         row_frame.bind("<MouseWheel>", on_main_scroll)
 
+        # Configure row_frame columns for grid layout
+        for col in range(14):  # 14 columns total
+            if col == 13:  # Session Notes (last column) expands
+                row_frame.columnconfigure(col, weight=1)
+            else:
+                row_frame.columnconfigure(col, weight=0)
+
         # Create label helper function
+        col_idx = 0  # Track current column index
+
         def create_label(
             text, width, wraplength=0, expand=False, use_text_widget=False
         ):
@@ -1069,6 +935,8 @@ class AnalysisFrame(ttk.Frame):
                 expand: Whether to expand to fill remaining space
                 use_text_widget: Use Text widget instead of Label (for better wrapping)
             """
+            nonlocal col_idx
+            
             if use_text_widget:
                 # Use Text widget for better text wrapping
                 txt = tk.Text(
@@ -1084,11 +952,12 @@ class AnalysisFrame(ttk.Frame):
                 txt.insert("1.0", text)
                 txt.config(state=tk.DISABLED)  # Make read-only
                 if expand:
-                    txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                    txt.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
                 else:
-                    txt.pack(side=tk.LEFT)
+                    txt.grid(row=0, column=col_idx, sticky=tk.W)
 
                 txt.bind("<MouseWheel>", on_main_scroll)
+                col_idx += 1
                 return txt
             else:
                 lbl = tk.Label(
@@ -1103,13 +972,14 @@ class AnalysisFrame(ttk.Frame):
                     justify="left",
                 )
                 if expand:
-                    lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                    lbl.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
                 else:
-                    lbl.pack(side=tk.LEFT)
+                    lbl.grid(row=0, column=col_idx, sticky=tk.W)
                 lbl.bind("<MouseWheel>", on_main_scroll)
+                col_idx += 1
                 return lbl
 
-        # Render all columns with proper widths
+        # Render all columns with proper widths using grid layout
         create_label(period["date"], 10)
         create_label(self.format_time_12hr(period["period_start"]), 9)
         create_label(self.format_duration(period["duration"]), 8)
@@ -1184,13 +1054,21 @@ class AnalysisFrame(ttk.Frame):
         for widget in self.timeline_header_frame.winfo_children():
             widget.destroy()
 
+        # Configure timeline_header_frame columns for grid layout
+        for col in range(14):  # 14 columns total
+            if col == 13:  # Session Notes (last column) expands
+                self.timeline_header_frame.columnconfigure(col, weight=1)
+            else:
+                self.timeline_header_frame.columnconfigure(col, weight=0)
+
+        col_idx = 0  # Track current column index
+
         def create_single_row_header(text, column_key, width):
             """Create single-row header with vertical centering for alignment with two-row headers"""
-            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
-            container.pack(side=tk.LEFT)
-
+            nonlocal col_idx
+            
             label = tk.Label(
-                container,
+                self.timeline_header_frame,
                 text=(
                     text + " ▼"
                     if self.timeline_sort_column == column_key
@@ -1207,14 +1085,18 @@ class AnalysisFrame(ttk.Frame):
                 bg="#d0d0d0",
                 cursor="hand2",
             )
-            label.pack()
+            label.grid(row=0, column=col_idx, sticky=tk.W)
             label.bind("<Button-1>", lambda e: self.sort_timeline(column_key))
-            return container
+            col_idx += 1
+            return label
 
         def create_two_row_header(top_text, bottom_text, width):
-            """Create two-row header with stacked labels for clearer column meaning"""
+            """Create two-row header with stacked labels using a temporary container Frame"""
+            nonlocal col_idx
+            
+            # For two-row headers, we need a container Frame to stack the labels
             container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
-            container.pack(side=tk.LEFT)
+            container.grid(row=0, column=col_idx, sticky=tk.W)
 
             # Top row label
             tk.Label(
@@ -1238,30 +1120,56 @@ class AnalysisFrame(ttk.Frame):
                 bg="#d0d0d0",
             ).pack()
 
+            col_idx += 1
             return container
 
-        def create_non_sortable_single_row_header(text, width, expand=False):
-            """Create non-sortable single-row header with vertical centering"""
-            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
-            container.pack(side=tk.LEFT)
-
-            label = tk.Label(
-                container,
-                text=text,
-                font=("Arial", 8),
-                width=width,
-                anchor="w",
-                padx=3,
-                pady=6,  # Vertical padding to center with two-row headers
-                bg="#d0d0d0",
-            )
-            if expand:
-                # For expandable headers (like Session Notes), fill horizontally
-                label.pack(fill=tk.X, expand=True)
+        def create_non_sortable_single_row_header(text, width, expand=False, use_text_widget=False):
+            """Create non-sortable single-row header with vertical centering
+            
+            Args:
+                use_text_widget: If True, use Text widget instead of Label to match data row widget type.
+                                 This ensures pixel-perfect width matching for comment columns.
+            """
+            nonlocal col_idx
+            
+            if use_text_widget:
+                # Use Text widget to match data row widget type (for comment columns)
+                txt = tk.Text(
+                    self.timeline_header_frame,
+                    width=width,
+                    height=1,
+                    wrap=tk.NONE,
+                    bg="#d0d0d0",
+                    font=("Arial", 8),
+                    relief=tk.FLAT,
+                    state=tk.NORMAL,
+                )
+                txt.insert("1.0", text)
+                txt.config(state=tk.DISABLED)  # Make read-only
+                if expand:
+                    txt.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
+                else:
+                    txt.grid(row=0, column=col_idx, sticky=tk.W)
+                col_idx += 1
+                return txt
             else:
-                label.pack()
+                label = tk.Label(
+                    self.timeline_header_frame,
+                    text=text,
+                    font=("Arial", 8),
+                    width=width,
+                    anchor="w",
+                    padx=3,
+                    pady=6,  # Vertical padding to center with two-row headers
+                    bg="#d0d0d0",
+                )
+                if expand:
+                    label.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
+                else:
+                    label.grid(row=0, column=col_idx, sticky=tk.W)
 
-            return container
+                col_idx += 1
+                return label
 
         # Header columns with new two-row design for "Active" columns
         create_single_row_header("Date", "date", 10)
@@ -1272,12 +1180,13 @@ class AnalysisFrame(ttk.Frame):
         create_two_row_header("Project", "Active", 5)  # Two-row: "Project" / "Active"
         create_single_row_header("Type", "type", 7)
         create_single_row_header("Primary Action", "primary_project", 15)
-        create_non_sortable_single_row_header("Primary Comment", 21)
+        # Use Text widget for comment columns to match data row widget type (pixel-perfect alignment)
+        create_non_sortable_single_row_header("Primary Comment", 21, use_text_widget=True)
         create_single_row_header("Secondary Action", "secondary_project", 15)
-        create_non_sortable_single_row_header("Secondary Comment", 21)
-        create_non_sortable_single_row_header("Active Comments", 21)
-        create_non_sortable_single_row_header("Break Comments", 21)
-        create_non_sortable_single_row_header("Session Notes", 21, expand=True)
+        create_non_sortable_single_row_header("Secondary Comment", 21, use_text_widget=True)
+        create_non_sortable_single_row_header("Active Comments", 21, use_text_widget=True)
+        create_non_sortable_single_row_header("Break Comments", 21, use_text_widget=True)
+        create_non_sortable_single_row_header("Session Notes", 21, use_text_widget=True, expand=True)
 
     def export_to_csv(self):
         """Export timeline data to CSV"""

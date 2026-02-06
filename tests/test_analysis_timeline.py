@@ -1001,6 +1001,120 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
+    def test_header_pixel_x_positions_match_data_row_x_positions(self):
+        """
+        TDD RED PHASE TEST: Timeline headers should align with data columns by X position.
+        
+        BUG: Using pack(side=tk.LEFT) causes gradual misalignment across 14 columns because:
+        - Headers use pack(side=tk.LEFT) for containers
+        - Data rows use pack(side=tk.LEFT) for individual widgets
+        - tk.Label and tk.Text render with different pixel widths even with same width=21
+        - Small differences accumulate, causing rightward drift
+        
+        This test verifies X positions (winfo_rootx) match, which catches the pack() bug.
+        
+        FIX: Replace pack() with grid(row=, column=) for precise column alignment.
+        """
+        date = "2026-01-29"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "start_timestamp": 1234567890,
+                "end_timestamp": 1234570890,
+                "total_duration": 3000,
+                "active_duration": 3000,
+                "active": [
+                    {
+                        "duration": 3000,
+                        "project": "Project A",
+                        "comment": "Working on task with some longer text that might wrap",
+                        "start": "10:30:00",
+                        "start_timestamp": 1234567890,
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": "active comment",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "session note",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time
+
+        # Update display
+        frame.update_timeline()
+        
+        # Force geometry update
+        self.root.update_idletasks()
+
+        # Get header widgets - now they can be Labels, Frames (two-row), or Text widgets (comment columns)
+        header_widgets = []
+        for widget in frame.timeline_header_frame.winfo_children():
+            if isinstance(widget, (tk.Label, tk.Frame, tk.Text)):
+                header_widgets.append(widget)
+
+        # Get first data row widgets
+        data_rows = [
+            w for w in frame.timeline_frame.winfo_children() if isinstance(w, tk.Frame)
+        ]
+        self.assertGreater(len(data_rows), 0, "Should have at least one data row")
+        
+        first_row = data_rows[0]
+        data_widgets = [w for w in first_row.winfo_children()]
+
+        # Verify counts match
+        self.assertEqual(
+            len(header_widgets),
+            len(data_widgets),
+            f"Header count ({len(header_widgets)}) should match data column count ({len(data_widgets)})"
+        )
+
+        # CRITICAL TEST: X positions should match (catches pack() misalignment)
+        misaligned_columns = []
+        for idx, (header, data) in enumerate(zip(header_widgets, data_widgets)):
+            # Get header text for display
+            if isinstance(header, tk.Label):
+                header_text = header.cget("text").replace(" ▼", "").replace(" ▲", "")
+            elif isinstance(header, tk.Text):
+                header_text = header.get("1.0", "end-1c")
+            else:
+                # Frame container (two-row header) - get text from first label child
+                labels = [w for w in header.winfo_children() if isinstance(w, tk.Label)]
+                header_text = labels[0].cget("text") if labels else "Unknown"
+            
+            header_x = header.winfo_rootx()
+            data_x = data.winfo_rootx()
+            
+            # Allow 2px tolerance for rounding/padding differences
+            if abs(header_x - data_x) > 2:
+                misaligned_columns.append(
+                    f"Column {idx} ('{header_text}'): header X={header_x}px, data X={data_x}px (diff={abs(header_x - data_x)}px)"
+                )
+        
+        self.assertEqual(
+            len(misaligned_columns),
+            0,
+            f"Headers should align with data columns by X position.\n" +
+            "Misaligned columns:\n" + "\n".join(misaligned_columns)
+        )
+
     def test_header_columns_align_with_data_rows(self):
         """
         BUG: Timeline header columns should align with data row columns.
@@ -1060,20 +1174,13 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         # Update the display to create header and data rows
         frame.update_timeline()
 
-        # Get all header labels (now inside Frame containers)
-        header_containers = [
-            w
-            for w in frame.timeline_header_frame.winfo_children()
-            if isinstance(w, tk.Frame)
-        ]
-        # Extract first label from each container
-        header_labels = []
-        for container in header_containers:
-            labels = [w for w in container.winfo_children() if isinstance(w, tk.Label)]
-            if labels:
-                header_labels.append(labels[0])  # Use first label from each container
+        # Get all header widgets (Labels, Text widgets, or Frame containers for two-row headers)
+        header_widgets = []
+        for w in frame.timeline_header_frame.winfo_children():
+            if isinstance(w, (tk.Label, tk.Text, tk.Frame)):
+                header_widgets.append(w)
 
-        # Get all data row labels from first row
+        # Get all data row widgets from first row
         data_rows = [
             w for w in frame.timeline_frame.winfo_children() if isinstance(w, tk.Frame)
         ]
@@ -1085,21 +1192,34 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
 
         # Verify header count matches data column count
         self.assertEqual(
-            len(header_labels),
+            len(header_widgets),
             len(data_widgets),
-            f"Header count ({len(header_labels)}) should match data column count ({len(data_widgets)})",
+            f"Header count ({len(header_widgets)}) should match data column count ({len(data_widgets)})",
         )
 
         # Verify each header aligns with corresponding data column
-        for idx, (header_label, data_widget) in enumerate(
-            zip(header_labels, data_widgets)
+        for idx, (header_widget, data_widget) in enumerate(
+            zip(header_widgets, data_widgets)
         ):
-            # Remove sort indicators from header text for display in error messages
-            header_text = header_label.cget("text").replace(" ▼", "").replace(" ▲", "")
+            # Get header text for display
+            if isinstance(header_widget, tk.Label):
+                header_text = header_widget.cget("text").replace(" ▼", "").replace(" ▲", "")
+            elif isinstance(header_widget, tk.Text):
+                header_text = header_widget.get("1.0", "end-1c")
+            else:
+                # Frame container (two-row header)
+                labels = [w for w in header_widget.winfo_children() if isinstance(w, tk.Label)]
+                header_text = labels[0].cget("text") if labels else "Unknown"
 
             # Verify header width matches data column width
-            header_width = header_label.cget("width")
-            # Handle both Label and Text widgets
+            # For Frame containers, get width from first label child
+            if isinstance(header_widget, tk.Frame):
+                labels = [w for w in header_widget.winfo_children() if isinstance(w, tk.Label)]
+                header_width = labels[0].cget("width") if labels else 0
+            else:
+                header_width = header_widget.cget("width")
+            
+            # Handle both Label and Text widgets in data rows
             data_width = (
                 data_widget.cget("width") if hasattr(data_widget, "cget") else 0
             )
@@ -1110,18 +1230,18 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
                 f"Column {idx} ('{header_text}'): header width ({header_width}) should match data width ({data_width})",
             )
 
-            # Verify both use same anchor (only for Label widgets)
-            if isinstance(data_widget, tk.Label):
+            # Verify both use same anchor (only for Label widgets in both header and data)
+            if isinstance(header_widget, tk.Label) and isinstance(data_widget, tk.Label):
                 self.assertEqual(
-                    header_label.cget("anchor"),
+                    header_widget.cget("anchor"),
                     data_widget.cget("anchor"),
                     f"Column {idx} ('{header_text}'): header and data should have same anchor",
                 )
 
-            # Verify both use same padx (only for Label widgets)
-            if isinstance(data_widget, tk.Label):
+            # Verify both use same padx (only for Label widgets in both header and data)
+            if isinstance(header_widget, tk.Label) and isinstance(data_widget, tk.Label):
                 self.assertEqual(
-                    header_label.cget("padx"),
+                    header_widget.cget("padx"),
                     data_widget.cget("padx"),
                     f"Column {idx} ('{header_text}'): header and data should have same padx",
                 )
@@ -1132,13 +1252,15 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
 
             # BUG: Headers MUST use same font as data for visual alignment
             # Headers should NOT be bold because that makes them wider than data
-            header_font = str(header_label.cget("font")).lower()
+            # Only check font for Label widgets (Text widgets use different font config)
+            if isinstance(header_widget, tk.Label):
+                header_font = str(header_widget.cget("font")).lower()
 
-            self.assertNotIn(
-                "bold",
-                header_font,
-                f"Column {idx} ('{header_text}'): header should NOT use bold font (causes visual width mismatch)",
-            )
+                self.assertNotIn(
+                    "bold",
+                    header_font,
+                    f"Column {idx} ('{header_text}'): header should NOT use bold font (causes visual width mismatch)",
+                )
 
 
 class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
