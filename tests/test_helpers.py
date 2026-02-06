@@ -188,6 +188,123 @@ class TestDataGenerator:
             },
         }
 
+    @staticmethod
+    def create_test_data_with_n_periods(n_periods):
+        """
+        Create test data with exactly N periods for testing pagination/load more.
+
+        Distributes periods across multiple sessions/days to create realistic data.
+
+        Args:
+            n_periods: Total number of periods to create
+
+        Returns:
+            Dict with data.json structure containing N total periods
+        """
+        import random
+        from datetime import datetime, timedelta
+
+        all_data = {}
+        base_date = datetime(2026, 1, 1)
+        periods_created = 0
+        session_counter = 0
+
+        # Create sessions with varying numbers of periods until we reach n_periods
+        while periods_created < n_periods:
+            # Each session has 3-10 periods
+            periods_this_session = min(
+                random.randint(3, 10), n_periods - periods_created
+            )
+
+            # Distribute across different days
+            days_offset = session_counter // 3  # ~3 sessions per day
+            current_date = base_date + timedelta(days=days_offset)
+            date_str = current_date.strftime("%Y-%m-%d")
+
+            # Create session timestamp
+            hour = 8 + ((session_counter % 3) * 4)  # 8am, 12pm, 4pm
+            start_dt = current_date.replace(hour=hour, minute=0, second=0)
+            start_timestamp = start_dt.timestamp()
+
+            session_name = f"{date_str}_{int(start_timestamp)}"
+
+            # Create periods for this session
+            active_periods = []
+            break_periods = []
+            current_time = start_timestamp
+
+            # Split periods between active and breaks (roughly 2:1 ratio)
+            num_active = int(periods_this_session * 0.66)
+            num_breaks = periods_this_session - num_active
+
+            # Create active periods
+            for i in range(num_active):
+                period_start = current_time
+                duration = random.randint(300, 1800)  # 5-30 minutes
+                period_end = period_start + duration
+
+                active_periods.append(
+                    {
+                        "start": datetime.fromtimestamp(period_start).strftime(
+                            "%H:%M:%S"
+                        ),
+                        "start_timestamp": period_start,
+                        "end": datetime.fromtimestamp(period_end).strftime("%H:%M:%S"),
+                        "end_timestamp": period_end,
+                        "duration": duration,
+                        "project": f"Project{(periods_created + i) % 5}",
+                        "comment": f"Period {periods_created + i + 1}",
+                    }
+                )
+                current_time = period_end
+
+            # Create break periods
+            for i in range(num_breaks):
+                period_start = current_time
+                duration = random.randint(120, 600)  # 2-10 minutes
+                period_end = period_start + duration
+
+                break_periods.append(
+                    {
+                        "start": datetime.fromtimestamp(period_start).strftime(
+                            "%H:%M:%S"
+                        ),
+                        "start_timestamp": period_start,
+                        "end": datetime.fromtimestamp(period_end).strftime("%H:%M:%S"),
+                        "end_timestamp": period_end,
+                        "duration": duration,
+                        "action": "Resting",
+                        "comment": "",
+                    }
+                )
+                current_time = period_end
+
+            # Calculate totals
+            total_active = sum(p["duration"] for p in active_periods)
+            total_break = sum(p["duration"] for p in break_periods)
+
+            all_data[session_name] = {
+                "sphere": f"Sphere{session_counter % 3}",  # Rotate through 3 spheres
+                "date": date_str,
+                "start_time": datetime.fromtimestamp(start_timestamp).strftime(
+                    "%H:%M:%S"
+                ),
+                "start_timestamp": start_timestamp,
+                "active": active_periods,
+                "breaks": break_periods,
+                "idle_periods": [],
+                "end_time": datetime.fromtimestamp(current_time).strftime("%H:%M:%S"),
+                "end_timestamp": current_time,
+                "total_duration": current_time - start_timestamp,
+                "active_duration": total_active,
+                "break_duration": total_break,
+            }
+
+            periods_created += periods_this_session
+            session_counter += 1
+
+        return all_data  # Return sessions dict directly (tracker.data format)
+
 
 class TestFileManager:
     """Manage test files with automatic cleanup"""

@@ -46,6 +46,12 @@ class AnalysisFrame(ttk.Frame):
         # Status filter (active, all, archived) - controls both sphere and project dropdowns
         self.status_filter = tk.StringVar(master=root, value="active")
 
+        # Load More pagination state
+        self.periods_per_page = 50  # Load 50 periods at a time
+        self.timeline_data_all = []  # Full dataset
+        self.periods_loaded = 0  # How many periods currently displayed
+        self.load_more_button = None  # Reference to Load More button
+
         self.create_widgets()
 
     def load_card_ranges(self):
@@ -982,8 +988,145 @@ class AnalysisFrame(ttk.Frame):
 
         return timeline_data
 
+    def load_more_periods(self):
+        """Load the next batch of periods (50 at a time) into the timeline"""
+        # Remove Load More button if it exists
+        if self.load_more_button:
+            self.load_more_button.destroy()
+            self.load_more_button = None
+
+        # Calculate range for this batch
+        start_idx = self.periods_loaded
+        end_idx = min(start_idx + self.periods_per_page, len(self.timeline_data_all))
+
+        # Get periods for this batch
+        periods_to_render = self.timeline_data_all[start_idx:end_idx]
+
+        # Render this batch of periods
+        for idx, period in enumerate(periods_to_render, start=start_idx):
+            self._render_timeline_period(period, idx)
+
+        # Update loaded count
+        self.periods_loaded = end_idx
+
+        # Add Load More button if there are more periods to load
+        if self.periods_loaded < len(self.timeline_data_all):
+            remaining = len(self.timeline_data_all) - self.periods_loaded
+            next_batch = min(self.periods_per_page, remaining)
+
+            button_frame = ttk.Frame(self.timeline_frame)
+            button_frame.grid(row=self.periods_loaded, column=0, pady=10)
+
+            button_text = f"Load {next_batch} More ({self.periods_loaded} of {len(self.timeline_data_all)} shown)"
+            self.load_more_button = ttk.Button(
+                button_frame, text=button_text, command=self.load_more_periods
+            )
+            self.load_more_button.pack()
+        else:
+            # All periods loaded
+            if len(self.timeline_data_all) > self.periods_per_page:
+                # Only show "all loaded" message if we had multiple pages
+                label_frame = ttk.Frame(self.timeline_frame)
+                label_frame.grid(row=self.periods_loaded, column=0, pady=10)
+                ttk.Label(
+                    label_frame,
+                    text=f"All {len(self.timeline_data_all)} periods loaded",
+                    font=("Arial", 10, "italic"),
+                ).pack()
+
+    def _render_timeline_period(self, period, idx):
+        """Render a single period row in the timeline
+
+        Args:
+            period: Period dict with timeline data
+            idx: Row index for grid placement
+        """
+        # Color code based on type
+        if period["type"] == "Active":
+            bg_color = "#e8f5e9"  # Light green
+        else:  # Break or Idle
+            bg_color = "#fff3e0"  # Light orange
+
+        row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
+        row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
+
+        # Bind mousewheel to row frame for scrolling
+        def on_main_scroll(event):
+            self.main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        row_frame.bind("<MouseWheel>", on_main_scroll)
+
+        # Create label helper function
+        def create_label(
+            text, width, wraplength=0, expand=False, use_text_widget=False
+        ):
+            """Create a label or text widget with optional text wrapping
+
+            Args:
+                text: Text to display
+                width: Width in characters
+                wraplength: Pixel width for text wrapping (0 = no wrap) - only for Label
+                expand: Whether to expand to fill remaining space
+                use_text_widget: Use Text widget instead of Label (for better wrapping)
+            """
+            if use_text_widget:
+                # Use Text widget for better text wrapping
+                txt = tk.Text(
+                    row_frame,
+                    width=width,
+                    height=1,
+                    wrap=tk.WORD,
+                    bg=bg_color,
+                    font=("Arial", 8),
+                    relief=tk.FLAT,
+                    state=tk.NORMAL,
+                )
+                txt.insert("1.0", text)
+                txt.config(state=tk.DISABLED)  # Make read-only
+                if expand:
+                    txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+                else:
+                    txt.pack(side=tk.LEFT)
+
+                txt.bind("<MouseWheel>", on_main_scroll)
+                return txt
+            else:
+                lbl = tk.Label(
+                    row_frame,
+                    text=text,
+                    width=width,
+                    anchor="w",
+                    padx=3,
+                    bg=bg_color,
+                    font=("Arial", 8),
+                    wraplength=wraplength,
+                    justify="left",
+                )
+                if expand:
+                    lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
+                else:
+                    lbl.pack(side=tk.LEFT)
+                lbl.bind("<MouseWheel>", on_main_scroll)
+                return lbl
+
+        # Render all columns with proper widths
+        create_label(period["date"], 10)
+        create_label(self.format_time_12hr(period["period_start"]), 9)
+        create_label(self.format_duration(period["duration"]), 8)
+        create_label(period.get("sphere", ""), 12)
+        create_label("✓" if period.get("sphere_active", True) else "", 5)
+        create_label("✓" if period.get("project_active", True) else "", 5)
+        create_label(period["type"], 7)
+        create_label(period["primary_project"], 15)
+        create_label(period["primary_comment"], 21, use_text_widget=True)
+        create_label(period["secondary_project"], 15)
+        create_label(period["secondary_comment"], 21, use_text_widget=True)
+        create_label(period["session_active_comments"], 21, use_text_widget=True)
+        create_label(period["session_break_idle_comments"], 21, use_text_widget=True)
+        create_label(period["session_notes"], 21, use_text_widget=True, expand=True)
+
     def update_timeline(self):
-        """Update the timeline display"""
+        """Update the timeline display with Load More pagination"""
         # Clear existing timeline
         for widget in self.timeline_frame.winfo_children():
             widget.destroy()
@@ -991,7 +1134,7 @@ class AnalysisFrame(ttk.Frame):
         # Configure timeline_frame column to expand
         self.timeline_frame.columnconfigure(0, weight=1)
 
-        # Get data using new get_timeline_data method
+        # Get ALL data using new get_timeline_data method
         range_name = self.card_ranges[self.selected_card]
         periods = self.get_timeline_data(range_name)
 
@@ -1014,150 +1157,17 @@ class AnalysisFrame(ttk.Frame):
             reverse=self.timeline_sort_reverse,
         )
 
-        # Limit to 100 entries
-        periods = periods[:100]
+        # Store full sorted dataset
+        self.timeline_data_all = periods
+
+        # Reset pagination - show only first 50 periods
+        self.periods_loaded = 0
+
+        # Load first page (50 periods)
+        self.load_more_periods()
 
         # Update frozen header
         self.update_timeline_header()
-
-        # Create timeline entries with color coding
-        for idx, period in enumerate(periods):
-            # Color code based on type
-            if period["type"] == "Active":
-                bg_color = "#e8f5e9"  # Light green
-            else:  # Break or Idle
-                bg_color = "#fff3e0"  # Light orange
-
-            row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
-            row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
-
-            # Bind mousewheel to row frame for scrolling
-            def on_main_scroll(event):
-                self.main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-            row_frame.bind("<MouseWheel>", on_main_scroll)
-
-            # Create label helper function
-            def create_label(
-                text, width, wraplength=0, expand=False, use_text_widget=False
-            ):
-                """Create a label or text widget with optional text wrapping
-
-                Args:
-                    text: Text to display
-                    width: Width in characters
-                    wraplength: Pixel width for text wrapping (0 = no wrap) - only for Label
-                    expand: Whether to expand to fill remaining space
-                    use_text_widget: If True, use Text widget with word-wrap instead of Label
-                """
-                if use_text_widget:
-                    # Use Text widget for proper word-boundary wrapping
-                    # Create widget with temporary height, then calculate actual height needed
-                    txt = tk.Text(
-                        row_frame,
-                        width=width,
-                        height=1,  # Temporary - will recalculate after inserting text
-                        wrap="word",  # Wrap at word boundaries
-                        font=("Arial", 8),
-                        bg=bg_color,
-                        relief="flat",
-                        padx=5,  # Slightly increased padding to match header width
-                        pady=0,
-                        borderwidth=0,
-                        highlightthickness=0,
-                        insertwidth=0,  # Hide cursor (read-only widget)
-                        spacing1=0,  # No extra space before lines
-                        spacing2=0,  # No extra space between wrapped lines
-                        spacing3=0,  # No extra space after lines
-                    )
-                    txt.insert("1.0", str(text))
-
-                    # Pack widget first so it knows its actual width for wrapping calculation
-                    if expand:
-                        txt.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-                    else:
-                        txt.pack(side=tk.LEFT)
-
-                    # Force update to calculate wrapping before measuring lines
-                    txt.update_idletasks()
-
-                    # Calculate actual number of DISPLAY lines (wrapped lines)
-                    # Use count method to count display lines from start to end
-                    # This accounts for word wrapping, unlike index which counts logical lines
-                    try:
-                        display_lines_tuple = txt.count("1.0", "end", "displaylines")
-                        if display_lines_tuple and display_lines_tuple[0]:
-                            actual_lines = display_lines_tuple[0]
-                        else:
-                            # Fallback if count returns None/0
-                            actual_lines = 1
-                    except:
-                        # Fallback: if count fails, estimate based on text length and width
-                        chars_per_line = width * 0.8
-                        actual_lines = max(1, int(len(str(text)) / chars_per_line) + 1)
-
-                    # Ensure at least 1 line
-                    actual_lines = max(1, actual_lines)
-
-                    # Cap at reasonable maximum (15 lines) to prevent excessive height
-                    actual_lines = min(15, actual_lines)
-
-                    # Set height to actual number of wrapped lines
-                    txt.config(height=actual_lines)
-                    txt.config(state="disabled")  # Make read-only
-                    txt.bind("<MouseWheel>", on_main_scroll)
-                    return txt
-                else:
-                    # Use Label for non-wrapping columns
-                    lbl = tk.Label(
-                        row_frame,
-                        text=text,
-                        width=width,
-                        anchor="w",
-                        padx=3,
-                        bg=bg_color,
-                        font=("Arial", 8),
-                        wraplength=wraplength,
-                        justify="left",
-                    )
-                    if expand:
-                        # For expandable columns (like Session Notes), fill remaining horizontal space
-                        lbl.pack(side=tk.LEFT, fill=tk.X, expand=True)
-                    else:
-                        lbl.pack(side=tk.LEFT)
-                    lbl.bind("<MouseWheel>", on_main_scroll)
-                    return lbl
-
-            # Column widths (adjust as needed for all columns to fit)
-            # Non-comment columns (no wrapping)
-            create_label(period["date"], 10)
-            create_label(self.format_time_12hr(period["period_start"]), 9)
-            create_label(self.format_duration(period["duration"]), 8)
-            create_label(period.get("sphere", ""), 12)
-            create_label("✓" if period.get("sphere_active", True) else "", 5)
-            create_label("✓" if period.get("project_active", True) else "", 5)
-            create_label(period["type"], 7)
-            create_label(period["primary_project"], 15)
-
-            # Comment columns with wrapping - use Text widgets for proper word-boundary wrapping
-            # Text widgets support wrap="word" which prevents mid-word breaks
-            # Note: Data rows use ipadx=2 in pack() to compensate for 4px rendering difference with headers
-            create_label(period["primary_comment"], 21, use_text_widget=True)
-            create_label(period["secondary_project"], 15)
-            create_label(period["secondary_comment"], 21, use_text_widget=True)
-            create_label(period["session_active_comments"], 21, use_text_widget=True)
-            create_label(
-                period["session_break_idle_comments"], 21, use_text_widget=True
-            )
-            # Session Notes expands to fill remaining space (most text)
-            create_label(period["session_notes"], 21, use_text_widget=True, expand=True)
-
-        if not periods:
-            ttk.Label(
-                self.timeline_frame,
-                text="No data for selected filters",
-                font=("Arial", 12),
-            ).grid(row=0, column=0, pady=20)
 
     def sort_timeline(self, column):
         """Sort timeline by column"""
