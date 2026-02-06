@@ -409,6 +409,23 @@ When following TDD, the "red" phase should produce a **test failure**, not a tes
 4. **Run relevant test file** - `python tests/test_<module>.py` - Should now show PASS (.)
 5. **Refactor** - Improve while keeping tests green
 
+**⚠️ CRITICAL: Test Naming Convention**
+
+**DO NOT** use "TDD RED PHASE" or similar labels in test names/docstrings:
+
+- ❌ **WRONG**: `"""TDD RED PHASE TEST: Verify session notes appear in UI"""`
+- ✅ **CORRECT**: `"""Verify session notes appear in UI"""`
+
+**Why**: Once the test passes, the "RED PHASE" label becomes misleading and causes confusion. The test name should describe WHAT it tests, not WHEN it was written.
+
+**Use descriptive names that remain accurate throughout the test lifecycle**:
+
+```python
+def test_session_notes_displays_in_correct_column():
+    """Verify session notes text appears in Session Notes column (column 13)."""
+    # Test implementation...
+```
+
 **Common Causes of Errors (E) Instead of Failures (F):**
 
 - Missing imports in test file

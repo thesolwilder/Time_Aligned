@@ -26,6 +26,135 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-06] - Test Naming Convention: No "TDD RED PHASE" Labels
+
+**Search Keywords**: test naming, TDD, docstrings, test conventions
+
+**Context**: Removed all "TDD RED PHASE TEST:" labels from test docstrings because once tests pass, the label becomes misleading.
+
+**What Worked** ✅:
+
+**Rule**: Test names should describe WHAT they test, not WHEN they were written.
+
+```python
+# ❌ WRONG - Label becomes misleading after test passes:
+def test_something():
+    """TDD RED PHASE TEST: Verify session notes appear in UI"""
+
+# ✅ CORRECT - Descriptive name that remains accurate:
+def test_something():
+    """Verify session notes appear in UI"""
+```
+
+**When Following TDD**:
+- Write descriptive test names from the start
+- Don't add phase labels like "RED PHASE", "GREEN PHASE", etc.
+- Test name should describe the behavior being verified
+- Docstring should explain the expected behavior and any relevant context
+
+**Files Modified**: tests/test_analysis_timeline.py (10 instances removed)
+
+**Key Learning**: Test names are permanent documentation. They should describe functionality, not development phase.
+
+---
+
+### [2026-02-06] - Fixed 6 Tests After grid() Layout Migration
+
+**Search Keywords**: test fixes, grid layout tests, header structure tests, two-row headers, Frame containers, geometry manager tests
+
+**Context**: After migrating timeline headers and data rows from `pack()` to `grid()` layout (to fix alignment bug), 6 tests failed because they expected the old structure where ALL headers were in Frame containers.
+
+**New Structure After Migration**:
+
+- **Single-row headers** (Date, Start, Duration, Sphere, Type, etc.): `tk.Label` widgets as direct children of `timeline_header_frame`
+- **Comment headers** (Primary Comment, Secondary Comment, etc.): `tk.Text` widgets as direct children
+- **Two-row headers** (Sphere Active, Project Active): `tk.Frame` containers with 2 stacked Labels inside
+
+**Old structure expected by tests**:
+
+- ALL headers in Frame containers
+- All containers accessible by filtering for `isinstance(w, tk.Frame)` and indexing
+
+**Failing Tests**:
+
+1. `test_sphere_active_header_has_two_rows` - Expected `header_containers[4]` but only 2 Frame containers exist
+2. `test_project_active_header_has_two_rows` - Expected `header_containers[5]` but only 2 Frame containers exist
+3. `test_single_row_headers_are_vertically_centered` - Expected `header_containers[0]` for Date, but Date is a Label
+4. `test_timeline_header_has_sphere_active_column` - Same issue, filtering for Frames then indexing
+5. `test_timeline_header_has_project_active_column` - Same issue
+6. `test_session_notes_column_expands_to_fill_space` - Used `pack_info()` but widgets now use `grid()`
+
+**What Worked** ✅:
+
+**Fix Pattern**: Access headers by position in `winfo_children()`, not by filtering and indexing
+
+```python
+# BEFORE (WRONG - only finds Frame containers):
+header_containers = [w for w in frame.timeline_header_frame.winfo_children() if isinstance(w, tk.Frame)]
+sphere_active = header_containers[4]  # ❌ Only 2 Frames exist!
+
+# AFTER (CORRECT - access by position):
+all_header_widgets = frame.timeline_header_frame.winfo_children()
+sphere_active = all_header_widgets[4]  # ✅ Gets column 4 regardless of type
+self.assertIsInstance(sphere_active, tk.Frame)  # Verify it's the expected type
+```
+
+**For grid() configuration checks**:
+
+```python
+# BEFORE (pack):
+pack_info = widget.pack_info()
+self.assertEqual(pack_info["fill"], "both")
+self.assertTrue(pack_info["expand"])
+
+# AFTER (grid):
+grid_info = widget.grid_info()
+self.assertEqual(grid_info["column"], 13)
+sticky = str(grid_info["sticky"]).lower()
+self.assertTrue('e' in sticky or 'w' in sticky)  # Check for expansion
+```
+
+**Tests Fixed**:
+
+1. **TestAnalysisTimelineTwoRowHeaders** (4 tests):
+   - `test_header_containers_exist_for_two_row_headers` ✅
+   - `test_sphere_active_header_has_two_rows` ✅
+   - `test_project_active_header_has_two_rows` ✅
+   - `test_single_row_headers_are_vertically_centered` ✅
+
+2. **TestAnalysisFrameTimelineColumns** (2 tests):
+   - `test_timeline_header_has_sphere_active_column` ✅
+   - `test_timeline_header_has_project_active_column` ✅
+
+3. **TestAnalysisTimelineSessionNotesContent** (1 test):
+   - `test_session_notes_column_expands_to_fill_space` ✅
+
+**Files Modified**:
+
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py): Updated 6 tests to work with new grid() structure
+
+**Test Results**:
+
+- Before: 49 passing, 6 failing (3 errors + 3 failures)
+- After: **55 passing, 0 failing** ✅
+
+**Key Learnings**:
+
+1. **Position-based access > Type-based filtering**: When widget structure varies (some Frames, some Labels, some Text), access by position using `winfo_children()[index]`, then verify type with `assertIsInstance()`.
+
+2. **grid_info() vs pack_info()**: After changing geometry managers, must update ALL geometry checks in tests.
+
+3. **Test expectations must match implementation**: After structural changes, tests need updating even if requirements haven't changed.
+
+4. **Header structure documentation**:
+   - Columns 0-3: Labels (single-row)
+   - Column 4: Frame (Sphere Active - two-row)
+   - Column 5: Frame (Project Active - two-row)
+   - Columns 6-7: Labels (single-row)
+   - Columns 8-13: Text widgets (comment columns)
+
+---
+
 ### [2026-02-06] - Fixed Timeline Header/Data Column Misalignment Bug (TDD)
 
 **Search Keywords**: header alignment, pack vs grid, geometry manager, tk.Text vs tk.Label, pixel width, gradual misalignment, widget type matching, timeline columns
@@ -36,7 +165,7 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 1. **Geometry Manager Conflict**: Initial headers used `pack(side=tk.LEFT)` in `__init__()`, but `update_timeline_header()` tried to use `grid()`. **Cannot mix pack() and grid() in same parent Frame** - even after destroying pack'd widgets, the Frame "remembers" it was using pack.
 
-2. **Widget Type Mismatch**: 
+2. **Widget Type Mismatch**:
    - Headers used `tk.Label` widgets for ALL columns (width=21 → 136px pixel width)
    - Data rows used `tk.Text` widgets for comment columns (width=21 → 130px pixel width)
    - **6px difference per comment column** accumulated across 5 comment columns → 30px total drift
@@ -96,6 +225,7 @@ create_non_sortable_single_row_header("Session Notes", 21, use_text_widget=True,
 **3. Use grid() for ALL Widgets**:
 
 Headers:
+
 ```python
 # Configure timeline_header_frame columns
 for col in range(14):
@@ -109,6 +239,7 @@ label.grid(row=0, column=col_idx, sticky=tk.W)
 ```
 
 Data rows:
+
 ```python
 # Configure row_frame columns
 for col in range(14):
@@ -124,6 +255,7 @@ widget.grid(row=0, column=col_idx, sticky=tk.W)
 **4. New TDD Test - Pixel X Position Alignment**:
 
 Created `test_header_pixel_x_positions_match_data_row_x_positions` that checks `winfo_rootx()` positions with 2px tolerance. This catches:
+
 - Geometry manager issues (pack vs grid)
 - Widget type mismatches (different pixel widths)
 - Accumulating misalignment across columns

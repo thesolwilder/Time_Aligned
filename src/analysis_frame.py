@@ -217,7 +217,7 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_header_frame.grid(
             row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
         )
-        
+
         # Headers will be created by update_timeline_header() using grid() layout
         # Do NOT create initial headers with pack() here - it conflicts with grid()
 
@@ -936,7 +936,7 @@ class AnalysisFrame(ttk.Frame):
                 use_text_widget: Use Text widget instead of Label (for better wrapping)
             """
             nonlocal col_idx
-            
+
             if use_text_widget:
                 # Use Text widget for better text wrapping
                 txt = tk.Text(
@@ -1066,7 +1066,7 @@ class AnalysisFrame(ttk.Frame):
         def create_single_row_header(text, column_key, width):
             """Create single-row header with vertical centering for alignment with two-row headers"""
             nonlocal col_idx
-            
+
             label = tk.Label(
                 self.timeline_header_frame,
                 text=(
@@ -1093,7 +1093,7 @@ class AnalysisFrame(ttk.Frame):
         def create_two_row_header(top_text, bottom_text, width):
             """Create two-row header with stacked labels using a temporary container Frame"""
             nonlocal col_idx
-            
+
             # For two-row headers, we need a container Frame to stack the labels
             container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
             container.grid(row=0, column=col_idx, sticky=tk.W)
@@ -1123,15 +1123,17 @@ class AnalysisFrame(ttk.Frame):
             col_idx += 1
             return container
 
-        def create_non_sortable_single_row_header(text, width, expand=False, use_text_widget=False):
+        def create_non_sortable_single_row_header(
+            text, width, expand=False, use_text_widget=False
+        ):
             """Create non-sortable single-row header with vertical centering
-            
+
             Args:
                 use_text_widget: If True, use Text widget instead of Label to match data row widget type.
                                  This ensures pixel-perfect width matching for comment columns.
             """
             nonlocal col_idx
-            
+
             if use_text_widget:
                 # Use Text widget to match data row widget type (for comment columns)
                 txt = tk.Text(
@@ -1181,12 +1183,22 @@ class AnalysisFrame(ttk.Frame):
         create_single_row_header("Type", "type", 7)
         create_single_row_header("Primary Action", "primary_project", 15)
         # Use Text widget for comment columns to match data row widget type (pixel-perfect alignment)
-        create_non_sortable_single_row_header("Primary Comment", 21, use_text_widget=True)
+        create_non_sortable_single_row_header(
+            "Primary Comment", 21, use_text_widget=True
+        )
         create_single_row_header("Secondary Action", "secondary_project", 15)
-        create_non_sortable_single_row_header("Secondary Comment", 21, use_text_widget=True)
-        create_non_sortable_single_row_header("Active Comments", 21, use_text_widget=True)
-        create_non_sortable_single_row_header("Break Comments", 21, use_text_widget=True)
-        create_non_sortable_single_row_header("Session Notes", 21, use_text_widget=True, expand=True)
+        create_non_sortable_single_row_header(
+            "Secondary Comment", 21, use_text_widget=True
+        )
+        create_non_sortable_single_row_header(
+            "Active Comments", 21, use_text_widget=True
+        )
+        create_non_sortable_single_row_header(
+            "Break Comments", 21, use_text_widget=True
+        )
+        create_non_sortable_single_row_header(
+            "Session Notes", 21, use_text_widget=True, expand=True
+        )
 
     def export_to_csv(self):
         """Export timeline data to CSV"""
