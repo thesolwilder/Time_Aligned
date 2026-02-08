@@ -76,7 +76,9 @@ class SettingsFrame(ttk.Frame):
     def create_widgets(self):
         """Create main settings interface"""
         # Create scrollable container
-        scrollable_container = ScrollableFrame(self, padding="10")
+        scrollable_container = ScrollableFrame(
+            self, debug_name="SettingsFrame Scrollable", padding="10"
+        )
         scrollable_container.pack(fill="both", expand=True)
 
         content_frame = scrollable_container.get_content_frame()

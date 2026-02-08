@@ -82,7 +82,9 @@ class AnalysisFrame(ttk.Frame):
     def create_widgets(self):
         """Create all UI elements for the analysis frame"""
         # Create scrollable container for entire frame
-        scrollable_container = ScrollableFrame(self)
+        scrollable_container = ScrollableFrame(
+            self, debug_name="AnalysisFrame Scrollable"
+        )
         scrollable_container.pack(fill="both", expand=True)
 
         content_frame = scrollable_container.get_content_frame()
@@ -249,6 +251,25 @@ class AnalysisFrame(ttk.Frame):
         # Load initial data
         self.refresh_all()
 
+    def destroy(self):
+        """Log when AnalysisFrame is destroyed for debugging."""
+        try:
+            import traceback
+
+            stack = traceback.extract_stack(limit=8)
+            caller = stack[-2] if len(stack) >= 2 else None
+            if caller:
+                print(
+                    f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)}) "
+                    f"called from {caller.filename}:{caller.lineno} in {caller.name}"
+                )
+            else:
+                print(f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)})")
+        except Exception:
+            print(f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)})")
+
+        super().destroy()
+
     def create_card(self, parent, index):
         """Create a single analysis card"""
         card_frame = ttk.LabelFrame(parent, relief=tk.RIDGE, borderwidth=2, padding=10)
@@ -345,9 +366,80 @@ class AnalysisFrame(ttk.Frame):
 
     def select_card(self, card_index):
         """Select a card and show its timeline"""
+        print("\n" + "=" * 80)
+        print("SELECT_CARD CALLED")
+        print("=" * 80)
+        print(f"[SELECT] Card index: {card_index}")
+        print(f"[SELECT] Card range: {self.card_ranges[card_index]}")
+        print(f"[SELECT] Instance ID: {id(self)}")
+        print(f"[SELECT] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
+        print(
+            f"[SELECT] timeline_frame ID: {id(self.timeline_frame) if hasattr(self, 'timeline_frame') else 'N/A'}"
+        )
+
+        # Check scrollable frame state
+        if hasattr(self, "timeline_scroll"):
+            try:
+                print(f"[SELECT] timeline_scroll exists: True")
+                print(f"[SELECT] timeline_scroll ID: {id(self.timeline_scroll)}")
+                print(
+                    f"[SELECT] timeline_scroll.winfo_exists(): {self.timeline_scroll.winfo_exists()}"
+                )
+                if hasattr(self.timeline_scroll, "canvas"):
+                    print(f"[SELECT] timeline_scroll.canvas exists: True")
+                    print(
+                        f"[SELECT] timeline_scroll.canvas ID: {id(self.timeline_scroll.canvas)}"
+                    )
+                    print(
+                        f"[SELECT] timeline_scroll.canvas.winfo_exists(): {self.timeline_scroll.canvas.winfo_exists()}"
+                    )
+                    # Check canvas bindings
+                    canvas_bindings = self.timeline_scroll.canvas.bind()
+                    print(f"[SELECT] Canvas bindings: {canvas_bindings}")
+            except Exception as e:
+                print(f"[SELECT ERROR] Error checking timeline_scroll: {e}")
+                import traceback
+
+                traceback.print_exc()
+
+        if hasattr(self, "timeline_frame") and self.timeline_frame:
+            try:
+                exists = self.timeline_frame.winfo_exists()
+                print(f"[SELECT] timeline_frame.winfo_exists(): {exists}")
+                master = self.timeline_frame.master
+                print(f"[SELECT] timeline_frame.master: {master}")
+                children = len(self.timeline_frame.winfo_children())
+                print(f"[SELECT] timeline_frame children count: {children}")
+            except Exception as e:
+                print(f"[SELECT ERROR] Error checking timeline_frame state: {e}")
+
         self.selected_card = card_index
+        print(f"[SELECT] Calling update_timeline()...")
         self.update_timeline()
+        print(f"[SELECT] update_timeline() completed")
+
+        # Check scrollable frame state AFTER update
+        if hasattr(self, "timeline_scroll"):
+            try:
+                print(f"[SELECT AFTER] timeline_scroll still exists: True")
+                print(
+                    f"[SELECT AFTER] timeline_scroll.winfo_exists(): {self.timeline_scroll.winfo_exists()}"
+                )
+                if hasattr(self.timeline_scroll, "canvas"):
+                    canvas_bindings = self.timeline_scroll.canvas.bind()
+                    print(f"[SELECT AFTER] Canvas bindings: {canvas_bindings}")
+                    print(
+                        f"[SELECT AFTER] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
+                    )
+            except Exception as e:
+                print(
+                    f"[SELECT AFTER ERROR] Error checking timeline_scroll after update: {e}"
+                )
+
         self.timeline_title.config(text=f"Timeline: {self.card_ranges[card_index]}")
+        print("=" * 80)
+        print("SELECT_CARD COMPLETED")
+        print("=" * 80 + "\n")
 
     def update_project_filter(self, set_default=False):
         """
@@ -651,7 +743,9 @@ class AnalysisFrame(ttk.Frame):
 
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
-        status_filter = self.status_filter.get()  # Get the radio button filter (active/all/archived)
+        status_filter = (
+            self.status_filter.get()
+        )  # Get the radio button filter (active/all/archived)
 
         # Collect all periods
         timeline_data = []
@@ -940,11 +1034,10 @@ class AnalysisFrame(ttk.Frame):
         row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
         row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
 
-        # Bind mousewheel to row frame for scrolling
-        def on_main_scroll(event):
-            self.main_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-
-        row_frame.bind("<MouseWheel>", on_main_scroll)
+        # NOTE: Removed individual mousewheel binding on row_frame
+        # ScrollableFrame's bind_all handler will handle scrolling automatically
+        # Adding bindings here was causing the handler to stop working after
+        # multiple update_timeline() calls
 
         # Configure row_frame columns for grid layout
         for col in range(14):  # 14 columns total
@@ -984,12 +1077,17 @@ class AnalysisFrame(ttk.Frame):
                 )
                 txt.insert("1.0", text)
                 txt.config(state=tk.DISABLED)  # Make read-only
+
+                # CRITICAL FIX: Text widgets have class bindings that interfere with bind_all
+                # Unbind the Text widget's default mousewheel handling
+                txt.bind("<MouseWheel>", lambda e: "break")
+
                 if expand:
                     txt.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
                 else:
                     txt.grid(row=0, column=col_idx, sticky=tk.W)
 
-                txt.bind("<MouseWheel>", on_main_scroll)
+                # NOTE: Removed mousewheel binding - ScrollableFrame handles it
                 col_idx += 1
                 return txt
             else:
@@ -1008,7 +1106,7 @@ class AnalysisFrame(ttk.Frame):
                     lbl.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
                 else:
                     lbl.grid(row=0, column=col_idx, sticky=tk.W)
-                lbl.bind("<MouseWheel>", on_main_scroll)
+                # NOTE: Removed mousewheel binding - ScrollableFrame handles it
                 col_idx += 1
                 return lbl
 
@@ -1030,16 +1128,64 @@ class AnalysisFrame(ttk.Frame):
 
     def update_timeline(self):
         """Update the timeline display with Load More pagination"""
-        # Clear existing timeline
+        print("\n" + "-" * 80)
+        print("UPDATE_TIMELINE CALLED")
+        print("-" * 80)
+        print(f"[UPDATE] Instance ID: {id(self)}")
+        print(f"[UPDATE] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
+
+        # Check scrollable frame BEFORE update
+        if hasattr(self, "timeline_scroll"):
+            try:
+                print(
+                    f"[UPDATE BEFORE] timeline_scroll exists and valid: {self.timeline_scroll.winfo_exists()}"
+                )
+                if hasattr(self.timeline_scroll, "canvas"):
+                    print(
+                        f"[UPDATE BEFORE] Canvas exists and valid: {self.timeline_scroll.canvas.winfo_exists()}"
+                    )
+                    print(
+                        f"[UPDATE BEFORE] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
+                    )
+                    canvas_bindings = self.timeline_scroll.canvas.bind()
+                    print(f"[UPDATE BEFORE] Canvas bindings: {canvas_bindings}")
+            except Exception as e:
+                print(f"[UPDATE BEFORE ERROR] Error checking scrollable frame: {e}")
+
+        if not hasattr(self, "timeline_frame"):
+            print(f"[UPDATE ERROR] timeline_frame attribute doesn't exist!")
+            return
+
+        print(f"[UPDATE] timeline_frame is None: {self.timeline_frame is None}")
+
+        if self.timeline_frame is None:
+            print(f"[UPDATE ERROR] timeline_frame is None!")
+            return
+
+        # Check if timeline_frame is valid
+        try:
+            exists = self.timeline_frame.winfo_exists()
+            print(f"[UPDATE] timeline_frame.winfo_exists(): {exists}")
+        except tk.TclError as e:
+            print(f"[UPDATE ERROR] timeline_frame is destroyed/invalid: {e}")
+            return
+
+        # CRITICAL FIX: Clear children instead of destroying the frame itself
+        # Destroying the frame was breaking the ScrollableFrame's canvas
+        # and causing hundreds of scroll errors
+        print(f"[UPDATE] Clearing timeline_frame children...")
         for widget in self.timeline_frame.winfo_children():
             widget.destroy()
+        print(f"[UPDATE] Children cleared")
 
         # Configure timeline_frame column to expand
         self.timeline_frame.columnconfigure(0, weight=1)
 
         # Get ALL data using new get_timeline_data method
         range_name = self.card_ranges[self.selected_card]
+        print(f"[UPDATE] Loading data for range: {range_name}")
         periods = self.get_timeline_data(range_name)
+        print(f"[UPDATE] Loaded {len(periods)} periods")
 
         # Sort by date and start time (or by selected column)
         if not hasattr(self, "timeline_sort_column"):
@@ -1055,10 +1201,14 @@ class AnalysisFrame(ttk.Frame):
             "start": lambda x: x["period_start"],
             "duration": lambda x: x["duration"],
         }
+        print(
+            f"[UPDATE] Sorting by: {self.timeline_sort_column}, reverse={self.timeline_sort_reverse}"
+        )
         periods.sort(
             key=sort_key_map.get(self.timeline_sort_column, sort_key_map["date"]),
             reverse=self.timeline_sort_reverse,
         )
+        print(f"[UPDATE] Sorting completed")
 
         # Store full sorted dataset
         self.timeline_data_all = periods
@@ -1067,10 +1217,58 @@ class AnalysisFrame(ttk.Frame):
         self.periods_loaded = 0
 
         # Load first page (50 periods)
+        print(f"[UPDATE] Loading first page (50 periods)...")
         self.load_more_periods()
+        print(f"[UPDATE] First page loaded, periods_loaded={self.periods_loaded}")
 
         # Update frozen header
+        print(f"[UPDATE] Updating timeline header...")
         self.update_timeline_header()
+        print(f"[UPDATE] Timeline header updated")
+
+        # Check scrollable frame AFTER complete update
+        if hasattr(self, "timeline_scroll"):
+            try:
+                print(
+                    f"[UPDATE AFTER] timeline_scroll still valid: {self.timeline_scroll.winfo_exists()}"
+                )
+                if hasattr(self.timeline_scroll, "canvas"):
+                    print(
+                        f"[UPDATE AFTER] Canvas still valid: {self.timeline_scroll.canvas.winfo_exists()}"
+                    )
+                    print(
+                        f"[UPDATE AFTER] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
+                    )
+                    canvas_bindings = self.timeline_scroll.canvas.bind()
+                    print(f"[UPDATE AFTER] Canvas bindings: {canvas_bindings}")
+                    # Try to get canvas bbox to see if it has content
+                    bbox = self.timeline_scroll.canvas.bbox("all")
+                    print(f"[UPDATE AFTER] Canvas bbox (content area): {bbox}")
+            except Exception as e:
+                print(
+                    f"[UPDATE AFTER ERROR] Error checking scrollable frame after update: {e}"
+                )
+                import traceback
+
+                traceback.print_exc()
+
+        # DIAGNOSTIC: Check if bind_all handlers still exist after loading periods
+        try:
+            root = self.winfo_toplevel()
+            bindings = root.bind_all("<MouseWheel>")
+            handler_count = bindings.count("if") if bindings else 0
+            print(
+                f"[UPDATE] bind_all handler count after loading {self.periods_loaded} periods: {handler_count}"
+            )
+            print(
+                f"[UPDATE] ScrollableFrame _is_alive: {self.scrollable_container._is_alive if hasattr(self, 'scrollable_container') else 'N/A'}"
+            )
+        except Exception as e:
+            print(f"[UPDATE] Error checking bind_all handlers: {e}")
+
+        print("-" * 80)
+        print("UPDATE_TIMELINE COMPLETED")
+        print("-" * 80 + "\n")
 
     def sort_timeline(self, column):
         """Sort timeline by column"""
@@ -1235,13 +1433,33 @@ class AnalysisFrame(ttk.Frame):
 
     def export_to_csv(self):
         """Export timeline data to CSV"""
+        print("\n" + "=" * 80)
+        print("CSV EXPORT STARTED")
+        print("=" * 80)
+        print(f"[CSV] Instance ID: {id(self)}")
+        print(f"[CSV] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
+        print(
+            f"[CSV] timeline_frame ID: {id(self.timeline_frame) if hasattr(self, 'timeline_frame') else 'N/A'}"
+        )
+        print(
+            f"[CSV] timeline_data_all size: {len(self.timeline_data_all) if hasattr(self, 'timeline_data_all') else 'N/A'}"
+        )
+        print(f"[CSV] selected_card: {self.selected_card}")
+        print(f"[CSV] card_ranges: {self.card_ranges}")
+
         # Get data for selected card's range
         range_name = self.card_ranges[self.selected_card]
+        print(f"[CSV] Exporting range: {range_name}")
         start_date, end_date = self.get_date_range(range_name)
+        print(f"[CSV] Date range: {start_date} to {end_date}")
         all_data = self.tracker.load_data()
+        print(f"[CSV] Loaded {len(all_data)} sessions from file")
 
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
+        status_filter = (
+            self.status_filter.get()
+        )  # Get the radio button filter (active/all/archived)
 
         # Collect all periods
         periods = []
@@ -1257,41 +1475,157 @@ class AnalysisFrame(ttk.Frame):
             if sphere_filter != "All Spheres" and session_sphere != sphere_filter:
                 continue
 
+            # Get sphere active status for filtering
+            sphere_active = (
+                self.tracker.settings.get("spheres", {})
+                .get(session_sphere, {})
+                .get("active", True)
+            )
+
             for period in session_data.get("active", []):
                 project_name = period.get("project", "")
                 if project_filter != "All Projects" and project_name != project_filter:
                     continue
 
+                # Get project active status
+                project_active = (
+                    self.tracker.settings.get("projects", {})
+                    .get(project_name, {})
+                    .get("active", True)
+                )
+
+                # Apply status filter (Active/All/Archived radio button)
+                # Active: Show only if BOTH sphere AND project are active
+                # All: Show everything (no filtering)
+                # Archived: Show if EITHER sphere OR project is inactive (but not both active)
+                if status_filter == "active":
+                    if not (sphere_active and project_active):
+                        continue  # Skip inactive combinations
+                elif status_filter == "archived":
+                    if sphere_active and project_active:
+                        continue  # Skip fully active combinations
+                # For "all", don't skip anything
+
+                # Get primary and secondary project data
+                primary_project = ""
+                primary_comment = ""
+                secondary_project = ""
+                secondary_comment = ""
+
+                if period.get("project"):
+                    # Single project case
+                    primary_project = period.get("project", "")
+                    primary_comment = period.get("comment", "")
+                else:
+                    # Multiple projects case
+                    for project_item in period.get("projects", []):
+                        if project_item.get("project_primary", True):
+                            primary_project = project_item.get("name", "")
+                            primary_comment = project_item.get("comment", "")
+                        else:
+                            secondary_project = project_item.get("name", "")
+                            secondary_comment = project_item.get("comment", "")
+
+                # Get session-level comments
+                session_comments_dict = session_data.get("session_comments", {})
+                if session_comments_dict:
+                    session_active_comments = session_comments_dict.get(
+                        "active_notes", ""
+                    )
+                    session_notes = session_comments_dict.get("session_notes", "")
+                else:
+                    session_active_comments = session_data.get(
+                        "session_active_comments", ""
+                    )
+                    session_notes = session_data.get("session_notes", "")
+
                 periods.append(
                     {
                         "Date": session_data.get("date"),
-                        "Type": "Active",
-                        "Sphere": session_sphere,
-                        "Project/Action": project_name,
-                        "Start Time": period.get("start", ""),
-                        "Duration (seconds)": period.get("duration", 0),
+                        "Start": period.get("start", ""),
                         "Duration": self.format_duration(period.get("duration", 0)),
-                        "Comment": period.get("comment", ""),
+                        "Sphere": session_sphere,
+                        "Sphere Active": "Yes" if sphere_active else "No",
+                        "Project Active": "Yes" if project_active else "No",
+                        "Type": "Active",
+                        "Primary Action": primary_project,
+                        "Primary Comment": primary_comment,
+                        "Secondary Action": secondary_project,
+                        "Secondary Comment": secondary_comment,
+                        "Active Comments": session_active_comments,
+                        "Break Comments": "",
+                        "Session Notes": session_notes,
                     }
                 )
 
             for period in session_data.get("breaks", []):
+                # Apply status filter for break periods
+                # Since break actions don't have active status, filter based on sphere only
+                if status_filter == "active":
+                    if not sphere_active:
+                        continue  # Skip if sphere is inactive
+                elif status_filter == "archived":
+                    if sphere_active:
+                        continue  # Archived filter only shows inactive spheres for breaks
+                # For "all", don't skip anything
+
+                # Get primary and secondary action data
+                primary_action = ""
+                primary_comment = ""
+                secondary_action = ""
+                secondary_comment = ""
+
+                if period.get("action"):
+                    # Single action case
+                    primary_action = period.get("action", "")
+                    primary_comment = period.get("comment", "")
+                else:
+                    # Multiple actions case
+                    for action_item in period.get("actions", []):
+                        if action_item.get("break_primary", True):
+                            primary_action = action_item.get("name", "")
+                            primary_comment = action_item.get("comment", "")
+                        else:
+                            secondary_action = action_item.get("name", "")
+                            secondary_comment = action_item.get("comment", "")
+
+                # Get session-level comments
+                session_comments_dict = session_data.get("session_comments", {})
+                if session_comments_dict:
+                    break_notes = session_comments_dict.get("break_notes", "")
+                    session_notes = session_comments_dict.get("session_notes", "")
+                else:
+                    break_notes = session_data.get("session_break_idle_comments", "")
+                    session_notes = session_data.get("session_notes", "")
+
                 periods.append(
                     {
                         "Date": session_data.get("date"),
-                        "Type": "Break",
-                        "Sphere": session_sphere,
-                        "Project/Action": period.get("action", "Break"),
-                        "Start Time": period.get("start", ""),
-                        "Duration (seconds)": period.get("duration", 0),
+                        "Start": period.get("start", ""),
                         "Duration": self.format_duration(period.get("duration", 0)),
-                        "Comment": period.get("comment", ""),
+                        "Sphere": session_sphere,
+                        "Sphere Active": "Yes" if sphere_active else "No",
+                        "Project Active": "N/A",
+                        "Type": "Break",
+                        "Primary Action": primary_action,
+                        "Primary Comment": primary_comment,
+                        "Secondary Action": secondary_action,
+                        "Secondary Comment": secondary_comment,
+                        "Active Comments": "",
+                        "Break Comments": break_notes,
+                        "Session Notes": session_notes,
                     }
                 )
 
         if not periods:
+            print(f"[CSV] No data to export")
             messagebox.showinfo("No Data", "No data to export for selected filters")
+            print("=" * 80)
+            print("CSV EXPORT ABORTED - No Data")
+            print("=" * 80 + "\n")
             return
+
+        print(f"[CSV] Collected {len(periods)} periods to export")
 
         # Ask user for save location
         filename = filedialog.asksaveasfilename(
@@ -1301,19 +1635,32 @@ class AnalysisFrame(ttk.Frame):
         )
 
         if not filename:
+            print(f"[CSV] User cancelled export")
+            print("=" * 80)
+            print("CSV EXPORT CANCELLED")
+            print("=" * 80 + "\n")
             return
+
+        print(f"[CSV] Saving to: {filename}")
 
         try:
             with open(filename, "w", newline="", encoding="utf-8") as csvfile:
+                # CSV headers match timeline headers in order
                 fieldnames = [
                     "Date",
-                    "Type",
-                    "Sphere",
-                    "Project/Action",
-                    "Start Time",
-                    "Duration (seconds)",
+                    "Start",
                     "Duration",
-                    "Comment",
+                    "Sphere",
+                    "Sphere Active",
+                    "Project Active",
+                    "Type",
+                    "Primary Action",
+                    "Primary Comment",
+                    "Secondary Action",
+                    "Secondary Comment",
+                    "Active Comments",
+                    "Break Comments",
+                    "Session Notes",
                 ]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
 
@@ -1321,11 +1668,32 @@ class AnalysisFrame(ttk.Frame):
                 for period in periods:
                     writer.writerow(period)
 
+            print(f"[CSV] Successfully exported {len(periods)} entries")
             messagebox.showinfo(
                 "Success", f"Exported {len(periods)} entries to {filename}"
             )
+
+            print("\n[CSV STATE AFTER EXPORT]:")
+            print(f"[CSV] Instance ID: {id(self)}")
+            print(f"[CSV] timeline_frame ID: {id(self.timeline_frame)}")
+            print(f"[CSV] timeline_data_all size: {len(self.timeline_data_all)}")
+            print(f"[CSV] periods_loaded: {self.periods_loaded}")
+            print(
+                f"[CSV] Timeline frame children count: {len(self.timeline_frame.winfo_children())}"
+            )
+            print("=" * 80)
+            print("CSV EXPORT COMPLETED SUCCESSFULLY")
+            print("=" * 80 + "\n")
+
         except Exception as e:
+            print(f"[CSV ERROR] Failed to export: {e}")
+            import traceback
+
+            traceback.print_exc()
             messagebox.showerror("Error", f"Failed to export CSV: {e}")
+            print("=" * 80)
+            print("CSV EXPORT FAILED")
+            print("=" * 80 + "\n")
 
     def open_latest_session(self):
         """Open session view from analysis frame"""
