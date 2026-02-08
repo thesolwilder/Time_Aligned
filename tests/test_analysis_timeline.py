@@ -1702,6 +1702,13 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data (active sphere, active project)
+        frame.status_filter.set("all")  # Show all combinations
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+
         frame.update_timeline()
         self.root.update()
 
@@ -1763,6 +1770,13 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data (active sphere, active project)
+        frame.status_filter.set("all")  # Show all combinations
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+
         frame.update_timeline()
         self.root.update()
 
@@ -1839,6 +1853,13 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data (active sphere, active project)
+        frame.status_filter.set("all")  # Show all combinations
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+
         frame.update_timeline()
         self.root.update_idletasks()
 
@@ -1930,6 +1951,13 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data (active sphere, active project)
+        frame.status_filter.set("all")  # Show all combinations
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+
         frame.update_timeline()
         self.root.update()
 
@@ -1988,6 +2016,12 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to match test data (active sphere, active project)
+        frame.status_filter.set("all")  # Show all combinations
+        frame.sphere_var.set("Work")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
 
         # Should not raise exception
         frame.update_timeline()
@@ -3934,6 +3968,306 @@ class TestAnalysisTimelineSessionNotesContent(unittest.TestCase):
             "e" in header_sticky or "w" in header_sticky,
             f"Session Notes header should have sticky with E or W for expansion (got: {header_sticky})",
         )
+
+
+class TestAnalysisFrameRadioButtonTimelineFiltering(unittest.TestCase):
+    """
+    Integration tests for radio button filtering in timeline display.
+
+    Tests verify that the Active/All/Archived radio buttons correctly filter
+    the timeline based on sphere and project active status.
+
+    Filter Logic:
+    - Active: Show only Active Sphere & Active Project
+    - All: Show all combinations (Active+Active, Active+Inactive, Inactive+Active, Inactive+Inactive)
+    - Archived: Show only Active Sphere & Inactive Project OR Inactive Sphere & Active Project (NO fully active)
+    """
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+        # Create settings with active and inactive spheres/projects
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {
+                "ActiveSphere": {"is_default": True, "active": True},
+                "InactiveSphere": {"is_default": False, "active": False},
+            },
+            "projects": {
+                "ActiveProject": {
+                    "sphere": "ActiveSphere",
+                    "is_default": True,
+                    "active": True,
+                },
+                "InactiveProjectInActiveSphere": {
+                    "sphere": "ActiveSphere",
+                    "is_default": False,
+                    "active": False,
+                },
+                "ActiveProjectInInactiveSphere": {
+                    "sphere": "InactiveSphere",
+                    "is_default": False,
+                    "active": True,
+                },
+                "InactiveProjectInInactiveSphere": {
+                    "sphere": "InactiveSphere",
+                    "is_default": False,
+                    "active": False,
+                },
+            },
+            "break_actions": {"Resting": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_radio_button_timeline_settings.json", settings
+        )
+
+        # Create test data with all four combinations
+        test_data = {
+            "2026-02-02_session1": {
+                "sphere": "ActiveSphere",
+                "date": "2026-02-02",
+                "start_time": "09:00:00",
+                "start_timestamp": 1738486800.0,
+                "end_time": "10:00:00",
+                "end_timestamp": 1738490400.0,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "start": "09:00:00",
+                        "start_timestamp": 1738486800.0,
+                        "end": "10:00:00",
+                        "end_timestamp": 1738490400.0,
+                        "duration": 3600,
+                        "project": "ActiveProject",
+                        "comment": "Active sphere + active project",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+            "2026-02-02_session2": {
+                "sphere": "ActiveSphere",
+                "date": "2026-02-02",
+                "start_time": "10:00:00",
+                "start_timestamp": 1738490400.0,
+                "end_time": "11:00:00",
+                "end_timestamp": 1738494000.0,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "start_timestamp": 1738490400.0,
+                        "end": "11:00:00",
+                        "end_timestamp": 1738494000.0,
+                        "duration": 3600,
+                        "project": "InactiveProjectInActiveSphere",
+                        "comment": "Active sphere + inactive project",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+            "2026-02-02_session3": {
+                "sphere": "InactiveSphere",
+                "date": "2026-02-02",
+                "start_time": "11:00:00",
+                "start_timestamp": 1738494000.0,
+                "end_time": "12:00:00",
+                "end_timestamp": 1738497600.0,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "start": "11:00:00",
+                        "start_timestamp": 1738494000.0,
+                        "end": "12:00:00",
+                        "end_timestamp": 1738497600.0,
+                        "duration": 3600,
+                        "project": "ActiveProjectInInactiveSphere",
+                        "comment": "Inactive sphere + active project",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+            "2026-02-02_session4": {
+                "sphere": "InactiveSphere",
+                "date": "2026-02-02",
+                "start_time": "13:00:00",
+                "start_timestamp": 1738501200.0,
+                "end_time": "14:00:00",
+                "end_timestamp": 1738504800.0,
+                "total_duration": 3600,
+                "active_duration": 3600,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "start": "13:00:00",
+                        "start_timestamp": 1738501200.0,
+                        "end": "14:00:00",
+                        "end_timestamp": 1738504800.0,
+                        "duration": 3600,
+                        "project": "InactiveProjectInInactiveSphere",
+                        "comment": "Inactive sphere + inactive project",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            },
+        }
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_radio_button_timeline_data.json", test_data
+        )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_active_radio_button_shows_only_active_sphere_and_active_project(self):
+        """
+        Verify Active radio button only shows sessions with Active Sphere AND Active Project.
+
+        Should show:
+        - Active sphere + Active project (session1)
+
+        Should NOT show:
+        - Active sphere + Inactive project (session2)
+        - Inactive sphere + Active project (session3)
+        - Inactive sphere + Inactive project (session4)
+        """
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set to Active filter
+        frame.status_filter.set("active")
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+        frame.update_timeline()
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Should only have 1 session (Active sphere + Active project)
+        self.assertEqual(
+            len(timeline_data),
+            1,
+            "Active filter should only show Active Sphere + Active Project (1 session)",
+        )
+
+        # Verify it's the correct session
+        self.assertEqual(timeline_data[0]["sphere"], "ActiveSphere")
+        self.assertEqual(timeline_data[0]["project"], "ActiveProject")
+        self.assertTrue(timeline_data[0]["sphere_active"])
+        self.assertTrue(timeline_data[0]["project_active"])
+
+    def test_all_radio_button_shows_all_combinations(self):
+        """
+        Verify All radio button shows all sphere/project combinations.
+
+        Should show ALL 4 sessions:
+        - Active sphere + Active project (session1)
+        - Active sphere + Inactive project (session2)
+        - Inactive sphere + Active project (session3)
+        - Inactive sphere + Inactive project (session4)
+        """
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set to All filter
+        frame.status_filter.set("all")
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+        frame.update_timeline()
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Should have all 4 sessions
+        self.assertEqual(
+            len(timeline_data),
+            4,
+            "All filter should show all combinations (4 sessions)",
+        )
+
+        # Verify we have all combinations
+        projects = [item["project"] for item in timeline_data]
+        self.assertIn("ActiveProject", projects)
+        self.assertIn("InactiveProjectInActiveSphere", projects)
+        self.assertIn("ActiveProjectInInactiveSphere", projects)
+        self.assertIn("InactiveProjectInInactiveSphere", projects)
+
+    def test_archived_radio_button_shows_no_active_projects(self):
+        """
+        Verify Archived radio button shows only archived combinations (NO fully active projects).
+
+        Should show:
+        - Active sphere + Inactive project (session2)
+        - Inactive sphere + Active project (session3)
+        - Inactive sphere + Inactive project (session4)
+
+        Should NOT show:
+        - Active sphere + Active project (session1) - this is fully active
+        """
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set to Archived filter
+        frame.status_filter.set("archived")
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time filter
+        frame.update_timeline()
+
+        # Get timeline data
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # Should have 3 sessions (all except fully active)
+        self.assertEqual(
+            len(timeline_data),
+            3,
+            "Archived filter should show 3 sessions (all except Active Sphere + Active Project)",
+        )
+
+        # Verify ActiveProject (fully active) is NOT in the timeline
+        projects = [item["project"] for item in timeline_data]
+        self.assertNotIn(
+            "ActiveProject",
+            projects,
+            "Archived filter should NOT show Active Sphere + Active Project",
+        )
+
+        # Verify the other 3 are present
+        self.assertIn("InactiveProjectInActiveSphere", projects)
+        self.assertIn("ActiveProjectInInactiveSphere", projects)
+        self.assertIn("InactiveProjectInInactiveSphere", projects)
 
 
 if __name__ == "__main__":

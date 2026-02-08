@@ -10,7 +10,7 @@
 - Be specific about what worked and what didn't
 - Include the WHY for both successes and failures
 
-**How to Search This File Effectively**:
+**How to Search This File Effective**:
 
 When working on a task, search for:
 
@@ -25,6 +25,326 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 ---
 
 ## Recent Changes
+
+### [2026-02-08] - Fixed Test Regressions from Radio Button Feature (Bug Fix)
+
+**Search Keywords**: radio button regression, test failure, IndexError list index out of range, status_filter, selected_card, time range filter, analysis timeline tests
+
+**Bug Description**: After implementing radio button filtering feature (2026-02-08), two tests in `TestAnalysisTimelineCommentWrapping` started failing with `IndexError: list index out of range`:
+
+- `test_comment_labels_have_wraplength_configured`
+- `test_comment_labels_do_not_have_width_restriction`
+
+**Root Cause**:
+
+The radio button feature introduced `status_filter` which defaults to "active" (only shows Active Sphere + Active Project). The failing tests:
+
+1. Created test data with active sphere ("Work") and active project ("Project A")
+2. Called `frame.update_timeline()` without setting filters
+3. Default "active" filter SHOULD have shown the data, BUT...
+4. Tests also didn't set `frame.selected_card = 2` (All Time filter)
+5. Result: Timeline was empty because time range filter excluded the data
+6. `timeline_children[0]` failed with IndexError
+
+**What Worked** ✅:
+
+**1. Pattern Recognition from Passing Tests**:
+
+- Searched for `selected_card` in test file
+- Found passing tests always set: `frame.selected_card = 2  # All Time`
+- Confirmed pattern: Need BOTH status filter AND time range filter
+
+**2. Fix Pattern for Analysis Timeline Tests**:
+
+```python
+# BEFORE (causes regression):
+parent_frame = ttk.Frame(self.root)
+frame = AnalysisFrame(parent_frame, tracker, self.root)
+frame.update_timeline()  # ❌ Uses default filters
+
+# AFTER (works):
+parent_frame = ttk.Frame(self.root)
+frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+# Set filters to match test data
+frame.status_filter.set("all")  # Show all sphere/project combinations
+frame.sphere_var.set("Work")
+frame.project_var.set("All Projects")
+frame.selected_card = 2  # All Time filter
+
+frame.update_timeline()  # ✅ Timeline has data
+```
+
+**Why This Works**:
+
+- `status_filter.set("all")` - Shows all active/inactive combinations
+- `selected_card = 2` - All Time range (no date filtering)
+- Together they ensure timeline has data to display
+- Tests can then verify widget properties
+
+**Files Modified**:
+
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - Fixed 2 tests in `TestAnalysisTimelineCommentWrapping`
+
+**Test Results**:
+
+- ✅ Both tests now pass
+- ✅ No other regressions detected
+
+**Key Learning**: When radio button filtering is added to a frame, ALL tests that call `update_timeline()` must explicitly set the filter status and time range. The default "active" filter is too restrictive for general test data.
+
+**Pattern to Apply**: When adding new filtering features, search existing tests for the update method and verify they set all filter variables before calling it.
+
+---
+
+### [2026-02-08] - Inactive Project Doesn't Display in Session Completion Frame (Bug Fix)
+
+**Search Keywords**: inactive project, completion frame, session view, archived project, historical session, project dropdown, active periods
+
+**Bug Reported**: When viewing a historical session with a project that has been marked as inactive (archived), the completion frame shows the default active project instead of the session's actual (but now inactive) project. Similar to the inactive sphere bug fixed on 2026-02-02.
+
+**User Requirement**: "it should pull it up even if the sphere or project is archived (inactive)" - Historical sessions must display correctly with their actual projects regardless of current active/inactive status.
+
+**Root Cause**: In `completion_frame.py`:
+
+1. `_get_sphere_projects()` method (line 589) only called `tracker.get_active_projects()` which filters out inactive projects
+2. `change_defaults_for_session()` method (line 188) used the default project instead of prioritizing the session's first project
+
+**What Worked** ✅:
+
+**1. TDD Approach for Bug Fix**:
+
+- Created test file `tests/test_inactive_project_completion.py`
+- Test workflow:
+  1. Create session with active project "Will Become Inactive"
+  2. Mark project as inactive (simulating archiving)
+  3. Open completion frame for that session
+  4. Assert: Default project dropdown and active period dropdowns show inactive project
+- Test FAILED correctly (red phase): `AssertionError: 'Active Project' != 'Will Become Inactive'`
+- Fixed the bug
+- Test PASSED (green phase)
+
+**2. Two-Part Fix in completion_frame.py**:
+
+**Part 1: Include session projects in `_get_sphere_projects()` (lines 589-622)**:
+
+```python
+def _get_sphere_projects(self):
+    """Get active projects and default project for the currently selected sphere
+
+    Also includes projects from the current session even if they're now inactive,
+    so historical sessions display correctly.
+    """
+    active_projects = self.tracker.get_active_projects(self.selected_sphere)
+    default_project = self.tracker.get_default_project(self.selected_sphere)
+
+    # Collect all projects used in this session (even if now inactive)
+    all_data = self.tracker.load_data()
+    if self.session_name in all_data:
+        session = all_data[self.session_name]
+        session_projects = set()
+
+        # Collect from active periods
+        for period in session.get("active", []):
+            # Single project case
+            if period.get("project"):
+                project_name = period.get("project", "")
+                if project_name:
+                    session_projects.add(project_name)
+            # Multiple projects case
+            for project_item in period.get("projects", []):
+                project_name = project_item.get("name", "")
+                if project_name:
+                    session_projects.add(project_name)
+
+        # Add session projects to active_projects if they belong to this sphere
+        for project_name in session_projects:
+            if project_name not in active_projects:
+                # Check if project belongs to this sphere
+                project_data = self.tracker.settings.get("projects", {}).get(project_name, {})
+                if project_data.get("sphere") == self.selected_sphere:
+                    active_projects.append(project_name)
+
+    return active_projects, default_project
+```
+
+**Part 2: Prioritize session's first project in `change_defaults_for_session()` (lines 188-232)**:
+
+```python
+# Determine initial value - prioritize first project used in session over default
+initial_project = default_project
+all_data = self.tracker.load_data()
+if self.session_name in all_data:
+    session = all_data[self.session_name]
+    # Get first project used in this session
+    for period in session.get("active", []):
+        if period.get("project"):
+            initial_project = period.get("project")
+            break
+        # Check projects array
+        for project_item in period.get("projects", []):
+            if project_item.get("project_primary", True):
+                initial_project = project_item.get("name", "")
+                break
+        if initial_project != default_project:
+            break
+
+if initial_project:
+    self.default_project_menu.set(initial_project)
+```
+
+**Why This Works**:
+
+- Pattern matches the inactive sphere fix from 2026-02-02
+- Session data is the source of truth for what was actually used
+- Inactive projects are added to dropdown options dynamically
+- Default project dropdown shows session's first project, not settings default
+- All active period dropdowns get populated correctly with inactive project
+- Historical accuracy preserved while still allowing new projects to be selected
+
+**Files Modified**:
+
+- `src/completion_frame.py` - Modified `_get_sphere_projects()` and `change_defaults_for_session()`
+- `tests/test_inactive_project_completion.py` - New integration test (CREATED)
+
+**Test Results**:
+
+- ✅ New test passes: `test_inactive_project_displays_in_session_completion_frame`
+- ✅ All 23 existing comprehensive completion frame tests still pass
+- ✅ No regressions
+
+**Key Learning**: When displaying historical session data, always prioritize the session's actual values over current settings defaults, even if those values are now inactive/archived. This applies to spheres, projects, and break actions.
+
+---
+
+### [2026-02-08] - Fixed Radio Button Timeline Filtering Bug (TDD)
+
+**Search Keywords**: radio buttons, status filter, timeline filtering, active filter, archived filter, all filter, get_timeline_data
+
+**Context**: User reported that radio buttons (Active/All/Archived) weren't filtering the timeline correctly - switching between them showed all projects regardless of the selected filter.
+
+**Bug Description**:
+
+The `get_timeline_data` method was:
+
+- Collecting `sphere_active` and `project_active` status correctly
+- BUT not applying any filtering based on `self.status_filter.get()` (the radio button value)
+- Only filtering by dropdown selections (`sphere_var` and `project_var`)
+- Result: All sessions appeared regardless of Active/All/Archived radio button selection
+
+**Required Filter Logic**:
+
+- **Active Radio Button**: Show only Active Sphere AND Active Project
+- **All Radio Button**: Show all combinations (Active+Active, Active+Inactive, Inactive+Active, Inactive+Inactive)
+- **Archived Radio Button**: Show only combinations where at least one is inactive (exclude Active Sphere + Active Project)
+
+**What Worked** ✅:
+
+**1. TDD Approach - Write Failing Tests First**:
+
+Created 3 integration tests in `TestAnalysisFrameRadioButtonTimelineFiltering` class:
+
+```python
+def test_active_radio_button_shows_only_active_sphere_and_active_project(self):
+    """Verify Active filter only shows Active Sphere + Active Project"""
+    # Should show 1 session (Active+Active)
+    # Should NOT show 3 sessions (Active+Inactive, Inactive+Active, Inactive+Inactive)
+
+def test_all_radio_button_shows_all_combinations(self):
+    """Verify All filter shows all 4 sphere/project combinations"""
+    # Should show all 4 sessions
+
+def test_archived_radio_button_shows_no_active_projects(self):
+    """Verify Archived filter excludes fully active combinations"""
+    # Should show 3 sessions (all except Active+Active)
+```
+
+**2. Proper RED Phase**:
+
+- All 3 tests written first
+- Ran tests: 2 FAILURES, 0 ERRORS ✅ (proper RED phase)
+- Active filter: Expected 1 session, got 4 (bug confirmed)
+- Archived filter: Expected 3 sessions, got 4 (bug confirmed)
+- All filter: PASSED (already working correctly)
+
+**3. Fixed get_timeline_data Method**:
+
+Added `status_filter` variable and filtering logic in three places:
+
+```python
+# At method start - get the radio button value
+status_filter = self.status_filter.get()  # active/all/archived
+
+# For active periods (after calculating sphere_active and project_active):
+if status_filter == "active":
+    if not (sphere_active and project_active):
+        continue  # Skip inactive combinations
+elif status_filter == "archived":
+    if sphere_active and project_active:
+        continue  # Skip fully active combinations
+# For "all", don't skip anything
+
+# For break periods (breaks don't have project active status):
+if status_filter == "active":
+    if not sphere_active:
+        continue  # Skip if sphere is inactive
+elif status_filter == "archived":
+    if sphere_active:
+        continue  # Archived only shows inactive spheres for breaks
+
+# For idle periods (same logic as breaks):
+if status_filter == "active":
+    if not sphere_active:
+        continue
+elif status_filter == "archived":
+    if sphere_active:
+        continue
+```
+
+**4. GREEN Phase Achieved**:
+
+- All 3 new tests PASS ✅
+- Existing integration tests still PASS ✅ (no regressions)
+- Radio buttons now correctly filter timeline data
+
+**Files Modified**:
+
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py): Added `TestAnalysisFrameRadioButtonTimelineFiltering` class with 3 integration tests
+- [src/analysis_frame.py](src/analysis_frame.py): Modified `get_timeline_data()` to apply status filter to active, break, and idle periods
+
+**Key Learnings**:
+
+1. **Integration tests are powerful**: Testing the full data flow (radio button → get_timeline_data → timeline display) caught the bug that unit tests alone wouldn't find
+
+2. **Filter logic must be explicit**: Even though `sphere_active` and `project_active` were being collected, they weren't being used for filtering - don't assume data collection = data filtering
+
+3. **Test all three filter modes**: Active, All, and Archived each have different logic, so test each one separately
+
+4. **Break/Idle periods need special handling**: They don't have project active status, so filter them based on sphere only
+
+5. **TDD caught the bug immediately**: The failing tests made it obvious where the filtering logic was missing
+
+**Pattern to Reuse** (for any status-based filtering):
+
+```python
+# Step 1: Get filter value
+status_filter = self.status_filter.get()
+
+# Step 2: Collect item's status flags
+item_active = get_item_status(item)
+parent_active = get_parent_status(parent)
+
+# Step 3: Apply filter logic
+if status_filter == "active":
+    if not (parent_active and item_active):
+        continue  # Skip if either is inactive
+elif status_filter == "archived":
+    if parent_active and item_active:
+        continue  # Skip if both are active
+# For "all", include everything
+```
+
+---
 
 ### [2026-02-06] - Test Naming Convention: No "TDD RED PHASE" Labels
 
@@ -47,6 +367,7 @@ def test_something():
 ```
 
 **When Following TDD**:
+
 - Write descriptive test names from the start
 - Don't add phase labels like "RED PHASE", "GREEN PHASE", etc.
 - Test name should describe the behavior being verified

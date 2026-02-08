@@ -207,8 +207,27 @@ class CompletionFrame(ttk.Frame):
             default_container, values=active_projects, state="readonly", width=20
         )
         self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
-        if default_project:
-            self.default_project_menu.set(default_project)
+
+        # Determine initial value - prioritize first project used in session over default
+        initial_project = default_project
+        all_data = self.tracker.load_data()
+        if self.session_name in all_data:
+            session = all_data[self.session_name]
+            # Get first project used in this session
+            for period in session.get("active", []):
+                if period.get("project"):
+                    initial_project = period.get("project")
+                    break
+                # Check projects array
+                for project_item in period.get("projects", []):
+                    if project_item.get("project_primary", True):
+                        initial_project = project_item.get("name", "")
+                        break
+                if initial_project != default_project:
+                    break
+
+        if initial_project:
+            self.default_project_menu.set(initial_project)
         disable_combobox_scroll(self.default_project_menu)
         ttk.Label(default_container, text="Default Break/Idle Action:").grid(
             row=0, column=2, sticky=tk.W, padx=5
@@ -587,9 +606,43 @@ class CompletionFrame(ttk.Frame):
         return self.tracker.get_active_spheres()
 
     def _get_sphere_projects(self):
-        """Get active projects and default project for the currently selected sphere"""
+        """Get active projects and default project for the currently selected sphere
+
+        Also includes projects from the current session even if they're now inactive,
+        so historical sessions display correctly.
+        """
         active_projects = self.tracker.get_active_projects(self.selected_sphere)
         default_project = self.tracker.get_default_project(self.selected_sphere)
+
+        # Collect all projects used in this session (even if now inactive)
+        all_data = self.tracker.load_data()
+        if self.session_name in all_data:
+            session = all_data[self.session_name]
+            session_projects = set()
+
+            # Collect from active periods
+            for period in session.get("active", []):
+                # Single project case
+                if period.get("project"):
+                    project_name = period.get("project", "")
+                    if project_name:
+                        session_projects.add(project_name)
+                # Multiple projects case
+                for project_item in period.get("projects", []):
+                    project_name = project_item.get("name", "")
+                    if project_name:
+                        session_projects.add(project_name)
+
+            # Add session projects to active_projects if they belong to this sphere and aren't already there
+            for project_name in session_projects:
+                if project_name not in active_projects:
+                    # Check if project belongs to this sphere
+                    project_data = self.tracker.settings.get("projects", {}).get(
+                        project_name, {}
+                    )
+                    if project_data.get("sphere") == self.selected_sphere:
+                        active_projects.append(project_name)
+
         return active_projects, default_project
 
     def _get_break_actions(self):

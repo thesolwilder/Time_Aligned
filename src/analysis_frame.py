@@ -651,6 +651,7 @@ class AnalysisFrame(ttk.Frame):
 
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
+        status_filter = self.status_filter.get()  # Get the radio button filter (active/all/archived)
 
         # Collect all periods
         timeline_data = []
@@ -735,6 +736,18 @@ class AnalysisFrame(ttk.Frame):
                     .get("active", True)
                 )
 
+                # Apply status filter (Active/All/Archived radio button)
+                # Active: Show only if BOTH sphere AND project are active
+                # All: Show everything (no filtering)
+                # Archived: Show if EITHER sphere OR project is inactive (but not both active)
+                if status_filter == "active":
+                    if not (sphere_active and project_active):
+                        continue  # Skip inactive combinations
+                elif status_filter == "archived":
+                    if sphere_active and project_active:
+                        continue  # Skip fully active combinations
+                # For "all", don't skip anything
+
                 timeline_data.append(
                     {
                         "date": session_data.get("date"),
@@ -776,6 +789,16 @@ class AnalysisFrame(ttk.Frame):
                         else:
                             secondary_action = action_item.get("name", "")
                             secondary_comment = action_item.get("comment", "")
+
+                # Apply status filter for break periods
+                # Since break actions don't have active status, filter based on sphere only
+                if status_filter == "active":
+                    if not sphere_active:
+                        continue  # Skip if sphere is inactive
+                elif status_filter == "archived":
+                    if sphere_active:
+                        continue  # Archived filter only shows inactive spheres for breaks
+                # For "all", don't skip anything
 
                 timeline_data.append(
                     {
@@ -819,6 +842,16 @@ class AnalysisFrame(ttk.Frame):
                             else:
                                 secondary_action = action_item.get("name", "")
                                 secondary_comment = action_item.get("comment", "")
+
+                    # Apply status filter for idle periods
+                    # Since idle actions don't have active status, filter based on sphere only
+                    if status_filter == "active":
+                        if not sphere_active:
+                            continue  # Skip if sphere is inactive
+                    elif status_filter == "archived":
+                        if sphere_active:
+                            continue  # Archived filter only shows inactive spheres for idle
+                    # For "all", don't skip anything
 
                     timeline_data.append(
                         {
