@@ -118,6 +118,24 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
 
     result = runner.run(suite)
 
+    # Print failed/errored tests details
+    if result.failures or result.errors:
+        print(f"\n{'='*70}")
+        print("FAILED/ERRORED TESTS")
+        print(f"{'='*70}")
+
+        if result.failures:
+            print("\nFAILURES:")
+            for test, traceback in result.failures:
+                print(f"  - {test}")
+
+        if result.errors:
+            print("\nERRORS:")
+            for test, traceback in result.errors:
+                print(f"  - {test}")
+
+        print(f"{'='*70}")
+
     # Print summary
     print(f"\n{'='*70}")
     print("TEST SUMMARY")

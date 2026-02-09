@@ -983,6 +983,7 @@ class AnalysisFrame(ttk.Frame):
                     font=("Arial", 8),
                     relief=tk.FLAT,
                     state=tk.NORMAL,
+                    cursor="arrow",  # Use arrow cursor instead of text cursor for read-only widget
                 )
                 txt.insert("1.0", text)
 
@@ -1005,11 +1006,7 @@ class AnalysisFrame(ttk.Frame):
 
                 txt.config(state=tk.DISABLED)  # Make read-only
 
-                # CRITICAL FIX: Text widgets have class bindings that interfere with bind_all
-                # Unbind the Text widget's default mousewheel handling
-                txt.bind("<MouseWheel>", lambda e: "break")
-
-                # NOTE: Removed mousewheel binding - ScrollableFrame handles it
+                # NOTE: ScrollableFrame's bind_all handles mousewheel - no widget-specific binding needed
                 col_idx += 1
                 return txt
             else:
