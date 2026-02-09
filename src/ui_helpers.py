@@ -191,63 +191,29 @@ class ScrollableFrame(ttk.Frame):
         def on_mousewheel(event):
             # Check if mouse is over this scrollable frame
             try:
-                # Always log first to confirm handler is called
-                if self._mousewheel_event_count < 10:
-                    print(
-                        f"[SCROLL TRACE] {self._debug_name} (ID: {id(self)}) "
-                        f"handler ENTRY, _is_alive={self._is_alive}"
-                    )
-
                 # CRITICAL: Check if this specific ScrollableFrame instance is still alive
                 # Don't use winfo_exists() as it may throw errors on destroyed widgets
                 if not self._is_alive:
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"handler called but _is_alive=False"
-                    )
                     return  # This instance is destroyed, silently ignore
 
                 # Validate canvas before scrolling
                 if not hasattr(self, "canvas"):
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"no canvas attribute"
-                    )
                     return
 
                 # Check canvas exists (this can fail if destroyed)
                 try:
                     canvas_exists = self.canvas.winfo_exists()
                     if not canvas_exists:
-                        print(
-                            f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                            f"canvas doesn't exist"
-                        )
                         return
-                except (tk.TclError, AttributeError) as e:
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"canvas check failed: {e}"
-                    )
+                except (tk.TclError, AttributeError):
                     return
 
                 # Get widget under mouse
                 x, y = self.winfo_pointerxy()
                 widget = self.winfo_containing(x, y)
 
-                if self._mousewheel_event_count < 10:
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"handler called, widget under mouse: {widget}"
-                    )
-
                 # Check if it's a combobox
                 if widget and isinstance(widget, ttk.Combobox):
-                    if self._mousewheel_event_count < 10:
-                        print(
-                            f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                            f"widget is combobox, ignoring"
-                        )
                     return
 
                 # Check if the widget is a descendant of this ScrollableFrame
@@ -263,12 +229,7 @@ class ScrollableFrame(ttk.Frame):
                             self.canvas.yview_scroll(
                                 int(-1 * (event.delta / 120)), "units"
                             )
-                            if self._mousewheel_event_count < 10:
-                                self._mousewheel_event_count += 1
-                                print(
-                                    f"[SCROLL EVENT] {self._debug_name} scrolled "
-                                    f"(ID: {id(self)})"
-                                )
+                            self._mousewheel_event_count += 1
                             return
                         try:
                             parent = parent.master
@@ -276,33 +237,11 @@ class ScrollableFrame(ttk.Frame):
                         except (AttributeError, tk.TclError):
                             break
 
-                    if self._mousewheel_event_count < 10:
-                        print(
-                            f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                            f"widget not descendant (checked {depth} levels), "
-                            f"self widget path: {self}"
-                        )
-                else:
-                    if self._mousewheel_event_count < 10:
-                        print(
-                            f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                            f"no widget under mouse"
-                        )
-            except (tk.TclError, AttributeError, RuntimeError) as e:
+            except (tk.TclError, AttributeError, RuntimeError):
                 # Widget destroyed or other errors, silently ignore
-                if self._mousewheel_event_count < 10:
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"exception in handler: {type(e).__name__}: {e}"
-                    )
                 return
-            except Exception as e:
+            except Exception:
                 # Any other error, silently ignore
-                if self._mousewheel_event_count < 10:
-                    print(
-                        f"[SCROLL DEBUG] {self._debug_name} (ID: {id(self)}) "
-                        f"unexpected exception: {type(e).__name__}: {e}"
-                    )
                 return
 
         # Bind to the root window to capture all mousewheel events
@@ -313,14 +252,8 @@ class ScrollableFrame(ttk.Frame):
                 # Note: Multiple ScrollableFrames will share this binding
                 # Each handler checks if its instance is alive before acting
                 root.bind_all("<MouseWheel>", on_mousewheel, add="+")
-                # Debug: Check what bindings exist
-                bindings = root.bind_all("<MouseWheel>")
-                print(
-                    f"[SCROLL SETUP] Bound mousewheel for {self._debug_name} "
-                    f"(ID: {id(self)}), total bind_all handlers: {bindings.count('if') if bindings else 0}"
-                )
-            except Exception as e:
-                print(f"[SCROLL SETUP ERROR] Failed to bind mousewheel: {e}")
+            except Exception:
+                pass
 
         # Delay binding until widget is visible
         self.after(100, setup_root_binding)

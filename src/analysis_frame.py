@@ -1128,64 +1128,27 @@ class AnalysisFrame(ttk.Frame):
 
     def update_timeline(self):
         """Update the timeline display with Load More pagination"""
-        print("\n" + "-" * 80)
-        print("UPDATE_TIMELINE CALLED")
-        print("-" * 80)
-        print(f"[UPDATE] Instance ID: {id(self)}")
-        print(f"[UPDATE] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
-
-        # Check scrollable frame BEFORE update
-        if hasattr(self, "timeline_scroll"):
-            try:
-                print(
-                    f"[UPDATE BEFORE] timeline_scroll exists and valid: {self.timeline_scroll.winfo_exists()}"
-                )
-                if hasattr(self.timeline_scroll, "canvas"):
-                    print(
-                        f"[UPDATE BEFORE] Canvas exists and valid: {self.timeline_scroll.canvas.winfo_exists()}"
-                    )
-                    print(
-                        f"[UPDATE BEFORE] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
-                    )
-                    canvas_bindings = self.timeline_scroll.canvas.bind()
-                    print(f"[UPDATE BEFORE] Canvas bindings: {canvas_bindings}")
-            except Exception as e:
-                print(f"[UPDATE BEFORE ERROR] Error checking scrollable frame: {e}")
-
-        if not hasattr(self, "timeline_frame"):
-            print(f"[UPDATE ERROR] timeline_frame attribute doesn't exist!")
-            return
-
-        print(f"[UPDATE] timeline_frame is None: {self.timeline_frame is None}")
-
-        if self.timeline_frame is None:
-            print(f"[UPDATE ERROR] timeline_frame is None!")
+        if not hasattr(self, "timeline_frame") or self.timeline_frame is None:
             return
 
         # Check if timeline_frame is valid
         try:
-            exists = self.timeline_frame.winfo_exists()
-            print(f"[UPDATE] timeline_frame.winfo_exists(): {exists}")
-        except tk.TclError as e:
-            print(f"[UPDATE ERROR] timeline_frame is destroyed/invalid: {e}")
+            if not self.timeline_frame.winfo_exists():
+                return
+        except tk.TclError:
             return
 
         # CRITICAL FIX: Clear children instead of destroying the frame itself
         # Destroying the frame was breaking the ScrollableFrame's canvas
-        # and causing hundreds of scroll errors
-        print(f"[UPDATE] Clearing timeline_frame children...")
         for widget in self.timeline_frame.winfo_children():
             widget.destroy()
-        print(f"[UPDATE] Children cleared")
 
         # Configure timeline_frame column to expand
         self.timeline_frame.columnconfigure(0, weight=1)
 
         # Get ALL data using new get_timeline_data method
         range_name = self.card_ranges[self.selected_card]
-        print(f"[UPDATE] Loading data for range: {range_name}")
         periods = self.get_timeline_data(range_name)
-        print(f"[UPDATE] Loaded {len(periods)} periods")
 
         # Sort by date and start time (or by selected column)
         if not hasattr(self, "timeline_sort_column"):
@@ -1201,14 +1164,10 @@ class AnalysisFrame(ttk.Frame):
             "start": lambda x: x["period_start"],
             "duration": lambda x: x["duration"],
         }
-        print(
-            f"[UPDATE] Sorting by: {self.timeline_sort_column}, reverse={self.timeline_sort_reverse}"
-        )
         periods.sort(
             key=sort_key_map.get(self.timeline_sort_column, sort_key_map["date"]),
             reverse=self.timeline_sort_reverse,
         )
-        print(f"[UPDATE] Sorting completed")
 
         # Store full sorted dataset
         self.timeline_data_all = periods
@@ -1217,58 +1176,26 @@ class AnalysisFrame(ttk.Frame):
         self.periods_loaded = 0
 
         # Load first page (50 periods)
-        print(f"[UPDATE] Loading first page (50 periods)...")
         self.load_more_periods()
-        print(f"[UPDATE] First page loaded, periods_loaded={self.periods_loaded}")
 
         # Update frozen header
-        print(f"[UPDATE] Updating timeline header...")
         self.update_timeline_header()
-        print(f"[UPDATE] Timeline header updated")
 
-        # Check scrollable frame AFTER complete update
-        if hasattr(self, "timeline_scroll"):
-            try:
-                print(
-                    f"[UPDATE AFTER] timeline_scroll still valid: {self.timeline_scroll.winfo_exists()}"
-                )
-                if hasattr(self.timeline_scroll, "canvas"):
-                    print(
-                        f"[UPDATE AFTER] Canvas still valid: {self.timeline_scroll.canvas.winfo_exists()}"
-                    )
-                    print(
-                        f"[UPDATE AFTER] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
-                    )
-                    canvas_bindings = self.timeline_scroll.canvas.bind()
-                    print(f"[UPDATE AFTER] Canvas bindings: {canvas_bindings}")
-                    # Try to get canvas bbox to see if it has content
-                    bbox = self.timeline_scroll.canvas.bbox("all")
-                    print(f"[UPDATE AFTER] Canvas bbox (content area): {bbox}")
-            except Exception as e:
-                print(
-                    f"[UPDATE AFTER ERROR] Error checking scrollable frame after update: {e}"
-                )
-                import traceback
-
-                traceback.print_exc()
-
-        # DIAGNOSTIC: Check if bind_all handlers still exist after loading periods
-        try:
-            root = self.winfo_toplevel()
-            bindings = root.bind_all("<MouseWheel>")
-            handler_count = bindings.count("if") if bindings else 0
-            print(
-                f"[UPDATE] bind_all handler count after loading {self.periods_loaded} periods: {handler_count}"
-            )
-            print(
-                f"[UPDATE] ScrollableFrame _is_alive: {self.scrollable_container._is_alive if hasattr(self, 'scrollable_container') else 'N/A'}"
-            )
-        except Exception as e:
-            print(f"[UPDATE] Error checking bind_all handlers: {e}")
-
-        print("-" * 80)
-        print("UPDATE_TIMELINE COMPLETED")
-        print("-" * 80 + "\n")
+        # CRITICAL FIX: Force canvas scrollregion recalculation and visual update
+        # After clearing/recreating children, the canvas needs explicit update
+        if hasattr(self, "scrollable_container") and hasattr(
+            self.scrollable_container, "canvas"
+        ):
+            # Force immediate geometry update
+            self.scrollable_container.content_frame.update_idletasks()
+            # Recalculate scrollregion based on actual content
+            bbox = self.scrollable_container.canvas.bbox("all")
+            if bbox:
+                self.scrollable_container.canvas.configure(scrollregion=bbox)
+            # Force visual redraw
+            self.scrollable_container.canvas.update_idletasks()
+            # Reset scroll position to top
+            self.scrollable_container.canvas.yview_moveto(0)
 
     def sort_timeline(self, column):
         """Sort timeline by column"""

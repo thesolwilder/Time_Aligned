@@ -26,6 +26,147 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-09] - Fixed Timeline Freeze Bug - Part 9: Canvas Scrollregion Not Recalculated After Widget Destruction
+
+**Search Keywords**: canvas scrollregion, update_idletasks, bbox, visual freeze, scrollbar frozen, yview changes but no visual update, widget recreation, timeline freeze
+
+**Context**:
+After fixing the `unbind_all` issue (Part 6-7), user reported a new manifestation:
+
+- "bug - after export large dataset csv... it freezes up when hit show timeline card"
+- Bug sequence: Open Analysis → Click "All Time" → Export CSV → Click "All Time" again → Scrolling freezes
+- Mouse wheel handler IS called (proven by logs)
+- Canvas yview IS changing correctly (0.0 to 0.47+ range proven by logs)
+- BUT visual display doesn't update - scrollbar frozen, screen frozen, can't click/drag scrollbar
+
+**The REAL Root Cause - Canvas Scrollregion Not Recalculated**:
+
+After `update_timeline()` clears and recreates child widgets, the canvas's `scrollregion` was not being recalculated. This caused the scrollbar and visual rendering to become disconnected from the actual scroll position.
+
+The canvas relied on a `<Configure>` event binding to update scrollregion:
+
+```python
+# OLD CODE (ui_helpers.py) - only updates on Configure events
+self.content_frame.bind(
+    "<Configure>",
+    lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")),
+)
+```
+
+When `update_timeline()` destroys all children and recreates them, the `<Configure>` event may not fire properly or the scrollregion becomes stale, causing:
+
+1. Canvas yview changes (internal position updates)
+2. Nothing visually updates (scrollregion doesn't match actual content)
+3. Scrollbar frozen (synced to old scrollregion)
+
+**What Didn't Work** ❌:
+
+**Attempt 1: Text widget `lambda e: "break"` binding**
+
+- **Approach**: Added to prevent Text widget class bindings from interfering
+- **Result**: No change
+- **Why It Failed**: The issue wasn't with Text widget bindings stealing focus
+
+**Attempt 2: Removed logging counter limits**
+
+- **Approach**: Changed `if self._mousewheel_event_count < 10:` to always log
+- **Result**: Revealed handler IS being called continuously (diagnostic only)
+- **Why It Failed**: This was just diagnostic - exposed the real problem but didn't fix it
+
+**Attempt 3: Added yview tracking**
+
+- **Approach**: Track canvas.yview() before and after scroll to prove scroll mechanism works
+- **Result**: **PROVED canvas yview changes correctly** (0.022→0.470 range observed)
+- **Why It Failed**: This was diagnostic only - proved the scroll MECHANISM works but rendering doesn't
+- **Key Finding**: This definitively showed the issue was visual rendering, not scroll handler logic
+
+**What Worked** ✅:
+
+**Solution: Force Canvas Scrollregion Recalculation After Widget Recreation**
+
+Added explicit scrollregion reconfiguration and canvas updates after `update_timeline()` completes:
+
+```python
+# NEW CODE (analysis_frame.py - in update_timeline method)
+# CRITICAL FIX: Force canvas scrollregion recalculation and visual update
+# After clearing/recreating children, the canvas needs explicit update
+if hasattr(self, "scrollable_container") and hasattr(
+    self.scrollable_container, "canvas"
+):
+    # Force immediate geometry update
+    self.scrollable_container.content_frame.update_idletasks()
+    # Recalculate scrollregion based on actual content
+    bbox = self.scrollable_container.canvas.bbox("all")
+    if bbox:
+        self.scrollable_container.canvas.configure(scrollregion=bbox)
+    # Force visual redraw
+    self.scrollable_container.canvas.update_idletasks()
+    # Reset scroll position to top
+    self.scrollable_container.canvas.yview_moveto(0)
+```
+
+**Why This Fixed The Bug**:
+
+1. **`update_idletasks()` forces geometry calculation**: Ensures all widgets have proper sizes before bbox calculation
+2. **`canvas.bbox("all")` gets actual content bounds**: Calculates the true bounding box of all child widgets
+3. **Explicit `scrollregion` configuration**: Overrides any stale scrollregion from Configure events
+4. **Second `update_idletasks()` forces visual redraw**: Ensures canvas actually redraws with new scrollregion
+5. **`yview_moveto(0)` resets position**: Scrolls to top, ensuring user starts at a valid position
+
+**Evidence of Fix**:
+
+```
+Before fix (scrollbar frozen):
+- Handler called: ✓
+- yview changing: ✓ (0.0 to 0.47)
+- Visual update: ✗ (frozen)
+- Scrollbar moves: ✗ (frozen)
+
+After fix (working):
+Canvas scrollregion updated to: (0, 0, 585, 1555)  # 88 periods
+Canvas scrollregion updated to: (0, 0, 585, 1196)  # 36 periods
+- Handler called: ✓
+- yview changing: ✓
+- Visual update: ✓ (working)
+- Scrollbar moves: ✓ (working)
+```
+
+**Key Learnings**:
+
+🔴 **Canvas scrollregion must be recalculated after widget destruction/recreation**
+
+- `<Configure>` event binding alone is insufficient when children are destroyed/recreated
+- Stale scrollregion causes visual freeze even if scroll logic works
+- Always force recalculation after major DOM changes
+
+✅ **Use update_idletasks() for geometry-dependent operations**
+
+- Call before `bbox("all")` to ensure accurate measurements
+- Call after `configure(scrollregion=...)` to force visual update
+- Two calls needed: one for geometry, one for rendering
+
+✅ **Diagnostic logging proved the hypothesis**
+
+- Tracking yview changes proved scroll mechanism worked
+- Comparing "handler works" + "yview changes" + "visual frozen" = rendering issue
+- This directed focus to canvas rendering instead of event handling
+
+✅ **Reset scroll position after content recreation**
+
+- `yview_moveto(0)` ensures user starts at a valid position
+- Prevents being scrolled to invalid position after content changes
+
+**Files Modified**:
+
+- [src/analysis_frame.py](src/analysis_frame.py) - Added scrollregion recalculation in `update_timeline()`
+- [src/ui_helpers.py](src/ui_helpers.py) - Removed excessive debug logging after fix verified
+
+**Related Issues**:
+
+- Part 6-7: Fixed `unbind_all` removing all bindings globally
+- Part 5: Fixed destroying timeline_frame instead of clearing children
+- This completes the timeline freeze bug fixes - all manifestations resolved
+
 ### [2026-02-08] - ScrollableFrame Diagnostics: Debug Names + Destroy Stack Trace
 
 **Search Keywords**: ScrollableFrame debug_name, destroy stack trace, scroll event logging, mousewheel debugging
