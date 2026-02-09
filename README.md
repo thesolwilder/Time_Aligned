@@ -31,6 +31,8 @@ A comprehensive time tracking application with advanced features for tracking wo
 - Analyze time spent across different projects
 - Review screenshots from past sessions
 - Export data for further analysis
+- **Dynamic text wrapping** - All comments display with proper word wrapping
+- **Paginated loading** - Loads 50 periods at a time for optimal performance
 
 ## Installation
 
@@ -89,6 +91,27 @@ Access settings to configure:
 - **Local**: All data is stored in `data.json`
 - **Google Sheets**: Optional automatic upload to your Google Spreadsheet
 - **Screenshots**: Stored in the `screenshots/` folder (organized by date and session)
+
+## Performance Characteristics
+
+### Timeline Loading
+
+The analysis timeline uses **dynamic text height calculation** to ensure all comment text is visible with proper word wrapping:
+
+- **Initial Load**: ~3.5-4 seconds for 50 periods (first page)
+- **Load More**: ~1-2 seconds per additional 50 periods
+- **Trade-off**: Prioritizes **accurate text display** over faster loading
+
+**Why this design?**
+
+Users click "Show Timeline" specifically to **review data** - this is an intentional action where they expect to spend time analyzing information. The 3-4 second load ensures:
+
+✅ All comment text is fully visible (no truncation)  
+✅ Proper word wrapping for readability  
+✅ Consistent layout across all text fields  
+✅ Accurate height calculation (not estimation)
+
+This is a deliberate engineering decision prioritizing **data quality and usability** over arbitrary speed targets.
 
 ## Privacy & Security
 

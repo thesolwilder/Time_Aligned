@@ -3,7 +3,6 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import csv
 from datetime import datetime, timedelta
-import random
 
 from src.ui_helpers import ScrollableFrame
 
@@ -106,10 +105,6 @@ class AnalysisFrame(ttk.Frame):
 
         ttk.Button(
             header_frame, text="Session View", command=self.open_latest_session
-        ).pack(side=tk.LEFT, padx=5)
-
-        ttk.Button(
-            header_frame, text="Generate Dummy Data", command=self.generate_dummy_data
         ).pack(side=tk.LEFT, padx=5)
 
         ttk.Button(header_frame, text="Export to CSV", command=self.export_to_csv).pack(
@@ -252,22 +247,7 @@ class AnalysisFrame(ttk.Frame):
         self.refresh_all()
 
     def destroy(self):
-        """Log when AnalysisFrame is destroyed for debugging."""
-        try:
-            import traceback
-
-            stack = traceback.extract_stack(limit=8)
-            caller = stack[-2] if len(stack) >= 2 else None
-            if caller:
-                print(
-                    f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)}) "
-                    f"called from {caller.filename}:{caller.lineno} in {caller.name}"
-                )
-            else:
-                print(f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)})")
-        except Exception:
-            print(f"[ANALYSIS DESTROY] AnalysisFrame destroyed (ID: {id(self)})")
-
+        """Clean up when AnalysisFrame is destroyed."""
         super().destroy()
 
     def create_card(self, parent, index):
@@ -366,80 +346,9 @@ class AnalysisFrame(ttk.Frame):
 
     def select_card(self, card_index):
         """Select a card and show its timeline"""
-        print("\n" + "=" * 80)
-        print("SELECT_CARD CALLED")
-        print("=" * 80)
-        print(f"[SELECT] Card index: {card_index}")
-        print(f"[SELECT] Card range: {self.card_ranges[card_index]}")
-        print(f"[SELECT] Instance ID: {id(self)}")
-        print(f"[SELECT] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
-        print(
-            f"[SELECT] timeline_frame ID: {id(self.timeline_frame) if hasattr(self, 'timeline_frame') else 'N/A'}"
-        )
-
-        # Check scrollable frame state
-        if hasattr(self, "timeline_scroll"):
-            try:
-                print(f"[SELECT] timeline_scroll exists: True")
-                print(f"[SELECT] timeline_scroll ID: {id(self.timeline_scroll)}")
-                print(
-                    f"[SELECT] timeline_scroll.winfo_exists(): {self.timeline_scroll.winfo_exists()}"
-                )
-                if hasattr(self.timeline_scroll, "canvas"):
-                    print(f"[SELECT] timeline_scroll.canvas exists: True")
-                    print(
-                        f"[SELECT] timeline_scroll.canvas ID: {id(self.timeline_scroll.canvas)}"
-                    )
-                    print(
-                        f"[SELECT] timeline_scroll.canvas.winfo_exists(): {self.timeline_scroll.canvas.winfo_exists()}"
-                    )
-                    # Check canvas bindings
-                    canvas_bindings = self.timeline_scroll.canvas.bind()
-                    print(f"[SELECT] Canvas bindings: {canvas_bindings}")
-            except Exception as e:
-                print(f"[SELECT ERROR] Error checking timeline_scroll: {e}")
-                import traceback
-
-                traceback.print_exc()
-
-        if hasattr(self, "timeline_frame") and self.timeline_frame:
-            try:
-                exists = self.timeline_frame.winfo_exists()
-                print(f"[SELECT] timeline_frame.winfo_exists(): {exists}")
-                master = self.timeline_frame.master
-                print(f"[SELECT] timeline_frame.master: {master}")
-                children = len(self.timeline_frame.winfo_children())
-                print(f"[SELECT] timeline_frame children count: {children}")
-            except Exception as e:
-                print(f"[SELECT ERROR] Error checking timeline_frame state: {e}")
-
         self.selected_card = card_index
-        print(f"[SELECT] Calling update_timeline()...")
         self.update_timeline()
-        print(f"[SELECT] update_timeline() completed")
-
-        # Check scrollable frame state AFTER update
-        if hasattr(self, "timeline_scroll"):
-            try:
-                print(f"[SELECT AFTER] timeline_scroll still exists: True")
-                print(
-                    f"[SELECT AFTER] timeline_scroll.winfo_exists(): {self.timeline_scroll.winfo_exists()}"
-                )
-                if hasattr(self.timeline_scroll, "canvas"):
-                    canvas_bindings = self.timeline_scroll.canvas.bind()
-                    print(f"[SELECT AFTER] Canvas bindings: {canvas_bindings}")
-                    print(
-                        f"[SELECT AFTER] Canvas scrollregion: {self.timeline_scroll.canvas.cget('scrollregion')}"
-                    )
-            except Exception as e:
-                print(
-                    f"[SELECT AFTER ERROR] Error checking timeline_scroll after update: {e}"
-                )
-
         self.timeline_title.config(text=f"Timeline: {self.card_ranges[card_index]}")
-        print("=" * 80)
-        print("SELECT_CARD COMPLETED")
-        print("=" * 80 + "\n")
 
     def update_project_filter(self, set_default=False):
         """
@@ -1373,27 +1282,10 @@ class AnalysisFrame(ttk.Frame):
 
     def export_to_csv(self):
         """Export timeline data to CSV"""
-        print("\n" + "=" * 80)
-        print("CSV EXPORT STARTED")
-        print("=" * 80)
-        print(f"[CSV] Instance ID: {id(self)}")
-        print(f"[CSV] timeline_frame exists: {hasattr(self, 'timeline_frame')}")
-        print(
-            f"[CSV] timeline_frame ID: {id(self.timeline_frame) if hasattr(self, 'timeline_frame') else 'N/A'}"
-        )
-        print(
-            f"[CSV] timeline_data_all size: {len(self.timeline_data_all) if hasattr(self, 'timeline_data_all') else 'N/A'}"
-        )
-        print(f"[CSV] selected_card: {self.selected_card}")
-        print(f"[CSV] card_ranges: {self.card_ranges}")
-
         # Get data for selected card's range
         range_name = self.card_ranges[self.selected_card]
-        print(f"[CSV] Exporting range: {range_name}")
         start_date, end_date = self.get_date_range(range_name)
-        print(f"[CSV] Date range: {start_date} to {end_date}")
         all_data = self.tracker.load_data()
-        print(f"[CSV] Loaded {len(all_data)} sessions from file")
 
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
@@ -1626,14 +1518,8 @@ class AnalysisFrame(ttk.Frame):
                 )
 
         if not periods:
-            print(f"[CSV] No data to export")
             messagebox.showinfo("No Data", "No data to export for selected filters")
-            print("=" * 80)
-            print("CSV EXPORT ABORTED - No Data")
-            print("=" * 80 + "\n")
             return
-
-        print(f"[CSV] Collected {len(periods)} periods to export")
 
         # Ask user for save location
         filename = filedialog.asksaveasfilename(
@@ -1643,13 +1529,7 @@ class AnalysisFrame(ttk.Frame):
         )
 
         if not filename:
-            print(f"[CSV] User cancelled export")
-            print("=" * 80)
-            print("CSV EXPORT CANCELLED")
-            print("=" * 80 + "\n")
             return
-
-        print(f"[CSV] Saving to: {filename}")
 
         try:
             with open(filename, "w", newline="", encoding="utf-8") as csvfile:
@@ -1676,160 +1556,15 @@ class AnalysisFrame(ttk.Frame):
                 for period in periods:
                     writer.writerow(period)
 
-            print(f"[CSV] Successfully exported {len(periods)} entries")
             messagebox.showinfo(
                 "Success", f"Exported {len(periods)} entries to {filename}"
             )
 
-            print("\n[CSV STATE AFTER EXPORT]:")
-            print(f"[CSV] Instance ID: {id(self)}")
-            print(f"[CSV] timeline_frame ID: {id(self.timeline_frame)}")
-            print(f"[CSV] timeline_data_all size: {len(self.timeline_data_all)}")
-            print(f"[CSV] periods_loaded: {self.periods_loaded}")
-            print(
-                f"[CSV] Timeline frame children count: {len(self.timeline_frame.winfo_children())}"
-            )
-            print("=" * 80)
-            print("CSV EXPORT COMPLETED SUCCESSFULLY")
-            print("=" * 80 + "\n")
-
         except Exception as e:
-            print(f"[CSV ERROR] Failed to export: {e}")
-            import traceback
-
-            traceback.print_exc()
             messagebox.showerror("Error", f"Failed to export CSV: {e}")
-            print("=" * 80)
-            print("CSV EXPORT FAILED")
             print("=" * 80 + "\n")
 
     def open_latest_session(self):
         """Open session view from analysis frame"""
         # Open session view with flag indicating we came from analysis
         self.tracker.open_session_view(from_analysis=True)
-
-    def generate_dummy_data(self):
-        """Generate two months of dummy data for testing"""
-        all_data = self.tracker.load_data()
-
-        # Get spheres and projects from settings
-        spheres = list(self.tracker.settings.get("spheres", {}).keys())
-        projects_by_sphere = {}
-        for proj, data in self.tracker.settings.get("projects", {}).items():
-            sphere = data.get("sphere", "General")
-            if sphere not in projects_by_sphere:
-                projects_by_sphere[sphere] = []
-            projects_by_sphere[sphere].append(proj)
-
-        break_actions = list(self.tracker.settings.get("break_actions", {}).keys())
-
-        if not spheres:
-            spheres = ["General"]
-        if not break_actions:
-            break_actions = ["Resting"]
-
-        # Generate data for last 60 days
-        today = datetime.now()
-        for days_ago in range(60):
-            current_date = today - timedelta(days=days_ago)
-            date_str = current_date.strftime("%Y-%m-%d")
-
-            # Generate 1-3 sessions per day
-            num_sessions = random.randint(1, 3)
-            for session_num in range(num_sessions):
-                # Create session timestamp
-                hour = 8 + (session_num * 4) + random.randint(0, 2)
-                minute = random.randint(0, 59)
-                start_dt = current_date.replace(hour=hour, minute=minute, second=0)
-                start_timestamp = start_dt.timestamp()
-
-                session_name = f"{date_str}_{int(start_timestamp)}"
-
-                # Skip if already exists
-                if session_name in all_data:
-                    continue
-
-                # Pick random sphere
-                sphere = random.choice(spheres)
-                projects = projects_by_sphere.get(sphere, ["General"])
-
-                # Generate active periods (2-5 periods)
-                active_periods = []
-                current_time = start_timestamp
-                num_active = random.randint(2, 5)
-
-                for _ in range(num_active):
-                    period_start = current_time
-                    duration = random.randint(600, 3600)  # 10 min to 1 hour
-                    period_end = period_start + duration
-
-                    active_periods.append(
-                        {
-                            "start": datetime.fromtimestamp(period_start).strftime(
-                                "%H:%M:%S"
-                            ),
-                            "start_timestamp": period_start,
-                            "end": datetime.fromtimestamp(period_end).strftime(
-                                "%H:%M:%S"
-                            ),
-                            "end_timestamp": period_end,
-                            "duration": duration,
-                            "project": random.choice(projects),
-                            "comment": f"Work session {_ + 1}",
-                        }
-                    )
-
-                    current_time = period_end
-
-                # Generate break periods (1-3 breaks)
-                breaks = []
-                num_breaks = random.randint(1, 3)
-                break_time = start_timestamp + 1800  # Start breaks after 30 min
-
-                for _ in range(num_breaks):
-                    duration = random.randint(300, 900)  # 5-15 min
-                    breaks.append(
-                        {
-                            "start": datetime.fromtimestamp(break_time).strftime(
-                                "%H:%M:%S"
-                            ),
-                            "start_timestamp": break_time,
-                            "duration": duration,
-                            "action": random.choice(break_actions),
-                            "comment": "",
-                        }
-                    )
-                    break_time += duration + random.randint(1800, 3600)
-
-                # Calculate totals
-                total_active = sum(p["duration"] for p in active_periods)
-                total_break = sum(b["duration"] for b in breaks)
-                end_timestamp = current_time
-
-                all_data[session_name] = {
-                    "sphere": sphere,
-                    "date": date_str,
-                    "start_time": datetime.fromtimestamp(start_timestamp).strftime(
-                        "%H:%M:%S"
-                    ),
-                    "start_timestamp": start_timestamp,
-                    "breaks": breaks,
-                    "active": active_periods,
-                    "idle_periods": [],
-                    "end_time": datetime.fromtimestamp(end_timestamp).strftime(
-                        "%H:%M:%S"
-                    ),
-                    "end_timestamp": end_timestamp,
-                    "total_duration": end_timestamp - start_timestamp,
-                    "active_duration": total_active,
-                    "break_duration": total_break,
-                }
-
-        # Save the data
-        try:
-            with open(self.tracker.data_file, "w") as f:
-                json.dump(all_data, f, indent=2)
-            messagebox.showinfo("Success", "Generated 2 months of dummy data!")
-            self.refresh_all()
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save dummy data: {e}")

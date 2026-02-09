@@ -1029,10 +1029,6 @@ class TimeTracker:
 
     def open_analysis(self):
         """Open the analysis window"""
-        print("\n" + "=" * 80)
-        print("OPEN_ANALYSIS CALLED")
-        print("=" * 80)
-
         try:
             # Don't allow opening analysis while tracking time
             if self.session_active:
@@ -1040,8 +1036,6 @@ class TimeTracker:
                     "Session Active",
                     "Cannot open analysis while tracking time. Please end the session first.",
                 )
-                print(f"[OPEN_ANALYSIS] Aborted - session active")
-                print("=" * 80 + "\n")
                 return
 
             # Special case: if we're in session view and analysis already exists,
@@ -1052,31 +1046,15 @@ class TimeTracker:
                 and hasattr(self, "analysis_frame")
                 and self.analysis_frame is not None
             ):
-                print(
-                    f"[OPEN_ANALYSIS] In session view, closing it to return to analysis"
-                )
                 self.close_session_view()
-                print("=" * 80 + "\n")
                 return
 
             # CRITICAL: Always create a fresh AnalysisFrame instance
             # Reusing the old instance causes state persistence bugs (e.g., after CSV export)
             # If analysis frame already exists, destroy it first
-            print(
-                f"[OPEN_ANALYSIS] analysis_frame exists: {hasattr(self, 'analysis_frame')}"
-            )
             if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
-                print(
-                    f"[OPEN_ANALYSIS] OLD analysis_frame instance ID: {id(self.analysis_frame)}"
-                )
-                if hasattr(self.analysis_frame, "timeline_frame"):
-                    print(
-                        f"[OPEN_ANALYSIS] OLD timeline_frame ID: {id(self.analysis_frame.timeline_frame)}"
-                    )
-                print(f"[OPEN_ANALYSIS] Destroying old analysis_frame...")
                 self.analysis_frame.destroy()
                 self.analysis_frame = None
-                print(f"[OPEN_ANALYSIS] Old analysis_frame destroyed")
 
             # Track if we're coming from completion frame (for proper back navigation)
             self.analysis_from_completion = False
@@ -1100,14 +1078,12 @@ class TimeTracker:
                 self.analysis_from_completion = True
 
             # Hide current frames
-            print(f"[OPEN_ANALYSIS] Hiding current frames...")
             self.main_frame_container.grid_forget()
             # Disable main frame scrolling while hidden
             self.main_frame_container._is_alive = False
 
             # Hide completion container if present
             if hasattr(self, "completion_container") and self.completion_container:
-                print(f"[OPEN_ANALYSIS] Hiding completion_container...")
                 self.completion_container.grid_forget()
 
             # Close session view if present (don't just hide it)
@@ -1116,7 +1092,6 @@ class TimeTracker:
                 and self.session_view_frame is not None
             ):
                 # Properly close session view to clear references
-                print(f"[OPEN_ANALYSIS] Destroying session view...")
                 if (
                     hasattr(self, "session_view_container")
                     and self.session_view_container
@@ -1125,34 +1100,15 @@ class TimeTracker:
                     self.session_view_container = None
                 self.session_view_frame = None
                 self.session_view_from_analysis = False
-                print(f"[OPEN_ANALYSIS] Session view destroyed")
 
             # Create analysis frame in main window
-            print(f"[OPEN_ANALYSIS] Creating NEW AnalysisFrame instance...")
             self.analysis_frame = AnalysisFrame(self.root, self, self.root)
-            print(
-                f"[OPEN_ANALYSIS] NEW AnalysisFrame instance ID: {id(self.analysis_frame)}"
-            )
-            print(
-                f"[OPEN_ANALYSIS] NEW timeline_frame ID: {id(self.analysis_frame.timeline_frame)}"
-            )
             self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-            print(f"[OPEN_ANALYSIS] AnalysisFrame gridded")
 
             # Update window title
             self.root.title("Time Aligned - Analysis")
-            print("=" * 80)
-            print("OPEN_ANALYSIS COMPLETED SUCCESSFULLY")
-            print("=" * 80 + "\n")
         except Exception as e:
-            print(f"[OPEN_ANALYSIS ERROR] Exception: {e}")
-            import traceback
-
-            traceback.print_exc()
             messagebox.showerror("Error", f"Failed to open analysis: {e}")
-            print("=" * 80)
-            print("OPEN_ANALYSIS FAILED")
-            print("=" * 80 + "\n")
             import traceback
 
             traceback.print_exc()
@@ -1218,49 +1174,28 @@ class TimeTracker:
         Args:
             from_analysis: True if opened from analysis frame
         """
-        print("\n" + "=" * 80)
-        print("OPEN_SESSION_VIEW CALLED")
-        print("=" * 80)
-        print(f"[OPEN_SESSION] from_analysis: {from_analysis}")
-
         # Don't allow opening session view while tracking time
         if self.session_active:
             messagebox.showwarning(
                 "Session Active",
                 "Cannot open session view while tracking time. Please end the session first.",
             )
-            print(f"[OPEN_SESSION] Aborted - session active")
-            print("=" * 80 + "\n")
             return
 
         if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
             # Session view already open, do nothing
-            print(f"[OPEN_SESSION] Aborted - session view already open")
-            print("=" * 80 + "\n")
             return
 
         # Track where we came from
         self.session_view_from_analysis = from_analysis
-        print(f"[OPEN_SESSION] Set session_view_from_analysis = {from_analysis}")
 
         # Hide current frame
         if from_analysis and hasattr(self, "analysis_frame") and self.analysis_frame:
-            print(
-                f"[OPEN_SESSION] analysis_frame instance ID: {id(self.analysis_frame)}"
-            )
-            print(
-                f"[OPEN_SESSION] analysis_frame.timeline_frame ID: {id(self.analysis_frame.timeline_frame)}"
-            )
-            print(f"[OPEN_SESSION] Hiding analysis_frame with grid_forget()...")
             self.analysis_frame.grid_forget()
-            print(f"[OPEN_SESSION] analysis_frame hidden")
         else:
-            print(f"[OPEN_SESSION] Hiding main_frame_container...")
             self.main_frame_container.grid_forget()
-            print(f"[OPEN_SESSION] main_frame_container hidden")
 
         # Create scrollable container for completion frame
-        print(f"[OPEN_SESSION] Creating session view container...")
         self.session_view_container = ScrollableFrame(
             self.root, debug_name="SessionView Scrollable"
         )
@@ -1270,85 +1205,47 @@ class TimeTracker:
 
         # Get content frame and create completion frame (session view)
         session_view_parent = self.session_view_container.get_content_frame()
-        print(f"[OPEN_SESSION] Creating CompletionFrame (session_view_frame)...")
         self.session_view_frame = CompletionFrame(session_view_parent, self, None)
         self.session_view_frame.pack(fill="both", expand=True)
 
         # Update window title
         self.root.title("Time Aligned - Session View")
-        print(f"[OPEN_SESSION] Session view created and shown")
-        print("=" * 80)
-        print("OPEN_SESSION_VIEW COMPLETED")
-        print("=" * 80 + "\n")
 
     def close_session_view(self):
         """Close session view and return to previous view"""
-        print("\n" + "=" * 80)
-        print("CLOSE_SESSION_VIEW CALLED")
-        print("=" * 80)
-
         if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
             # Check where we came from before destroying
             came_from_analysis = (
                 hasattr(self, "session_view_from_analysis")
                 and self.session_view_from_analysis
             )
-            print(f"[CLOSE_SESSION] came_from_analysis: {came_from_analysis}")
 
             # Destroy session view container
             if hasattr(self, "session_view_container"):
-                print(f"[CLOSE_SESSION] Destroying session_view_container...")
                 self.session_view_container.destroy()
                 self.session_view_container = None
-                print(f"[CLOSE_SESSION] session_view_container destroyed")
 
             self.session_view_frame = None
-            print(f"[CLOSE_SESSION] session_view_frame set to None")
 
             # Return to analysis frame if we came from there
             if came_from_analysis:
                 # CRITICAL FIX: Don't restore the old hidden analysis frame
                 # It may have corrupted state from CSV export or other operations
                 # Instead, destroy it and create a fresh instance
-                print(f"[CLOSE_SESSION] Returning to analysis frame")
-                print(
-                    f"[CLOSE_SESSION] analysis_frame exists: {hasattr(self, 'analysis_frame')}"
-                )
-
                 if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
-                    print(
-                        f"[CLOSE_SESSION] OLD analysis_frame instance ID: {id(self.analysis_frame)}"
-                    )
-                    if hasattr(self.analysis_frame, "timeline_frame"):
-                        print(
-                            f"[CLOSE_SESSION] OLD timeline_frame ID: {id(self.analysis_frame.timeline_frame)}"
-                        )
-                    print(f"[CLOSE_SESSION] Destroying old analysis_frame...")
                     self.analysis_frame.destroy()
                     self.analysis_frame = None
-                    print(f"[CLOSE_SESSION] Old analysis_frame destroyed")
 
                 # Now call open_analysis to create a fresh instance
-                print(
-                    f"[CLOSE_SESSION] Calling open_analysis() to create fresh instance..."
-                )
                 self.open_analysis()
-                print(f"[CLOSE_SESSION] open_analysis() completed")
                 self.session_view_from_analysis = False
             else:
                 # Show main frame
-                print(f"[CLOSE_SESSION] Returning to main frame")
-                print(f"[CLOSE_SESSION] Showing main_frame_container...")
                 self.main_frame_container._is_alive = True  # Re-enable scrolling
                 self.main_frame_container.grid(
                     row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
                 )
                 self.root.title("Time Aligned - Time Tracker")
-                print(f"[CLOSE_SESSION] main_frame_container shown")
-
-        print("=" * 80)
-        print("CLOSE_SESSION_VIEW COMPLETED")
-        print("=" * 80 + "\n")
 
     def create_tray_icon_image(self, state="idle"):
         """Create icon image for system tray based on state"""

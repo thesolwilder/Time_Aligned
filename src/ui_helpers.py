@@ -166,22 +166,6 @@ class ScrollableFrame(ttk.Frame):
         """Clean up before destroying"""
         # Mark as no longer alive so handlers can ignore it
         self._is_alive = False
-        caller = None
-        try:
-            stack = traceback.extract_stack(limit=5)
-            if len(stack) >= 2:
-                caller = stack[-2]
-        except Exception:
-            caller = None
-
-        if caller:
-            print(
-                f"[SCROLL CLEANUP] {self._debug_name} destroyed (ID: {id(self)}) "
-                f"called from {caller.filename}:{caller.lineno} in {caller.name}"
-            )
-        else:
-            print(f"[SCROLL CLEANUP] {self._debug_name} destroyed (ID: {id(self)})")
-
         # Call parent destroy
         super().destroy()
 
