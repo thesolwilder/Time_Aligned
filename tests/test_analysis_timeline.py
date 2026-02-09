@@ -58,7 +58,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
 
     def test_sphere_filter_work_only(self):
         """Test filtering by Work sphere"""
-        date = "2026-01-22"
+        date = "2026-01-22"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -97,6 +97,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
         # Filter by Work sphere
         frame.sphere_var.set("Work")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
         active, breaks = frame.calculate_totals("All Time")
 
         # Should only count Work sessions: 4000 active, 1000 break
@@ -105,7 +106,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
 
     def test_sphere_filter_personal_only(self):
         """Test filtering by Personal sphere"""
-        date = "2026-01-22"
+        date = "2026-01-22"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -144,6 +145,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
         # Filter by Personal sphere
         frame.sphere_var.set("Personal")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
         active, breaks = frame.calculate_totals("All Time")
 
         # Should only count Personal sessions: 2000 active, 0 break
@@ -152,7 +154,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
 
     def test_sphere_filter_all_spheres(self):
         """Test filtering by All Spheres"""
-        date = "2026-01-22"
+        date = "2026-01-22"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -191,6 +193,7 @@ class TestAnalysisFrameSphereFiltering(unittest.TestCase):
         # Filter by All Spheres
         frame.sphere_var.set("All Spheres")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
         active, breaks = frame.calculate_totals("All Time")
 
         # Should count both: 6000 active, 1000 break
@@ -233,7 +236,7 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
 
     def test_project_filter_project_a(self):
         """Test filtering by specific project"""
-        date = "2026-01-22"
+        date = "2026-01-22"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -263,6 +266,7 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
         # Filter by Project A
         frame.sphere_var.set("All Spheres")
         frame.project_var.set("Project A")
+        frame.selected_card = 2  # All Time - ensure test date is included
         active, breaks = frame.calculate_totals("All Time")
 
         # Should count periods with Project A: 3000 active
@@ -270,7 +274,7 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
 
     def test_project_filter_project_b(self):
         """Test filtering by different project"""
-        date = "2026-01-22"
+        date = "2026-01-22"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -300,6 +304,7 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
         # Filter by Project B
         frame.sphere_var.set("All Spheres")
         frame.project_var.set("Project B")
+        frame.selected_card = 2  # All Time - ensure test date is included
         active, breaks = frame.calculate_totals("All Time")
 
         # Should count periods with Project B: 1000 active
@@ -341,7 +346,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
     def test_timeline_data_has_all_required_fields(self):
         """Test that get_timeline_data returns all required fields for each period"""
-        date = "2026-01-28"
+        date = "2026-01-28"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -384,6 +389,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time - ensure test date is included
 
         # Get timeline data
         timeline_data = frame.get_timeline_data("All Time")
@@ -426,7 +432,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
     def test_timeline_data_with_secondary_project(self):
         """Test that secondary projects are properly separated from primary"""
-        date = "2026-01-28"
+        date = "2026-01-28"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -471,6 +477,8 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
 
+        frame.selected_card = 2  # All Time - ensure test date is included
+
         # Get timeline data
         timeline_data = frame.get_timeline_data("All Time")
 
@@ -486,7 +494,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
     def test_timeline_data_with_primary_and_secondary_break(self):
         """Test that primary and secondary break actions are properly separated"""
-        date = "2026-01-28"
+        date = "2026-01-28"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -531,6 +539,8 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
 
+        frame.selected_card = 2  # All Time - ensure test date is included
+
         # Get timeline data
         timeline_data = frame.get_timeline_data("All Time")
 
@@ -547,7 +557,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
     def test_timeline_data_with_primary_and_secondary_idle(self):
         """Test that primary and secondary idle actions are properly separated"""
-        date = "2026-01-28"
+        date = "2026-01-28"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -593,6 +603,8 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
 
+        frame.selected_card = 2  # All Time - ensure test date is included
+
         # Get timeline data
         timeline_data = frame.get_timeline_data("All Time")
 
@@ -609,7 +621,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
     def test_session_level_comments_appear_on_all_periods(self):
         """Test that session-level comments appear on ALL periods from that session"""
-        date = "2026-01-28"
+        date = "2026-01-28"  # Specific date for test consistency
         test_data = {
             f"{date}_session1": {
                 "sphere": "Work",
@@ -679,6 +691,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
         # Explicitly set filters to show all data
         frame.sphere_var.set("All Spheres")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
 
         # Get timeline data
         timeline_data = frame.get_timeline_data("All Time")
@@ -1026,20 +1039,37 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
                 "active_duration": 3000,
                 "active": [
                     {
-                        "duration": 3000,
-                        "project": "Project A",
-                        "comment": "Working on task with some longer text that might wrap",
+                        "duration": 1500,
                         "start": "10:30:00",
                         "start_timestamp": 1234567890,
-                    }
+                        "projects": [
+                            {
+                                "name": "Project A",
+                                "comment": "Primary task",
+                                "percentage": 70,
+                            },
+                            {
+                                "name": "Project B",
+                                "comment": "Secondary task",
+                                "percentage": 30,
+                            },
+                        ],
+                    },
+                    {
+                        "duration": 1500,
+                        "project": "Project C",
+                        "comment": "Another task",
+                        "start": "11:00:00",
+                        "start_timestamp": 1234569390,
+                    },
                 ],
                 "breaks": [],
                 "idle_periods": [],
                 "session_comments": {
-                    "active_notes": "active comment",
-                    "break_notes": "",
-                    "idle_notes": "",
-                    "session_notes": "session note",
+                    "active_notes": "working hard",
+                    "break_notes": "took breaks",
+                    "idle_notes": "got distracted",
+                    "session_notes": "productive session",
                 },
             }
         }
@@ -1076,7 +1106,22 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
         ]
         self.assertGreater(len(data_rows), 0, "Should have at least one data row")
 
-        first_row = data_rows[0]
+        # IMPORTANT: Use first Active period row (not Break/Idle) to ensure all columns have content
+        # Active periods have all columns populated (secondary comment, active comments, etc.)
+        first_row = None
+        for row in data_rows:
+            # Check if this is an Active period by looking at the Type column (index 6)
+            widgets = [w for w in row.winfo_children()]
+            if len(widgets) > 6:
+                type_widget = widgets[6]
+                if (
+                    isinstance(type_widget, tk.Label)
+                    and type_widget.cget("text") == "Active"
+                ):
+                    first_row = row
+                    break
+
+        self.assertIsNotNone(first_row, "Should have at least one Active period row")
         data_widgets = [w for w in first_row.winfo_children()]
 
         # Verify counts match
@@ -1101,6 +1146,15 @@ class TestAnalysisTimelineHeaderAlignment(unittest.TestCase):
 
             header_x = header.winfo_rootx()
             data_x = data.winfo_rootx()
+
+            # KNOWN LIMITATION: Empty tk.Text widgets return winfo_rootx()=0 in headless mode
+            # This is a tkinter limitation, not an alignment bug. Skip empty Text widgets.
+            # See test_empty_text.py for proof of this behavior.
+            if isinstance(data, tk.Text):
+                data_content = data.get("1.0", "end-1c").strip()
+                if not data_content and data_x == 0:
+                    # Empty Text widget - skip this check (known headless limitation)
+                    continue
 
             # Allow 2px tolerance for rounding/padding differences
             if abs(header_x - data_x) > 2:
@@ -1356,6 +1410,7 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
         self.root.update_idletasks()
 
@@ -1418,6 +1473,7 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
         self.root.update_idletasks()
 
@@ -1509,6 +1565,7 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
         self.root.update_idletasks()
 
@@ -1600,6 +1657,7 @@ class TestAnalysisTimelineTwoRowHeaders(unittest.TestCase):
 
         parent_frame = ttk.Frame(self.root)
         frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
         self.root.update_idletasks()
 
@@ -2088,6 +2146,7 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         # Set filters to match test data (sphere="General")
         frame.sphere_var.set("General")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
 
         frame.update_timeline()
         self.root.update_idletasks()
@@ -2221,6 +2280,7 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         # Set filters to match test data (sphere="General")
         frame.sphere_var.set("General")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure test date is included
 
         frame.update_timeline()
         self.root.update_idletasks()
@@ -2384,8 +2444,10 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
         frame = AnalysisFrame(parent_frame, tracker, self.root)
 
         # Set filters to match test data (sphere="General")
+        frame.status_filter.set("all")  # Show all data regardless of active status
         frame.sphere_var.set("General")
         frame.project_var.set("All Projects")
+        frame.selected_card = 2  # All Time - ensure date range includes test data
 
         frame.update_timeline()
         self.root.update_idletasks()
@@ -2433,20 +2495,26 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
                     f"{col_name} text content length mismatch",
                 )
 
-                # The widget is created with height=1 initially (single line)
-                # This is expected behavior - the Text widget uses wrap=WORD
-                # to handle long text, but in the current implementation it's
-                # constrained to height=1 for row uniformity in the timeline.
+                # CRITICAL: Verify widget height is set to display ALL wrapped content
+                # The widget should use count("displaylines") to calculate actual wrapped lines
+                # For the test text "1. the dog is blonde. " * 7 (153 chars),
+                # with width=21, this wraps to exactly 7 display lines.
                 #
-                # This test documents that limitation: Text widgets with height=1
-                # will only show the first line visually, though all text is stored.
-                # Users can see full text by expanding or via tooltips.
-                #
-                # For now, just verify text is stored completely (not truncated)
-                self.assertIn(
-                    "the dog is blonde",
-                    displayed_text,
-                    f"{col_name} should contain the test phrase",
+                # This test ensures the implementation uses TRUE dynamic height,
+                # not hardcoded height=1 which would truncate the text visually.
+                widget.update_idletasks()  # Ensure wrapping is calculated
+                display_lines_tuple = widget.count("1.0", "end", "displaylines")
+                actual_wrapped_lines = (
+                    display_lines_tuple[0] if display_lines_tuple else 1
+                )
+
+                # Widget height should match the actual wrapped line count
+                self.assertEqual(
+                    height,
+                    actual_wrapped_lines,
+                    f"{col_name} widget height should be {actual_wrapped_lines} lines "
+                    f"(actual wrapped content), but is {height} lines. "
+                    f"Text is being visually truncated!",
                 )
 
 
@@ -3455,6 +3523,7 @@ class TestAnalysisFrameTimelineColumns(unittest.TestCase):
         # Select appropriate filters
         frame.sphere_var.set("ActiveSphere")
         frame.project_var.set("ActiveProject")
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
 
         # Check that timeline frame has widgets (rows were created)
@@ -3511,6 +3580,7 @@ class TestAnalysisFrameTimelineColumns(unittest.TestCase):
         frame.refresh_dropdowns()
         frame.sphere_var.set("InactiveSphere")
         frame.update_project_filter()
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
 
         # Check that timeline displays sphere active status (should be unchecked/False for InactiveSphere)
@@ -3563,6 +3633,7 @@ class TestAnalysisFrameTimelineColumns(unittest.TestCase):
         # Update timeline to populate data
         frame.sphere_var.set("ActiveSphere")
         frame.project_var.set("ActiveProject")
+        frame.selected_card = 2  # All Time - ensure test date is included
         frame.update_timeline()
 
         # Force geometry update

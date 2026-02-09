@@ -1064,11 +1064,11 @@ class AnalysisFrame(ttk.Frame):
             nonlocal col_idx
 
             if use_text_widget:
-                # Use Text widget for better text wrapping
+                # Use Text widget for better text wrapping with TRUE dynamic height
                 txt = tk.Text(
                     row_frame,
                     width=width,
-                    height=1,
+                    height=1,  # Temporary height - will be updated after measuring wrapped content
                     wrap=tk.WORD,
                     bg=bg_color,
                     font=("Arial", 8),
@@ -1076,16 +1076,29 @@ class AnalysisFrame(ttk.Frame):
                     state=tk.NORMAL,
                 )
                 txt.insert("1.0", text)
+
+                # Grid the widget FIRST so it knows its actual width for wrapping
+                if expand:
+                    txt.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
+                else:
+                    txt.grid(row=0, column=col_idx, sticky=tk.W)
+
+                # Update to force wrap calculation
+                txt.update_idletasks()
+
+                # TRUE dynamic height: Use count("displaylines") to get ACTUAL wrapped line count
+                # (not an estimation formula - this is exact!)
+                display_lines_tuple = txt.count("1.0", "end", "displaylines")
+                actual_lines = display_lines_tuple[0] if display_lines_tuple else 1
+
+                # Set height to exact wrapped line count (cap at 15 for extremely long text)
+                txt.config(height=min(15, max(1, actual_lines)))
+
                 txt.config(state=tk.DISABLED)  # Make read-only
 
                 # CRITICAL FIX: Text widgets have class bindings that interfere with bind_all
                 # Unbind the Text widget's default mousewheel handling
                 txt.bind("<MouseWheel>", lambda e: "break")
-
-                if expand:
-                    txt.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))
-                else:
-                    txt.grid(row=0, column=col_idx, sticky=tk.W)
 
                 # NOTE: Removed mousewheel binding - ScrollableFrame handles it
                 col_idx += 1
@@ -1410,7 +1423,15 @@ class AnalysisFrame(ttk.Frame):
             )
 
             for period in session_data.get("active", []):
+                # Get project name - handle both single project and projects array
                 project_name = period.get("project", "")
+                if not project_name and period.get("projects"):
+                    # If using projects array, get the primary project name
+                    for proj in period.get("projects", []):
+                        if proj.get("project_primary", True):
+                            project_name = proj.get("name", "")
+                            break
+
                 if project_filter != "All Projects" and project_name != project_filter:
                     continue
 
@@ -1540,6 +1561,66 @@ class AnalysisFrame(ttk.Frame):
                         "Secondary Comment": secondary_comment,
                         "Active Comments": "",
                         "Break Comments": break_notes,
+                        "Session Notes": session_notes,
+                    }
+                )
+
+            # Export idle periods
+            for period in session_data.get("idle_periods", []):
+                # Apply status filter for idle periods
+                # Since idle actions don't have active status, filter based on sphere only
+                if status_filter == "active":
+                    if not sphere_active:
+                        continue  # Skip if sphere is inactive
+                elif status_filter == "archived":
+                    if sphere_active:
+                        continue  # Archived filter only shows inactive spheres for idles
+                # For "all", don't skip anything
+
+                # Get primary and secondary action data
+                primary_action = ""
+                primary_comment = ""
+                secondary_action = ""
+                secondary_comment = ""
+
+                if period.get("action"):
+                    # Single action case
+                    primary_action = period.get("action", "")
+                    primary_comment = period.get("comment", "")
+                else:
+                    # Multiple actions case
+                    for action_item in period.get("actions", []):
+                        if action_item.get("idle_primary", True):
+                            primary_action = action_item.get("name", "")
+                            primary_comment = action_item.get("comment", "")
+                        else:
+                            secondary_action = action_item.get("name", "")
+                            secondary_comment = action_item.get("comment", "")
+
+                # Get session-level comments
+                session_comments_dict = session_data.get("session_comments", {})
+                if session_comments_dict:
+                    idle_notes = session_comments_dict.get("idle_notes", "")
+                    session_notes = session_comments_dict.get("session_notes", "")
+                else:
+                    idle_notes = session_data.get("session_break_idle_comments", "")
+                    session_notes = session_data.get("session_notes", "")
+
+                periods.append(
+                    {
+                        "Date": session_data.get("date"),
+                        "Start": period.get("start", ""),
+                        "Duration": self.format_duration(period.get("duration", 0)),
+                        "Sphere": session_sphere,
+                        "Sphere Active": "Yes" if sphere_active else "No",
+                        "Project Active": "N/A",
+                        "Type": "Idle",
+                        "Primary Action": primary_action,
+                        "Primary Comment": primary_comment,
+                        "Secondary Action": secondary_action,
+                        "Secondary Comment": secondary_comment,
+                        "Active Comments": "",
+                        "Break Comments": idle_notes,
                         "Session Notes": session_notes,
                     }
                 )

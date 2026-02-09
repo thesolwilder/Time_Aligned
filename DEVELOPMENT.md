@@ -200,6 +200,90 @@ if __name__ == "__main__":
 - ✅ **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
 - ✅ Always call `safe_teardown_tk_root(self.root)` in tearDown
 - ✅ Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
+- ✅ **NEVER** use hardcoded dates without setting `selected_card = 2` (see Date Handling section below)
+
+## 📅 Date Handling in Tests
+
+**⚠️ CRITICAL: Hardcoded dates cause test failures over time**
+
+### The Problem
+
+Tests with hardcoded dates like `"2026-01-22"` will fail when that date falls outside the default filter window ("Last 7 Days" = `selected_card = 0`). This causes tests to pass today but fail in the future.
+
+### Solution: Choose Based on Test Purpose
+
+**Option 1: Use `datetime.now()` for tests requiring recent data**
+
+```python
+from datetime import datetime, timedelta
+
+def test_recent_data_filtering(self):
+    # Use dynamic dates for tests that need "current" data
+    today = datetime.now()
+    yesterday = today - timedelta(days=1)
+    date = today.strftime("%Y-%m-%d")
+
+    test_data = {f"{date}_session1": {"date": date, ...}}
+```
+
+**Use when**: Test logic requires recent/current dates (e.g., testing "Last 7 Days" filter behavior)
+
+**Option 2: Use hardcoded dates + `selected_card = 2` (All Time)**
+
+```python
+def test_specific_date_logic(self):
+    date = "2026-01-22"  # Specific date for test consistency
+    test_data = {f"{date}_session1": {"date": date, ...}}
+
+    # CRITICAL: Set to "All Time" to ensure date is included
+    frame.selected_card = 2  # All Time - ensures test date is always visible
+    frame.update_timeline()
+```
+
+**Use when**: Test needs specific dates for consistency (e.g., testing date parsing, specific scenarios)
+
+**Option 3: Combination approach** (RECOMMENDED)
+
+- Use `datetime.now()` for timeline/filter tests that need recent data
+- Use hardcoded + `selected_card = 2` for tests that need specific dates
+
+### Required Filter Settings for Timeline Tests
+
+**ALWAYS set these filter variables before calling `update_timeline()` or `get_timeline_data()`:**
+
+```python
+frame.status_filter.set("all")  # "all", "active", or "archived"
+frame.sphere_var.set("All Spheres")  # or specific sphere name
+frame.project_var.set("All Projects")  # or specific project name
+frame.selected_card = 2  # 0=Last 7 Days, 1=Last 30 Days, 2=All Time
+frame.update_timeline()
+```
+
+### Common Pitfalls
+
+❌ **DON'T**: Use hardcoded dates without setting `selected_card`
+
+```python
+date = "2026-01-22"  # Will fail after 2026-01-29 (8 days later)
+# ... no selected_card set (defaults to 0 = Last 7 Days)
+frame.update_timeline()  # FAILS: No data visible!
+```
+
+✅ **DO**: Set `selected_card = 2` for hardcoded dates
+
+```python
+date = "2026-01-22"  # Specific date for test consistency
+frame.selected_card = 2  # All Time - ensures always visible
+frame.update_timeline()  # WORKS: Data visible regardless of test run date
+```
+
+✅ **DO**: Use `datetime.now()` for dynamic tests
+
+```python
+today = datetime.now().strftime("%Y-%m-%d")  # Always current
+# Works with default selected_card = 0 (Last 7 Days)
+frame.update_timeline()  # WORKS: Data is recent
+```
 
 ## Test Organization
 

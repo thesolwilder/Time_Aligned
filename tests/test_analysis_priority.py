@@ -1140,5 +1140,221 @@ class TestAnalysisCSVExportIntegration(unittest.TestCase):
         return ttk.Frame(self.root)
 
 
+class TestCSVExportAllPeriodTypes(unittest.TestCase):
+    """Integration test to verify CSV export includes all period types (Active, Break, Idle)"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": True, "idle_threshold": 60},
+            "spheres": {"General": {"is_default": True, "active": True}},
+            "projects": {
+                "General": {"sphere": "General", "is_default": True, "active": True},
+                "Work": {"sphere": "General", "is_default": False, "active": True},
+            },
+            "break_actions": {
+                "Resting": {"is_default": True, "active": True},
+                "bathroom": {"is_default": False, "active": True},
+            },
+        }
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_all_period_types_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_all_period_types_settings.json", settings
+        )
+
+    def content_frame(self):
+        """Create and return a content frame for testing"""
+        return ttk.Frame(self.root)
+
+    def test_csv_export_includes_active_break_and_idle_periods(self):
+        """
+        Test that CSV export includes all three period types: Active, Break, and Idle.
+
+        This is a regression test for a bug where only Break and Idle periods were exported,
+        but Active periods were skipped when they used the 'projects' array format.
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        # Create test data with all three period types
+        # This mirrors the actual data structure from data.json
+        test_data = {
+            f"{today}_1770645170": {
+                "sphere": "General",
+                "date": today,
+                "start_time": "08:52:50",
+                "active": [
+                    {
+                        "start": "08:52:50",
+                        "duration": 3.07,
+                        "projects": [
+                            {
+                                "name": "General",
+                                "percentage": 50,
+                                "comment": "Active project 1",
+                                "duration": 1,
+                                "project_primary": True,
+                            },
+                            {
+                                "name": "Work",
+                                "percentage": 50,
+                                "comment": "Active project 2",
+                                "duration": 1,
+                                "project_primary": False,
+                            },
+                        ],
+                    },
+                    {
+                        "start": "08:52:56",
+                        "duration": 3.89,
+                        "projects": [
+                            {
+                                "name": "General",
+                                "percentage": 50,
+                                "comment": "Active project 3",
+                                "duration": 1,
+                                "project_primary": True,
+                            },
+                            {
+                                "name": "Work",
+                                "percentage": 50,
+                                "comment": "Active project 4",
+                                "duration": 1,
+                                "project_primary": False,
+                            },
+                        ],
+                    },
+                ],
+                "breaks": [
+                    {
+                        "start": "08:53:00",
+                        "duration": 5.21,
+                        "actions": [
+                            {
+                                "name": "Resting",
+                                "percentage": 50,
+                                "duration": 2,
+                                "comment": "Break action 1",
+                                "break_primary": True,
+                            },
+                            {
+                                "name": "bathroom",
+                                "percentage": 50,
+                                "duration": 2,
+                                "comment": "Break action 2",
+                                "break_primary": False,
+                            },
+                        ],
+                    }
+                ],
+                "idle_periods": [
+                    {
+                        "start": "08:52:53",
+                        "duration": 3.05,
+                        "actions": [
+                            {
+                                "name": "Resting",
+                                "percentage": 50,
+                                "duration": 1,
+                                "comment": "Idle action 1",
+                                "idle_primary": True,
+                            },
+                            {
+                                "name": "bathroom",
+                                "percentage": 50,
+                                "duration": 1,
+                                "comment": "Idle action 2",
+                                "idle_primary": False,
+                            },
+                        ],
+                    }
+                ],
+                "session_comments": {
+                    "active_notes": "Session active comments",
+                    "break_notes": "Session break comments",
+                    "idle_notes": "Session idle comments",
+                    "session_notes": "Session notes",
+                },
+            }
+        }
+
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = self.content_frame()
+        analysis = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Set filters to show all data
+        analysis.status_filter.set("all")
+        analysis.sphere_var.set("All Spheres")
+        analysis.project_var.set("All Projects")
+        analysis.selected_card = 2  # All Time
+
+        csv_file = "test_all_period_types.csv"
+        self.file_manager.test_files.append(csv_file)
+
+        with patch("tkinter.filedialog.asksaveasfilename", return_value=csv_file):
+            with patch("tkinter.messagebox.showinfo"):
+                analysis.export_to_csv()
+
+        # Verify file was created
+        self.assertTrue(os.path.exists(csv_file), "CSV file should be created")
+
+        # Read and verify CSV contents
+        with open(csv_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        # Should have 4 rows total: 2 Active + 1 Break + 1 Idle
+        self.assertEqual(
+            len(rows),
+            4,
+            f"CSV should have 4 rows (2 Active, 1 Break, 1 Idle), but got {len(rows)}",
+        )
+
+        # Verify we have all three period types
+        types = [row["Type"] for row in rows]
+        active_count = types.count("Active")
+        break_count = types.count("Break")
+        idle_count = types.count("Idle")
+
+        self.assertEqual(
+            active_count, 2, f"Should have 2 Active periods, got {active_count}"
+        )
+        self.assertEqual(
+            break_count, 1, f"Should have 1 Break period, got {break_count}"
+        )
+        self.assertEqual(idle_count, 1, f"Should have 1 Idle period, got {idle_count}")
+
+        # Verify Active periods have correct data
+        active_rows = [row for row in rows if row["Type"] == "Active"]
+        self.assertEqual(active_rows[0]["Primary Action"], "General")
+        self.assertEqual(active_rows[0]["Secondary Action"], "Work")
+        self.assertEqual(active_rows[0]["Project Active"], "Yes")
+
+        # Verify Break period has correct data
+        break_rows = [row for row in rows if row["Type"] == "Break"]
+        self.assertEqual(break_rows[0]["Primary Action"], "Resting")
+        self.assertEqual(break_rows[0]["Secondary Action"], "bathroom")
+        self.assertEqual(break_rows[0]["Project Active"], "N/A")
+
+        # Verify Idle period has correct data
+        idle_rows = [row for row in rows if row["Type"] == "Idle"]
+        self.assertEqual(idle_rows[0]["Primary Action"], "Resting")
+        self.assertEqual(idle_rows[0]["Secondary Action"], "bathroom")
+        self.assertEqual(idle_rows[0]["Project Active"], "N/A")
+
+
 if __name__ == "__main__":
     unittest.main()
