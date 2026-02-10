@@ -127,14 +127,50 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
         if result.failures:
             print("\nFAILURES:")
             for test, traceback in result.failures:
-                print(f"  - {test}")
+                print(f"\n  - {test}")
+                # Extract the actual AssertionError message
+                lines = traceback.strip().split('\n')
+                
+                # Find the AssertionError line (contains the actual error message)
+                assertion_error = None
+                assertion_line = None
+                
+                for i, line in enumerate(lines):
+                    if line.strip().startswith('AssertionError:'):
+                        assertion_error = line.strip()
+                        # Look backwards for the assertion call
+                        for j in range(i-1, max(i-5, -1), -1):
+                            if 'self.assert' in lines[j]:
+                                assertion_line = lines[j].strip()
+                                break
+                        break
+                
+                if assertion_error:
+                    if assertion_line:
+                        print(f"    Failed: {assertion_line}")
+                    print(f"    {assertion_error}")
+                else:
+                    # Fallback: print last non-empty line
+                    for line in reversed(lines):
+                        if line.strip():
+                            print(f"    Cause: {line.strip()}")
+                            break
 
         if result.errors:
             print("\nERRORS:")
             for test, traceback in result.errors:
-                print(f"  - {test}")
+                print(f"\n  - {test}")
+                # Extract the exception type and message
+                lines = traceback.strip().split('\n')
+                
+                # Find the actual exception line (usually last non-empty line)
+                for line in reversed(lines):
+                    stripped = line.strip()
+                    if stripped and not stripped.startswith('File ') and ':' in stripped:
+                        print(f"    {stripped}")
+                        break
 
-        print(f"{'='*70}")
+        print(f"\n{'='*70}")
 
     # Print summary
     print(f"\n{'='*70}")
