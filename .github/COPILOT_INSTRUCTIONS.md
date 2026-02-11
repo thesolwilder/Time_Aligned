@@ -152,12 +152,51 @@ Add comprehensive tests following DEVELOPMENT.md:
 
 Review implementation against standards:
 
+**Testing & Quality Assurance:**
+
 - [ ] Test coverage (import → unit → integration → E2E)
-- [ ] Follows existing patterns
-- [ ] All tests passing
-- [ ] Docstrings present
-- [ ] No hardcoded values
-- [ ] Error handling tested
+- [ ] All tests passing with no warnings
+- [ ] Edge cases and error paths tested
+- [ ] No test data in production code
+
+**Architecture & Design:**
+
+- [ ] Follows existing patterns and project structure
+- [ ] Single Responsibility Principle (each function does ONE thing)
+- [ ] DRY principle (no duplicate code)
+- [ ] Proper separation of concerns
+
+**Documentation:**
+
+- [ ] Docstrings present for all public functions/classes
+- [ ] Complex logic has explanatory comments
+- [ ] README accurately reflects current functionality
+- [ ] Type hints on function signatures
+
+**Configuration & Dependencies:**
+
+- [ ] No hardcoded values (use config files/constants)
+- [ ] All dependencies in requirements.txt with versions
+- [ ] Environment variables documented
+- [ ] Sensitive data excluded from version control
+
+**Error Handling & Logging:**
+
+- [ ] Comprehensive error handling (try/except where appropriate)
+- [ ] User-friendly error messages
+- [ ] Logging used instead of print statements for debugging
+- [ ] No silent failures
+
+**Code Quality (CRITICAL FOR PORTFOLIO):**
+
+- [ ] **Strictly follows PEP 8 formatting standards**
+- [ ] **Absolutely NO dead code, commented-out code, or unused imports**
+- [ ] **Clear, descriptive variable/function names (no abbreviations)**
+- [ ] **Consistent naming conventions throughout**
+- [ ] **Maximum function length ~50 lines (break up large functions)**
+- [ ] **Human readability prioritized over "clever" code**
+- [ ] **No magic numbers - use named constants**
+- [ ] **Proper use of whitespace for visual clarity**
 
 ---
 

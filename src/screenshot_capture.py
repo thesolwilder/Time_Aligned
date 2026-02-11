@@ -217,7 +217,6 @@ class ScreenshotCapture:
             return screenshot_info
 
         except Exception as e:
-            print(f"Error capturing screenshot: {e}")
             return None
 
     def _monitor_loop(self):
@@ -235,7 +234,6 @@ class ScreenshotCapture:
                 time.sleep(0.5)
 
             except Exception as e:
-                print(f"Error in screenshot monitor loop: {e}")
                 time.sleep(1)
 
     def get_screenshot_folder_path(self):

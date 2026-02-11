@@ -151,7 +151,6 @@ class TimeTracker:
             with open(self.settings_file, "r") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Failed to read settings file: {e}")
             return default_settings
 
     def _get_default_sphere(self):
@@ -242,7 +241,6 @@ class TimeTracker:
             with open(self.data_file, "r") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Failed to read data file: {e}")
             return {}
 
     def save_data(self, session_data, merge=True):
@@ -259,14 +257,13 @@ class TimeTracker:
             else:
                 # Safety check: Don't save if replacement data is empty
                 if not session_data:
-                    print("WARNING: Refusing to save empty data with merge=False")
                     return
                 all_data = session_data
 
             with open(self.data_file, "w") as f:
                 json.dump(all_data, f, indent=2)
         except Exception as e:
-            print(f"Failed to save data: {e}")
+            pass
 
     def create_widgets(self):
         """Create the main GUI elements"""

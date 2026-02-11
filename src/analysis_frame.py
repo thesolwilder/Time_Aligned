@@ -1559,7 +1559,6 @@ class AnalysisFrame(ttk.Frame):
 
         except Exception as e:
             messagebox.showerror("Error", f"Failed to export CSV: {e}")
-            print("=" * 80 + "\n")
 
     def open_latest_session(self):
         """Open session view from analysis frame"""

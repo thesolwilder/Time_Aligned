@@ -1759,16 +1759,10 @@ class CompletionFrame(ttk.Frame):
 
             if uploader.is_enabled():
                 success = uploader.upload_session(session_data, self.session_name)
-                if success:
-                    print(f"Session {self.session_name} uploaded to Google Sheets")
-                else:
-                    print(
-                        f"Failed to upload session {self.session_name} to Google Sheets"
-                    )
         except ImportError:
-            print("Google Sheets integration not available - missing dependencies")
+            pass
         except Exception as e:
-            print(f"Error uploading to Google Sheets: {e}")
+            pass
 
     def skip_and_close(self):
         """Return to appropriate frame without saving"""

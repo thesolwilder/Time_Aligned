@@ -72,7 +72,6 @@ class GoogleSheetsUploader:
             with open(self.settings_file, "r") as f:
                 return json.load(f)
         except Exception as e:
-            print(f"Error loading settings: {e}")
             return {}
 
     def is_enabled(self):
@@ -92,7 +91,6 @@ class GoogleSheetsUploader:
 
         # Validate spreadsheet ID format (should be alphanumeric, hyphens, underscores)
         if spreadsheet_id and not self._is_valid_spreadsheet_id(spreadsheet_id):
-            print(f"Warning: Invalid spreadsheet ID format: {spreadsheet_id}")
             return ""
 
         return spreadsheet_id
@@ -113,7 +111,6 @@ class GoogleSheetsUploader:
 
         # Validate sheet name to prevent injection attacks
         if not self._is_valid_sheet_name(sheet_name):
-            print(f"Warning: Invalid sheet name format: {sheet_name}. Using default.")
             return "Sessions"
 
         return sheet_name
@@ -151,7 +148,6 @@ class GoogleSheetsUploader:
 
         # Validate credentials file path to prevent path traversal
         if credentials_file and not self._is_safe_file_path(credentials_file):
-            print(f"Warning: Unsafe credentials file path: {credentials_file}")
             return False
 
         # Check if we have valid credentials
@@ -160,7 +156,6 @@ class GoogleSheetsUploader:
                 with open(token_file, "rb") as token:
                     creds = pickle.load(token)
             except Exception as e:
-                print(f"Error loading token file: {e}")
                 creds = None
 
         # If credentials are invalid or don't exist, get new ones
@@ -169,12 +164,10 @@ class GoogleSheetsUploader:
                 try:
                     creds.refresh(Request())
                 except Exception as e:
-                    print(f"Error refreshing credentials: {e}")
                     creds = None
 
             if not creds:
                 if not os.path.exists(credentials_file):
-                    print(f"Credentials file not found: {credentials_file}")
                     return False
 
                 try:
@@ -184,7 +177,6 @@ class GoogleSheetsUploader:
                     )
                     creds = flow.run_local_server(port=0)
                 except Exception as e:
-                    print(f"Error during OAuth flow: {e}")
                     return False
 
             # Save the credentials for the next run
@@ -192,7 +184,7 @@ class GoogleSheetsUploader:
                 with open(token_file, "wb") as token:
                     pickle.dump(creds, token)
             except Exception as e:
-                print(f"Error saving credentials: {e}")
+                pass
 
         self.credentials = creds
 
@@ -201,7 +193,6 @@ class GoogleSheetsUploader:
             self.service = build("sheets", "v4", credentials=self.credentials)
             return True
         except Exception as e:
-            print(f"Error building Google Sheets service: {e}")
             return False
 
     def _is_safe_file_path(self, file_path):
@@ -296,10 +287,8 @@ class GoogleSheetsUploader:
                     return self._ensure_sheet_headers()
                 except:
                     pass
-            print(f"Error ensuring headers: {error}")
             return False
         except Exception as e:
-            print(f"Error ensuring headers: {e}")
             return False
 
     def _create_sheet(self):
@@ -322,7 +311,6 @@ class GoogleSheetsUploader:
             return True
 
         except Exception as e:
-            print(f"Error creating sheet: {e}")
             return False
 
     def upload_session(self, session_data, session_id):
@@ -340,7 +328,6 @@ class GoogleSheetsUploader:
             return False
 
         if not self.get_spreadsheet_id():
-            print("No spreadsheet ID configured")
             return False
 
         # Authenticate if needed
@@ -571,20 +558,13 @@ class GoogleSheetsUploader:
                     .execute()
                 )
 
-                print(
-                    f"Session uploaded to Google Sheets: {len(rows)} rows, "
-                    f"{result.get('updates', {}).get('updatedCells', 0)} cells updated"
-                )
                 return True
             else:
-                print("No data to upload to Google Sheets")
                 return False
 
         except HttpError as error:
-            print(f"HTTP Error uploading to Google Sheets: {error}")
             return False
         except Exception as e:
-            print(f"Error uploading to Google Sheets: {e}")
             return False
 
     def test_connection(self):
