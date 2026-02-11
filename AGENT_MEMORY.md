@@ -26,6 +26,126 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-11] - Fixed Incomplete Variable Replacement Bug (87 Test Failures → All Passing)
+
+**Search Keywords**: UnboundLocalError, col variable, incomplete replacement, test failures, completion_frame, timeline_column, grid_column, missed replacements
+
+**Context**:
+After replacing variable abbreviations (`e`→`error`, `idx`→`index`, `col`→`column`), ran test suite and discovered 87 failures all with same error: "UnboundLocalError: cannot access local variable 'col' where it is not associated with a value". Initial replacement only covered 7 instances in completion_frame.py session navigation, but missed 43 more instances in two other sections of the same file.
+
+**What Worked** ✅:
+
+**1. Quickly identified the root cause:**
+
+- All 87 test failures had identical error message (same variable, same file)
+- Used grep_search to find ALL remaining `col` references in completion_frame.py
+- Found 50 total matches across 3 sections (only first section was replaced)
+
+**2. Three distinct sections required different naming:**
+
+**Section 1 (lines 510-600): Session Navigation Controls** ✅ ALREADY DONE
+
+- Initial replacement renamed `col` → `grid_column` (7 instances)
+- Sequential widget placement: Date dropdown, Session dropdown, time labels
+- One missed instance at line 599 (end time label) still used `col`
+
+**Section 2 (lines 616-665): Duration Display Method**
+
+- `_create_duration_display()` method - completely missed in initial replacement
+- Grid layout for Total Time, Active Time, Break Time, Idle Time labels
+- Renamed `col` → `grid_column` (13 instances)
+- Same pattern as Section 1: sequential widget placement
+
+**Section 3 (lines 883-1184): Timeline Period Loop**
+
+- Most complex section - rendering each period row in timeline
+- Loop variable was `idx` (already renamed to `period_idx`)
+- BUT `col` inside loop was completely missed (30 instances!)
+- Renamed `col` → `timeline_column` for semantic clarity
+  - Different from grid_column (this is inside the timeline, not session navigation)
+  - Reset to 0 for each period row
+  - Incremented for each widget in the row (type, start, dash, end, duration, project/action, comment, toggle, secondary fields, etc.)
+
+**3. Batch replacement with multi_replace_string_in_file:**
+
+- 14 replacement operations in one tool call
+- Covered all remaining `col` usage patterns
+- Verified with grep_search afterward: 0 matches found
+
+**4. Context-aware naming prevented future confusion:**
+
+- `grid_column` - Sequential position in session navigation and duration display
+- `timeline_column` - Column position within each timeline period row
+- `period_idx` - Which period row (already renamed from `idx`)
+
+**Key Learnings**:
+
+- ✅ **Search entire file, not just first match**: Initial replacement found session navigation section, assumed complete
+- ✅ **grep_search maxResults parameter**: Default shows only 20 matches - need `maxResults=100` to see all
+- ✅ **Test immediately after refactoring**: Running tests revealed the issue before committing
+- ✅ **Read error messages carefully**: All 87 errors were SAME issue (UnboundLocalError on `col`)
+- ✅ **Context-specific names prevent confusion**: `grid_column` vs `timeline_column` clarifies purpose
+- ⚠️ **Don't assume variable is used only once**: Just because you replaced it in one section doesn't mean it's complete
+
+**What Didn't Work** ❌:
+
+**1. Initial grep_search without maxResults showed only first section:**
+
+- Default behavior shows ~20 matches
+- Stopped searching after seeing 20 instances in session navigation section
+- **Should have used** `maxResults=100` to see ALL 50 matches upfront
+
+**2. Assumed all grid layout variables in same file would be together:**
+
+- Session navigation at top of file (lines 510-600)
+- Duration display in middle (lines 616-665)
+- Timeline loop near bottom (lines 883-1184)
+- **Reality:** Grid layout code scattered across entire 2000+ line file
+
+**Root Cause Analysis**:
+
+**Why did this happen?**
+
+1. Initial search found 20 results, showed first section (session navigation)
+2. Made replacements for that section (7 instances)
+3. Didn't search for MORE instances - assumed complete
+4. Two other sections (duration display + timeline loop) completely missed
+5. Tests failed because those sections still referenced undefined `col`
+
+**How was it discovered?**
+
+- Ran full test suite immediately after refactoring
+- 87 tests failed with identical error
+- All tests use completion_frame.py (most of test suite)
+- Error message pinpointed exact issue: `col` not defined
+
+**Impact**:
+
+- **Before fix:** 87 test failures (all in completion_frame.py tests)
+- **After fix:** All 386 tests passing
+- **Lines changed:** 43 additional `col` → descriptive names (14 replacement operations)
+- **Total `col` replacements:** 50 instances across 3 sections
+
+**Prevention for Future**:
+
+1. **Always use maxResults when searching for replacements** - see full scope before starting
+2. **Search AFTER replacement** - verify 0 matches remain
+3. **Run tests immediately** - catch issues before moving on
+4. **Read entire file context** - don't assume variable used in one section only
+
+**Files Modified:**
+
+- `src/completion_frame.py` - 43 additional instances fixed (50 total across file)
+
+**Verification:**
+
+```bash
+grep -n "\bcol\b" src/completion_frame.py  # Returns: No matches
+python tests/run_all_tests.py  # Returns: All 386 tests passing
+```
+
+---
+
 ### [2026-02-11] - Replaced All Variable Abbreviations for Portfolio-Level Code Clarity
 
 **Search Keywords**: variable naming, abbreviations, code clarity, portfolio standards, e→error, idx→index, col→column, proj→project, descriptive names, self-documenting code

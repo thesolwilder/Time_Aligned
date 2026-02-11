@@ -289,7 +289,14 @@ def method_name(self, param1: str, param2: int) -> bool:
 - [x] `proj` → `project_name` or `project_dict` - **10 instances** (dict keys and iteration variables)
 - [x] `br` → N/A (not found in production code - was example only)
 
-**Total Changes:** 56 variable renames across 6 production files
+**Total Changes:** 99 variable renames across 6 production files (56 initial + 43 follow-up fixes)
+
+**Issue Encountered:** Initial replacement missed 43 instances in completion_frame.py (87 test failures)
+
+- **Root cause:** grep_search default showed only ~20 matches, didn't see full scope
+- **Fix:** Used maxResults=100, found remaining 50 instances across 3 sections of file
+- **Resolution:** All 386 tests passing after completing all replacements
+- **Lesson:** Always search ENTIRE file with maxResults, verify 0 matches after replacement
 
 **Files Updated:**
 
