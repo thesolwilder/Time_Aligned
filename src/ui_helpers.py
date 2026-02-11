@@ -163,7 +163,7 @@ class ScrollableFrame(ttk.Frame):
         self._setup_mousewheel()
 
     def destroy(self):
-        """Clean up before destroying"""
+        """Clean up frame lifecycle by marking dead and calling parent destroy."""
         # Mark as no longer alive so handlers can ignore it
         self._is_alive = False
         # Call parent destroy
@@ -275,5 +275,5 @@ class ScrollableFrame(ttk.Frame):
         self._disable_combobox_scrolling()
 
     def get_content_frame(self):
-        """Get the content frame to add widgets to"""
+        """Get the scrollable content frame for adding child widgets."""
         return self.content_frame

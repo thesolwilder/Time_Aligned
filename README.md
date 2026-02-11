@@ -113,6 +113,16 @@ Users click "Show Timeline" specifically to **review data** - this is an intenti
 
 This is a deliberate engineering decision prioritizing **data quality and usability** over arbitrary speed targets.
 
+### Code Design Philosophy
+
+This codebase prioritizes **working, tested code** over dogmatic adherence to arbitrary metrics:
+
+- **Function length**: Some methods (like `export_to_csv()` at 280 lines) are intentionally longer when they handle sequential workflows with similar-but-different logic. Linear structure can be clearer than jumping between many small helper methods.
+- **Pragmatic refactoring**: Code with full test coverage and clear logic is left as-is rather than refactored for the sake of refactoring. Development effort focuses on improvements with meaningful ROI.
+- **"Do better next time"**: Rather than gold-plating existing working code, write smaller functions going forward.
+
+This approach values **readability, maintainability, and test coverage** over rigid adherence to style guide maximums.
+
 ## Privacy & Security
 
 - All data is stored locally by default

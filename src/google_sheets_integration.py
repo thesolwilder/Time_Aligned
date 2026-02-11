@@ -71,15 +71,58 @@ class GoogleSheetsUploader:
         try:
             with open(self.settings_file, "r") as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as error:
             return {}
 
     def is_enabled(self):
-        """Check if Google Sheets upload is enabled"""
+        """Check if Google Sheets upload is enabled in settings.
+
+        Guard method called before any Google Sheets API operations to check
+        if user has enabled the integration.
+
+        Called from 6+ locations:
+        - upload_session() - Guard before upload attempt
+        - Session completion checks
+        - UI elements (enable/disable upload buttons)
+        - Test setup verification
+
+        Returns:
+            Boolean - True if enabled in settings, False otherwise
+
+        Note:
+            Returns False if google_sheets section missing from settings.
+            Does NOT check if credentials are valid, only if feature enabled.
+        """
         return self.settings.get("google_sheets", {}).get("enabled", False)
 
     def get_spreadsheet_id(self):
-        """Get the configured spreadsheet ID from settings or environment variable"""
+        """Get Google Sheets spreadsheet ID with security validation.
+
+        Retrieves spreadsheet ID from environment variable (preferred for security)
+        or settings file (fallback). Validates format to prevent injection attacks.
+
+        Called from 12+ locations:
+        - All Google Sheets API operations
+        - Upload session validation
+        - Settings verification
+        - Test setup
+
+        Lookup priority:
+        1. Environment variable: GOOGLE_SHEETS_SPREADSHEET_ID (most secure)
+        2. Settings file: settings["google_sheets"]["spreadsheet_id"]
+
+        Security:
+        - Validates ID format via _is_valid_spreadsheet_id()
+        - Rejects IDs with dangerous characters (prevents injection)
+        - Google Sheets IDs are 44-char alphanumeric with hyphens/underscores
+
+        Returns:
+            String spreadsheet ID if valid, empty string if missing/invalid
+
+        Note:
+            Environment variable preferred to avoid storing sensitive IDs in settings.json.
+            Empty string return signals caller to skip Google Sheets operations.
+        """
         # Try environment variable first (more secure)
         spreadsheet_id = os.environ.get("GOOGLE_SHEETS_SPREADSHEET_ID", "")
 
@@ -104,7 +147,29 @@ class GoogleSheetsUploader:
         return bool(re.match(r"^[a-zA-Z0-9_-]+$", spreadsheet_id))
 
     def get_sheet_name(self):
-        """Get the configured sheet name (tab name within spreadsheet)"""
+        """Get Google Sheets sheet/tab name with security validation.
+
+        Retrieves the sheet name (tab name within the spreadsheet) from settings.
+        Validates to prevent injection attacks and applies length limits.
+
+        Called from 6+ locations:
+        - upload_session() - Sheet name for append operation
+        - Google Sheets API calls
+        - Settings verification
+
+        Security:
+        - Validates via _is_valid_sheet_name()
+        - Rejects sheet names >100 characters
+        - Rejects dangerous characters that could enable injection
+        - Falls back to "Sessions" default if validation fails
+
+        Returns:
+            String sheet name (defaults to "Sessions" if missing/invalid)
+
+        Note:
+            Always returns a valid sheet name - never returns empty string.
+            Validation prevents malicious sheet names from reaching Google API.
+        """
         sheet_name = self.settings.get("google_sheets", {}).get(
             "sheet_name", "Sessions"
         )
@@ -155,7 +220,7 @@ class GoogleSheetsUploader:
             try:
                 with open(token_file, "rb") as token:
                     creds = pickle.load(token)
-            except Exception as e:
+            except Exception as error:
                 creds = None
 
         # If credentials are invalid or don't exist, get new ones
@@ -163,7 +228,7 @@ class GoogleSheetsUploader:
             if creds and creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
-                except Exception as e:
+                except Exception as error:
                     creds = None
 
             if not creds:
@@ -176,14 +241,14 @@ class GoogleSheetsUploader:
                         credentials_file, self.scopes
                     )
                     creds = flow.run_local_server(port=0)
-                except Exception as e:
+                except Exception as error:
                     return False
 
             # Save the credentials for the next run
             try:
                 with open(token_file, "wb") as token:
                     pickle.dump(creds, token)
-            except Exception as e:
+            except Exception as error:
                 pass
 
         self.credentials = creds
@@ -192,7 +257,7 @@ class GoogleSheetsUploader:
         try:
             self.service = build("sheets", "v4", credentials=self.credentials)
             return True
-        except Exception as e:
+        except Exception as error:
             return False
 
     def _is_safe_file_path(self, file_path):

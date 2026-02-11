@@ -48,6 +48,9 @@ from src.constants import (
     DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
+    DEFAULT_SETTINGS_FILE,
+    DEFAULT_DATA_FILE,
+    DEFAULT_SCREENSHOT_FOLDER,
 )
 
 
@@ -87,8 +90,8 @@ class TimeTracker:
         )  # save every minute
 
         # File paths
-        self.settings_file = "settings.json"
-        self.data_file = "data.json"
+        self.settings_file = DEFAULT_SETTINGS_FILE
+        self.data_file = DEFAULT_DATA_FILE
 
         # Load settings
         self.settings = self.get_settings()
@@ -137,7 +140,7 @@ class TimeTracker:
                 "enabled": False,  # enable/disable screenshot capture
                 "capture_on_focus_change": True,  # capture on window focus change
                 "min_seconds_between_captures": 10,  # minimum seconds between captures
-                "screenshot_path": "screenshots",  # base path for screenshots
+                "screenshot_path": DEFAULT_SCREENSHOT_FOLDER,  # base path for screenshots
             },
             "spheres": {
                 "General": {"is_default": True, "active": True},
@@ -241,14 +244,28 @@ class TimeTracker:
         return break_actions, default_action
 
     def load_data(self):
-        """Load existing session data"""
+        """Load existing session data from the data file.
+
+        Reads the data.json file containing all saved session information.
+        Returns an empty dictionary if the file doesn't exist or cannot be read.
+
+        Returns:
+            dict: Dictionary mapping session names to session data, or empty dict if:
+                - data.json file doesn't exist
+                - File cannot be read due to permissions/corruption
+                - JSON parsing fails
+
+        Note:
+            This method silently handles errors by returning {} rather than raising
+            exceptions, allowing the app to continue with empty/new data.
+        """
         if not os.path.exists(self.data_file):
             return {}
 
         try:
             with open(self.data_file, "r") as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception as error:
             return {}
 
     def save_data(self, session_data, merge=True):
@@ -270,11 +287,30 @@ class TimeTracker:
 
             with open(self.data_file, "w") as f:
                 json.dump(all_data, f, indent=2)
-        except Exception as e:
+        except Exception as error:
             pass
 
     def create_widgets(self):
-        """Create the main GUI elements"""
+        """Create the main GUI elements for the time tracker interface.
+
+        Builds the complete user interface including:
+        - Scrollable main frame container
+        - Top navigation links (Settings, Analysis, Session View)
+        - Session name entry field
+        - Session control buttons (Start/End Session, Start/End Break)
+        - Timer displays (Session, Break, Total Active, Total Break)
+        - Status indicator label
+
+        Side effects:
+            - Creates self.main_frame_container (ScrollableFrame)
+            - Initializes all UI widgets (buttons, labels, entry fields)
+            - Sets initial button states (Start enabled, End/Break disabled)
+            - Configures grid layout and padding
+            - Binds click handlers to navigation links
+
+        Note:
+            This is called once during __init__ to set up the entire main UI.
+        """
         # Create scrollable container for main frame
         self.main_frame_container = ScrollableFrame(
             self.root, debug_name="MainFrame Scrollable", padding="10"
@@ -423,7 +459,40 @@ class TimeTracker:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def start_input_monitoring(self):
-        """Start monitoring keyboard and mouse input"""
+        """Start monitoring keyboard and mouse input for idle detection.
+
+        Sets up pynput listeners to track user activity (mouse movement, clicks,
+        scrolling, and keyboard presses). When activity is detected after an idle
+        period, this method handles the complex transition back to active state:
+        - Saves the completed idle period with duration
+        - Saves the pre-idle active period (from last active start to idle start)
+        - Starts a new active period from when activity resumed
+        - Manages screenshot capture transitions between periods
+
+        The on_activity callback is triggered on ANY input event and updates
+        last_user_input timestamp used by check_idle() for threshold detection.
+
+        Side effects:
+            - Sets input_listener_running flag to True
+            - Creates and starts mouse_listener (pynput.mouse.Listener)
+            - Creates and starts keyboard_listener (pynput.keyboard.Listener)
+            - When resuming from idle:
+                - Updates session_idle flag to False
+                - Saves idle period end time to data.json
+                - Saves pre-idle active period with screenshot info
+                - Starts new active period with fresh screenshot capture
+                - Updates active_period_start_time to current time
+
+        Note:
+            Exceptions from pynput callbacks are suppressed to handle harmless
+            Python 3.13 compatibility issues. The monitoring continues even if
+            individual callbacks fail.
+
+        CRITICAL: This method implements complex state transitions when resuming
+        from idle. It must save the active period that ended when idle started,
+        then start a fresh active period from when idle ended. This preserves
+        accurate time tracking boundaries.
+        """
         if self.input_listener_running:
             return
 
@@ -536,7 +605,22 @@ class TimeTracker:
             self.keyboard_listener = None
 
     def start_session(self):
-        """Start a new tracking session"""
+        """Start a new tracking session.
+
+        Creates a new time tracking session with a unique name based on the current
+        date and timestamp. Initializes session state, saves initial session data to
+        the data file, updates the UI to reflect the active session, and starts input
+        monitoring and screenshot capture (if enabled).
+
+        The session name format is: YYYY-MM-DD_<unix_timestamp>
+
+        Side effects:
+            - Creates new session entry in data.json
+            - Enables End Session and Start Break buttons
+            - Starts input monitoring for idle detection
+            - Starts screenshot capture for the first active period
+            - Updates status label to "Session active"
+        """
         if self.session_active:
             return
 
@@ -591,7 +675,26 @@ class TimeTracker:
         self.screenshot_capture.start_monitoring()
 
     def end_session(self):
-        """End the current session"""
+        """End the current tracking session.
+
+        Finalizes the current session by saving the final active period, calculating
+        total elapsed time, active time, and break time, updating the session data in
+        the data file, and displaying the completion frame for labeling session actions.
+
+        If a break is active when ending the session, it will be automatically ended
+        first. Input monitoring and screenshot capture are stopped.
+
+        Side effects:
+            - Saves final active period to data.json with screenshot info
+            - Stops input monitoring (mouse/keyboard listeners)
+            - Stops screenshot capture
+            - Calculates and saves final time statistics
+            - Resets UI to inactive state
+            - Shows completion frame for activity labeling
+
+        Note:
+            Session name is retained after ending to support completion frame workflow.
+        """
         if not self.session_active:
             return
 
@@ -688,7 +791,30 @@ class TimeTracker:
         )
 
     def toggle_break(self):
-        """Start or end a break"""
+        """Start or end a break period.
+
+        Toggles between break and active states during a session. When starting a break,
+        saves the current active period with screenshot data and switches screenshot
+        capture to the break period. When ending a break, saves the break period data
+        and starts a new active period.
+
+        If the break was auto-started due to idle detection, uses the idle start time
+        as the break start time instead of the current time.
+
+        Side effects:
+            Starting a break:
+                - Saves current active period to data.json
+                - Switches screenshot capture to break period
+                - Updates status label to "On break"
+                - Changes button text to "End Break"
+
+            Ending a break:
+                - Saves break period to data.json
+                - Increments total_break_time counter
+                - Switches screenshot capture back to active period
+                - Updates status label to "Session active"
+                - Changes button text to "Start Break"
+        """
         if not self.session_active:
             return
 
@@ -796,7 +922,35 @@ class TimeTracker:
     def show_completion_frame(
         self, total_elapsed, active_time, break_time, original_start, end_time
     ):
-        """Show completion frame for labeling session actions"""
+        """Display session completion UI for labeling and saving session data.
+
+        Called at the end of every session to allow user to categorize the session
+        with sphere, project, break actions, and notes. Creates a ScrollableFrame
+        container with CompletionFrame inside.
+
+        Called from:
+        - end_session() - After session ends normally
+        - User clicking "End Session" button
+
+        Args:
+            total_elapsed: Total session duration in seconds
+            active_time: Active (non-break, non-idle) time in seconds
+            break_time: Break time in seconds
+            original_start: Session start time string ("YYYY-MM-DD HH:MM:SS")
+            end_time: Session end time string ("YYYY-MM-DD HH:MM:SS")
+
+        Side effects:
+            - Hides main_frame_container via grid_remove()
+            - Creates completion_container (ScrollableFrame)
+            - Creates completion_frame (CompletionFrame) inside container
+            - Passes session_name to CompletionFrame for data lookup
+            - Stores canvas reference in completion_frame for scrolling
+            - Updates window title (done by CompletionFrame)
+
+        Note:
+            CompletionFrame handles all session data editing and saving.
+            After save/skip, calls back to tracker.show_main_frame().
+        """
         # Hide main frame
         self.main_frame_container.grid_remove()
 
@@ -820,7 +974,38 @@ class TimeTracker:
         )  # Already handled by ScrollableFrame
 
     def show_main_frame(self):
-        """Show main timer frame (called from other frames to navigate back)"""
+        """Return to main tracker view from any other frame (analysis/completion/session view).
+
+        Central navigation hub that cleanly destroys all other frame types and
+        restores the main time tracking interface. Handles 4 possible frame sources:
+        - Analysis frame (from viewing statistics)
+        - Completion container (from ending session)
+        - Session view container (from viewing past sessions)
+        - Multiple frames simultaneously (edge case, handles gracefully)
+
+        Called from:
+        - CompletionFrame.save_and_close() - After saving session
+        - CompletionFrame.skip_session() - After skipping session
+        - close_analysis() - When closing analysis frame
+        - Navigation buttons in various frames
+
+        Side effects:
+        - Destroys analysis_frame if present (grid_remove + destroy + clear ref)
+        - Destroys completion_container and completion_frame (grid_remove + destroy + clear refs)
+        - Destroys session_view_container and session_view_frame (grid_remove + destroy + clear refs)
+        - Re-enables main_frame_container scrolling (sets _is_alive = True)
+        - Shows main_frame_container via grid(row=0, column=0, sticky all sides)
+        - Restores window title to "Time Aligned - Time Tracker"
+        - Clears session_name if no active session (prevents stale data)
+
+        Error handling:
+            Uses try/except around all destroy() calls to handle already-destroyed frames.
+            Ensures main frame always becomes visible even if cleanup fails.
+
+        Note:
+            Order of operations ensures no orphaned frames. Always clears references
+            after destroying to prevent use-after-free bugs.
+        """
         # Remove analysis frame if present
         if hasattr(self, "analysis_frame") and self.analysis_frame:
             try:
@@ -866,7 +1051,33 @@ class TimeTracker:
             self.session_name = None
 
     def check_idle(self):
-        """Check if user is idle and update status"""
+        """Check if user is idle and update session status accordingly.
+
+        Monitors time since last user input (mouse/keyboard activity) and detects idle
+        periods based on the configured idle threshold. When idle is detected, records
+        the start of the idle period. If idle exceeds the break threshold, automatically
+        starts a break.
+
+        IMPORTANT: Idle detection is threshold-based. The period before idle is detected
+        still counts as active time. Idle time is only tracked from the moment the
+        threshold is exceeded, not retroactively.
+
+        Does nothing if:
+            - No session is active
+            - A break is already active
+            - Idle tracking is disabled in settings
+
+        Side effects:
+            When newly idle:
+                - Sets session_idle flag to True
+                - Records idle_start_time as current time
+                - Saves idle period start to data.json
+                - Updates status label to "Idle detected"
+
+            When idle exceeds break threshold:
+                - Auto-starts a break using toggle_break()
+                - Sets auto_break_start_time_from_idle for accurate break timing
+        """
         if not self.session_active or self.break_active:
             return
 
@@ -913,7 +1124,27 @@ class TimeTracker:
                 self.toggle_break()
 
     def update_timers(self):
-        """Update timer displays"""
+        """Update timer displays and perform periodic background tasks.
+
+        Called every 100ms (UPDATE_TIMER_INTERVAL_MS) by the Tkinter event loop.
+        Updates session timer, break timer, total active time, and total break time
+        labels. Also performs periodic tasks like idle checking and auto-backup.
+
+        Side effects:
+            - Updates system tray icon with current session status
+            - Updates session_timer_label with current active time
+            - Updates break_timer_label with current break duration
+            - Updates total_active_label with cumulative active time
+            - Updates total_break_label with cumulative break time
+            - Calls check_idle() to monitor for idle periods
+            - Auto-saves session data every minute to prevent data loss
+            - Triggers screenshot capture (if enabled)
+
+        Note:
+            This method implements a backup loop counter that triggers auto-save
+            every minute (60000ms / 100ms = 600 iterations) to protect against
+            unexpected program termination.
+        """
         # Update tray icon periodically
         self.update_tray_icon()
 
@@ -1033,7 +1264,40 @@ class TimeTracker:
             self.main_frame_container._is_alive = True
 
     def open_analysis(self):
-        """Open the analysis window"""
+        """Open the analysis frame with proper state management and navigation handling.
+
+        Displays the analysis view for reviewing session data, statistics, and timeline.
+        Handles complex navigation scenarios:
+        - Coming from main tracker view (normal case)
+        - Coming from completion frame (prompts to save unsaved data)
+        - Coming from session view (closes session view first)
+        - Re-opening analysis while already open (destroys old instance)
+
+        Always creates a fresh AnalysisFrame instance to avoid state persistence bugs
+        (e.g., after CSV export the frame needs clean state).
+
+        Side effects:
+            - Blocks if session is active (shows warning and returns)
+            - Destroys existing analysis_frame if present
+            - If coming from completion frame:
+                - Prompts user to save/skip/cancel unsaved session data
+                - Sets analysis_from_completion flag for proper back navigation
+            - Hides main_frame_container and disables its scrolling
+            - Hides/destroys completion_container if present
+            - Closes session_view properly (destroys container, clears references)
+            - Creates new AnalysisFrame instance
+            - Updates window title to "Time Aligned - Analysis"
+
+        Raises:
+            Shows error messagebox if frame creation fails, ensures main frame
+            is restored to visible state even on error.
+
+        Navigation Flow:
+            Main → Analysis: Standard open
+            Completion → Analysis: Save prompt → sets analysis_from_completion flag
+            Session View → Analysis: If analysis exists, just close session view
+            Analysis → Analysis: Destroys old instance, creates fresh one
+        """
         try:
             # Don't allow opening analysis while tracking time
             if self.session_active:
@@ -1112,8 +1376,8 @@ class TimeTracker:
 
             # Update window title
             self.root.title("Time Aligned - Analysis")
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to open analysis: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to open analysis: {error}")
             import traceback
 
             traceback.print_exc()
@@ -1125,7 +1389,31 @@ class TimeTracker:
                 )
 
     def close_analysis(self):
-        """Close analysis and return to previous view"""
+        """Close analysis frame and return to appropriate previous view.
+
+        Handles complex navigation logic based on where user came from:
+        - From completion frame: Returns to main tracker (not back to completion)
+        - From main tracker: Returns to main tracker
+        - From session view: Returns to session view
+
+        Navigation states tracked:
+        - analysis_from_completion: Flag set when opened from completion
+        - session_view_open: Flag set when opened from session view
+
+        Side effects:
+            - Destroys analysis_frame and clears reference
+            - If from completion: Clears analysis_from_completion flag,
+              shows main_frame_container (skips completion frame)
+            - If from session view: Re-opens session view to previous state
+            - Otherwise: Shows main_frame_container normally
+            - Re-enables main_frame scrolling via _is_alive flag
+            - Reloads settings to pick up any changes made in analysis
+            - Updates window title to "Time Aligned - Time Tracker"
+
+        Note:
+            Analysis frame is always destroyed when closing, never reused.
+            Fresh instance created on next open to avoid state bugs.
+        """
         if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
             # Destroy analysis frame
             self.analysis_frame.destroy()
@@ -1174,10 +1462,39 @@ class TimeTracker:
             self.settings = self.get_settings()
 
     def open_session_view(self, from_analysis=False):
-        """Open the session view window (shows completion frame)
+        """Open session view for viewing and editing past sessions.
+
+        Creates a new window (or reuses existing) showing the CompletionFrame UI
+        loaded with historical session data. Allows user to review and edit any
+        past session from data.json.
+
+        Called from:
+        - Analysis frame "View Session" button
+        - Tray menu "View Sessions"
+        - Direct navigation from main tracker
 
         Args:
-            from_analysis: True if opened from analysis frame
+            from_analysis: Boolean, True if opened from analysis frame.
+                          Sets session_view_open flag for proper back navigation.
+
+        Side effects:
+            - Blocks if session_active (shows warning and returns)
+            - Hides analysis_frame if present (grid_remove, not destroy)
+            - Hides main_frame_container if no analysis open
+            - Disables main_frame scrolling (_is_alive = False)
+            - Creates session_view_container (ScrollableFrame)
+            - Creates session_view_frame (CompletionFrame) in "session view" mode
+            - Sets session_view_open flag if from_analysis (for proper close_session_view)
+            - Updates window title to "Time Aligned - Session View"
+
+        Navigation state:
+            If from_analysis=True, close_session_view() will restore analysis frame
+            instead of main frame. This preserves user's workflow when viewing a
+            session from the analysis timeline.
+
+        Note:
+            Session view uses CompletionFrame in special mode where it loads
+            historical session data and allows editing without affecting active session.
         """
         # Don't allow opening session view while tracking time
         if self.session_active:
@@ -1362,14 +1679,14 @@ class TimeTracker:
             logging.info("  Ctrl+Shift+B - Toggle break")
             logging.info("  Ctrl+Shift+E - End session")
             logging.info("  Ctrl+Shift+W - Show/hide window")
-        except Exception as e:
-            logging.error(f"Failed to setup global hotkeys: {e}")
+        except Exception as error:
+            logging.error(f"Failed to setup global hotkeys: {error}")
             import traceback
 
             traceback.print_exc()
 
     def _hotkey_start_session(self):
-        """Start session via hotkey"""
+        """Hotkey handler: Start new session if none active (Ctrl+Shift+S)."""
 
         def do_start():
             if not self.session_active:
@@ -1378,7 +1695,7 @@ class TimeTracker:
         self.root.after(0, do_start)
 
     def _hotkey_toggle_break(self):
-        """Toggle break via hotkey"""
+        """Hotkey handler: Toggle break state if session active (Ctrl+Shift+B)."""
 
         def do_break():
             if self.session_active:
@@ -1387,7 +1704,7 @@ class TimeTracker:
         self.root.after(0, do_break)
 
     def _hotkey_end_session(self):
-        """End session via hotkey"""
+        """Hotkey handler: End session and show completion UI (Ctrl+Shift+E)."""
 
         def do_end():
             if self.session_active:
@@ -1399,11 +1716,11 @@ class TimeTracker:
         self.root.after(0, do_end)
 
     def _hotkey_toggle_window(self):
-        """Toggle window visibility via hotkey"""
+        """Hotkey handler: Show/hide main window (Ctrl+Shift+W)."""
         self.root.after(0, self.toggle_window)
 
     def toggle_window(self, icon=None, item=None):
-        """Toggle main window visibility"""
+        """Show or hide main window, updating visibility tracking flag."""
         if self.window_visible:
             self.root.withdraw()
             self.window_visible = False
@@ -1414,34 +1731,34 @@ class TimeTracker:
             self.window_visible = True
 
     def tray_start_session(self, icon=None, item=None):
-        """Start session from tray menu"""
+        """Tray menu handler: Start new session via root.after for thread safety."""
         self.root.after(0, self.start_session)
 
     def tray_toggle_break(self, icon=None, item=None):
-        """Toggle break from tray menu"""
+        """Tray menu handler: Toggle break state via root.after for thread safety."""
         self.root.after(0, self.toggle_break)
 
     def tray_end_session(self, icon=None, item=None):
-        """End session from tray menu"""
+        """Tray menu handler: Show window then end session to display completion frame."""
         # Show window when ending session (completion frame needs to be visible)
         if not self.window_visible:
             self.toggle_window()
         self.root.after(0, self.end_session)
 
     def tray_open_settings(self, icon=None, item=None):
-        """Open settings from tray menu"""
+        """Tray menu handler: Show window then open settings frame."""
         if not self.window_visible:
             self.toggle_window()
         self.root.after(0, self.open_settings)
 
     def tray_open_analysis(self, icon=None, item=None):
-        """Open analysis from tray menu"""
+        """Tray menu handler: Show window then open analysis frame."""
         if not self.window_visible:
             self.toggle_window()
         self.root.after(0, self.open_analysis)
 
     def tray_quit(self, icon=None, item=None):
-        """Quit application from tray menu"""
+        """Tray menu handler: Quit application via root.after for clean shutdown."""
         self.root.after(0, self.on_closing)
 
     def on_closing(self):

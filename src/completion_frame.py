@@ -11,6 +11,8 @@ from tkinter import messagebox
 import os
 import subprocess
 
+from src.constants import DEFAULT_BACKUP_FOLDER
+
 
 def disable_combobox_scroll(combobox):
     """Disable mousewheel scrolling on a combobox to prevent accidental value changes"""
@@ -186,7 +188,32 @@ class CompletionFrame(ttk.Frame):
         )
 
     def change_defaults_for_session(self):
-        """Change default project and break/idle actions for the session"""
+        """Create default project and break/idle action dropdown selectors.
+        
+        Displays two dropdown menus allowing user to set defaults for the session:
+        - Default Project: Used for active periods (pre-filled with first project from session)
+        - Default Break/Idle Action: Used for break/idle periods
+        
+        Both dropdowns support inline creation via "Add New..." option that enables
+        editing mode with Enter/FocusOut binding for save/cancel.
+        
+        Smart initialization:
+        - Prioritizes first project actually used in session over settings default
+        - Scans session active periods to find first project assignment
+        - Falls back to settings default if no project used yet
+        
+        Side effects:
+            - Creates default_container frame at current_row
+            - Creates default_project_menu combobox with inline creation support
+            - Creates default_action_menu combobox with inline creation support
+            - Binds <<ComboboxSelected>> to _on_project_selected and _on_break_action_selected
+            - Disables mousewheel scroll on both dropdowns
+            - Increments current_row for next section
+            
+        Note:
+            Inline creation handlers (_save_new_project, _save_new_break_action) update
+            all dependent dropdowns to maintain consistency across UI.
+        """
         active_projects, default_project = self._get_sphere_projects()
         active_projects = active_projects + ["Add New Project..."]
 
@@ -364,7 +391,38 @@ class CompletionFrame(ttk.Frame):
                 self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _save_new_sphere(self, event):
-        """Save the new sphere to settings"""
+        """Save inline-created sphere to settings and update UI.
+        
+        Called when user types new sphere name and presses Enter or loses focus.
+        Creates new sphere in settings.json with default configuration (not default,
+        active=True).
+        
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Sphere..." placeholder
+        - Checks for duplicate sphere names
+        
+        On success:
+        - Adds sphere to settings["spheres"] with {is_default: False, active: True}
+        - Saves settings.json to disk
+        - Updates sphere_menu dropdown with new option
+        - Sets selected_sphere to new value
+        - Calls _update_project_dropdowns() to refresh project lists for new sphere
+        - Returns combobox to readonly state
+        
+        On duplicate or empty:
+        - Calls _cancel_new_sphere() to revert
+        
+        Side effects:
+            - Modifies tracker.settings["spheres"] dict
+            - Writes to settings.json file
+            - Unbinds <Return> and <FocusOut> events from sphere_menu
+            - Updates all project dropdowns throughout UI
+            
+        Note:
+            New spheres start with no projects. User must create projects separately.
+        """
         new_sphere = self.sphere_menu.get().strip()
 
         if new_sphere and new_sphere != "Add New Sphere...":
@@ -400,7 +458,24 @@ class CompletionFrame(ttk.Frame):
         self.sphere_menu.unbind("<FocusOut>")
 
     def _cancel_new_sphere(self, event):
-        """Cancel adding new sphere and revert to previous state"""
+        """Cancel inline sphere creation and restore dropdown to previous state.
+        
+        Reverts sphere_menu combobox to readonly state with sensible fallback value.
+        Called when user cancels inline creation (empty input, FocusOut without save).
+        
+        Fallback priority:
+        1. Default sphere (if exists and is active)
+        2. First active sphere (if any exist)
+        3. Empty string (if no active spheres)
+        
+        Side effects:
+            - Sets sphere_menu to readonly state
+            - Updates sphere_menu value to fallback
+            - Unbinds <Return> and <FocusOut> events
+            
+        Note:
+            Does NOT modify settings or create any data. Pure UI reversion.
+        """
         active_spheres, default_sphere = self._get_active_spheres()
 
         fallback = (
@@ -436,7 +511,7 @@ class CompletionFrame(ttk.Frame):
         )
         self.current_row += 1
 
-        col = 0
+        grid_column = 0
         # Create dropdown for selecting date first
         all_data = self.tracker.load_data()
 
@@ -453,18 +528,18 @@ class CompletionFrame(ttk.Frame):
             current_date = self.session_name.split("_")[0]
 
         ttk.Label(time_frame, text="Date:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
 
         self.date_selector = ttk.Combobox(
             time_frame, values=date_options, state="readonly", width=12
         )
         self.date_selector.set(current_date)
         disable_combobox_scroll(self.date_selector)
-        self.date_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.date_selector.grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 10))
         self.date_selector.bind("<<ComboboxSelected>>", self._on_date_selected)
-        col += 1
+        grid_column += 1
 
         # Create dropdown for selecting session within the date
         self.sessions_for_date = [
@@ -486,24 +561,24 @@ class CompletionFrame(ttk.Frame):
             current_session_readable = "Session " + str(current_index + 1)
 
         ttk.Label(time_frame, text="Session:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
 
         self.session_selector = ttk.Combobox(
             time_frame, values=self.session_name_readable, state="readonly", width=20
         )
         self.session_selector.set(current_session_readable)
         disable_combobox_scroll(self.session_selector)
-        self.session_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.session_selector.grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 10))
         self.session_selector.bind("<<ComboboxSelected>>", self._on_session_selected)
-        col += 1
+        grid_column += 1
 
         # Populate start and end time based on selected session
         ttk.Label(time_frame, text=f"{start_time}", font=("Arial", 12)).grid(
-            row=0, column=col, sticky=tk.W
+            row=0, column=grid_column, sticky=tk.W
         )
-        col += 1
+        grid_column += 1
 
         ttk.Label(
             time_frame,
@@ -512,8 +587,8 @@ class CompletionFrame(ttk.Frame):
                 "Arial",
                 12,
             ),
-        ).grid(row=0, column=col, sticky=tk.W)
-        col += 1
+        ).grid(row=0, column=grid_column, sticky=tk.W)
+        grid_column += 1
         ttk.Label(
             time_frame,
             text=f"{end_time}",
@@ -1164,7 +1239,36 @@ class CompletionFrame(ttk.Frame):
                 button.config(text="+")
 
     def _on_project_selected(self, event, combobox):
-        """Handle project selection - enable editing if 'Add New Project...' is selected"""
+        """Handle project dropdown selection, enabling inline creation if needed.
+        
+        Called on <<ComboboxSelected>> event for any project combobox. Checks if user
+        selected "Add New Project..." option and switches to inline creation mode.
+        
+        Special handling for default_project_menu:
+        - Updates all project dropdowns when default changes (update_all=True)
+        - Ensures consistency across all period project selectors
+        
+        Inline creation mode (when "Add New Project..." selected):
+        - Switches combobox to "normal" state (editable)
+        - Clears placeholder text
+        - Focuses combobox for immediate typing
+        - Binds <Return> to _save_new_project()
+        - Binds <FocusOut> to _cancel_new_project()
+        
+        Args:
+            event: Tkinter event object
+            combobox: The specific project combobox that fired the event
+            
+        Side effects:
+            - If default_project_menu: Calls _update_project_dropdowns(update_all=True)
+            - If "Add New Project..." selected:
+              - Changes combobox state to normal
+              - Sets focus to combobox
+              - Binds inline creation event handlers
+              
+        Note:
+            Inline creation saves project with current selected_sphere.
+        """
         selected = combobox.get()
 
         if combobox == self.default_project_menu:
@@ -1179,7 +1283,44 @@ class CompletionFrame(ttk.Frame):
             combobox.bind("<FocusOut>", lambda e: self._cancel_new_project(e, combobox))
 
     def _save_new_project(self, event, combobox):
-        """Save the new project to settings"""
+        """Save inline-created project to settings with current sphere association.
+        
+        Creates new project in settings.json associated with selected_sphere.
+        Handles special case where combobox is default_project_menu (updates all
+        dropdowns) vs period-specific project menu (updates only non-default dropdowns).
+        
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Project..." placeholder
+        - Checks for duplicate project names (case-sensitive)
+        
+        On success:
+        - Adds project to settings["projects"] with:
+          {active: True, sphere: selected_sphere, is_default: False}
+        - Saves settings.json to disk
+        - Updates combobox values and selection
+        - Calls _update_project_dropdowns() to refresh all dependent dropdowns
+          - update_all=True if default_project_menu (affects all periods)
+          - update_all=False if period-specific menu (only that period's dropdowns)
+        - Returns combobox to readonly state
+        
+        On duplicate or empty:
+        - Calls _cancel_new_project() to revert
+        
+        Args:
+            event: Tkinter event object (Return or FocusOut)
+            combobox: The specific project combobox being edited
+            
+        Side effects:
+            - Modifies tracker.settings["projects"] dict
+            - Writes to settings.json file  
+            - Unbinds <Return> and <FocusOut> events
+            - Updates all project dropdowns in UI
+            
+        Note:
+            New projects inherit sphere from current selection, not user-specified.
+        """
         new_project = combobox.get().strip()
 
         if new_project and new_project != "Add New Project...":
@@ -1218,7 +1359,27 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _cancel_new_project(self, event, combobox):
-        """Cancel adding new project and revert to previous state"""
+        """Cancel inline project creation and restore combobox to readonly state.
+        
+        Reverts project combobox to readonly with sensible fallback. Handles both
+        default_project_menu and period-specific project menus.
+        
+        Fallback priority:
+        1. Default project for sphere (if exists and in active projects)
+        2. "Select Project" placeholder (if no suitable default)
+        
+        Args:
+            event: Tkinter event object
+            combobox: The project combobox to revert
+            
+        Side effects:
+            - Sets combobox to readonly state
+            - Updates combobox value to fallback
+            - Does NOT unbind events (handled by caller)
+            
+        Note:
+            Does NOT modify settings. Pure UI reversion.
+        """
         active_projects, default_project = self._get_sphere_projects()
 
         fallback = (
@@ -1252,7 +1413,43 @@ class CompletionFrame(ttk.Frame):
             )
 
     def _save_new_break_action(self, event, combobox):
-        """Save the new break action to settings"""
+        """Save inline-created break action to settings and update all dropdowns.
+        
+        Creates new break action in settings.json. Unlike projects, break actions are
+        not sphere-specific (they're global). Handles default vs period-specific menus.
+        
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Break Action..." placeholder
+        - Checks for duplicate action names
+        
+        On success:
+        - Adds action to settings["break_actions"] with:
+          {active: True, is_default: False}
+        - Saves settings.json to disk
+        - Updates combobox values and selection
+        - Calls _update_break_action_dropdowns():
+          - update_all=True if default_action_menu
+          - update_all=False if period-specific menu
+        - Returns combobox to readonly state
+        
+        On duplicate or empty:
+        - Calls _cancel_new_break_action() to revert
+        
+        Args:
+            event: Tkinter event object (Return or FocusOut)
+            combobox: The specific break action combobox being edited
+            
+        Side effects:
+            - Modifies tracker.settings["break_actions"] dict
+            - Writes to settings.json file
+            - Unbinds <Return> and <FocusOut> events
+            - Updates all break action dropdowns in UI
+            
+        Note:
+            Break actions are global, not sphere-specific like projects.
+        """
         new_action = combobox.get().strip()
 
         if new_action and new_action != "Add New Break Action...":
@@ -1290,7 +1487,26 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _cancel_new_break_action(self, event, combobox):
-        """Cancel adding new break action and revert to previous state"""
+        """Cancel inline break action creation and restore combobox to readonly.
+        
+        Reverts break action combobox to readonly with sensible fallback.
+        
+        Fallback priority:
+        1. Default break action (if exists in active actions)
+        2. "Select Break Action" placeholder (if no suitable default)
+        
+        Args:
+            event: Tkinter event object
+            combobox: The break action combobox to revert
+            
+        Side effects:
+            - Sets combobox to readonly state
+            - Updates combobox value to fallback
+            - Does NOT unbind events (handled by caller)
+            
+        Note:
+            Does NOT modify settings. Pure UI reversion.
+        """
         break_actions, default_break_action = self._get_break_actions()
 
         fallback = (
@@ -1804,7 +2020,7 @@ class CompletionFrame(ttk.Frame):
                 import os
 
                 # Ensure backups directory exists
-                backup_dir = "backups"
+                backup_dir = DEFAULT_BACKUP_FOLDER
                 os.makedirs(backup_dir, exist_ok=True)
 
                 backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"

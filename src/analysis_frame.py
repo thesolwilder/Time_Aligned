@@ -80,8 +80,8 @@ class AnalysisFrame(ttk.Frame):
         try:
             with open(self.tracker.settings_file, "w") as f:
                 json.dump(self.tracker.settings, f, indent=2)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to save settings: {error}")
 
     def create_widgets(self):
         """Create all UI elements for the analysis frame"""
@@ -271,7 +271,9 @@ class AnalysisFrame(ttk.Frame):
         range_dropdown.grid(row=0, column=0, pady=5)
         range_dropdown.bind(
             "<<ComboboxSelected>>",
-            lambda e, idx=index: self.on_range_changed(idx, range_var.get()),
+            lambda e, card_index=index: self.on_range_changed(
+                card_index, range_var.get()
+            ),
         )
 
         # Active time label
@@ -286,7 +288,7 @@ class AnalysisFrame(ttk.Frame):
         select_btn = ttk.Button(
             card_frame,
             text="Show Timeline",
-            command=lambda idx=index: self.select_card(idx),
+            command=lambda card_index=index: self.select_card(card_index),
         )
         select_btn.grid(row=3, column=0, pady=10)
 
@@ -383,25 +385,25 @@ class AnalysisFrame(ttk.Frame):
                 .get("active", True)
             )
 
-            for proj, data in self.tracker.settings.get("projects", {}).items():
+            for project_name, data in self.tracker.settings.get("projects", {}).items():
                 if data.get("sphere") == sphere:
                     is_active = data.get("active", True)
 
                     if filter_status == "active":
                         # Only show active projects
                         if is_active:
-                            projects.append(proj)
+                            projects.append(project_name)
                     elif filter_status == "archived":
                         # If sphere is active, show only inactive projects
                         # If sphere is inactive, show all projects
                         if sphere_is_active:
                             if not is_active:
-                                projects.append(proj)
+                                projects.append(project_name)
                         else:
-                            projects.append(proj)
+                            projects.append(project_name)
                     elif filter_status == "all":
                         # Show all projects
-                        projects.append(proj)
+                        projects.append(project_name)
 
             self.project_filter["values"] = projects
 
@@ -416,7 +418,7 @@ class AnalysisFrame(ttk.Frame):
                 self.project_var.set("All Projects")
 
     def on_filter_changed(self, event=None):
-        """Handle when filters change"""
+        """Handle filter changes by updating dependent filters and refreshing display."""
         if event and event.widget == self.sphere_filter:
             self.update_project_filter()
 
@@ -484,13 +486,68 @@ class AnalysisFrame(ttk.Frame):
         self.refresh_all()
 
     def refresh_all(self):
-        """Refresh all cards and timeline"""
+        """Refresh all cards and timeline display after filter or data changes.
+
+        Coordinates full UI refresh when filters change or data is modified.
+        Updates all three summary cards (Active, Break, Idle) and the complete
+        timeline period list.
+
+        Called from filter change events:
+        - on_sphere_filter_changed() - Sphere filter dropdown
+        - on_project_filter_changed() - Project filter dropdown
+        - on_range_changed() - Date range filter
+        - on_status_changed() - Active/All/Archived toggle
+
+        Side effects:
+            - Updates all 3 card displays with recalculated totals
+            - Refreshes timeline with filtered periods
+            - Resets pagination to first page
+            - Updates scrollable area
+
+        Note:
+            Always updates cards before timeline to ensure summary
+            stats are available for display.
+        """
         for i in range(3):
             self.update_card(i)
         self.update_timeline()
 
     def get_date_range(self, range_name):
-        """Get start and end dates for a given range name"""
+        """Convert date range string to start/end datetime objects for filtering.
+
+        Converts user-friendly range names ("Today", "Last 7 Days") into precise
+        datetime boundaries for filtering timeline data. All times normalized to
+        midnight (00:00:00) for consistent day-based filtering.
+
+        Called from 4 key locations:
+        - calculate_totals() - Time aggregation filtering
+        - get_timeline_data() - Timeline period filtering
+        - export_to_csv() - CSV export date filtering
+        - get_date_range_for_filter() - Test compatibility wrapper
+
+        Supported range names:
+        - "Today" - Current day (midnight to midnight+1)
+        - "Yesterday" - Previous day
+        - "Last 7 Days" - Rolling 7-day window ending today
+        - "Last 14 Days", "Last 30 Days" - Rolling windows
+        - "This Week (Mon-Sun)" - Current Monday through next Monday
+        - "Last Week (Mon-Sun)" - Previous Monday through Monday
+        - "This Month" - 1st of month through 1st of next month
+        - "Last Month" - 1st of previous month through 1st of current month
+        - "Custom: YYYY-MM-DD" - Specific single day
+        - "All Time" - Extremely wide range (2000-2100)
+
+        Args:
+            range_name: User-friendly date range string
+
+        Returns:
+            Tuple of (start_datetime, end_datetime) normalized to midnight.
+            End datetime is exclusive (represents start of next period).
+
+        Note:
+            Invalid custom dates fall back to "Today" range.
+            Week ranges use Monday as first day of week.
+        """
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
         if range_name == "Today":
@@ -553,7 +610,22 @@ class AnalysisFrame(ttk.Frame):
         return self.get_date_range(range_name)
 
     def calculate_totals(self, range_name):
-        """Calculate total active and break time for a date range"""
+        """Calculate total active and break time for a date range.
+
+        Sums up all active periods and break/idle periods that fall within the
+        specified date range and match current filter settings (sphere, project).
+
+        Args:
+            range_name: Name of the date range (e.g., "Last 7 Days", "This Month", "All Time")
+
+        Returns:
+            tuple: (total_active_seconds, total_break_seconds) as float values
+
+        Note:
+            - Idle periods with end timestamps are counted as break time
+            - Applies current sphere_filter and project_filter selections
+            - For multi-project periods, checks if any project matches the filter
+        """
         start_date, end_date = self.get_date_range(range_name)
         all_data = self.tracker.load_data()
 
@@ -584,8 +656,8 @@ class AnalysisFrame(ttk.Frame):
                     if period_project != project_filter:
                         # Check if it's in projects list (for multi-project periods)
                         found = False
-                        for proj in period.get("projects", []):
-                            if proj.get("name") == project_filter:
+                        for project_dict in period.get("projects", []):
+                            if project_dict.get("name") == project_filter:
                                 found = True
                                 break
                         if not found:
@@ -605,7 +677,29 @@ class AnalysisFrame(ttk.Frame):
         return total_active, total_break
 
     def format_duration(self, seconds):
-        """Format seconds as Xh Ym Zs"""
+        """Format duration in seconds to human-readable string with intelligent rounding.
+
+        Converts seconds into a compact human-readable format:
+        - Hours + minutes when >= 1 hour ("2h 15m")
+        - Minutes + seconds when >= 1 minute ("15m 30s")
+        - Seconds only when < 1 minute ("45s")
+
+        Called from 9+ locations across the UI:
+        - Card displays (active/break/idle labels)
+        - Timeline period duration display
+        - CSV export duration columns
+        - Total duration summaries
+
+        Args:
+            seconds: Duration in seconds (can be float or int)
+
+        Returns:
+            Formatted string (e.g., "2h 15m", "30m 5s", "45s")
+
+        Note:
+            Intelligent rounding drops least significant unit for readability.
+            Hours display omits seconds, minutes display omits milliseconds.
+        """
         hours = int(seconds // 3600)
         minutes = int((seconds % 3600) // 60)
         secs = int(seconds % 60)
@@ -618,7 +712,26 @@ class AnalysisFrame(ttk.Frame):
             return f"{secs}s"
 
     def format_time_12hr(self, time_str):
-        """Convert 24hr time to 12hr format"""
+        """Convert 24-hour time string to 12-hour format with AM/PM.
+
+        Formats time strings for user-friendly timeline display.
+        Converts from 24-hour format ("14:30:00") to 12-hour format ("02:30 PM").
+
+        Called from:
+        - render_timeline() - Timeline period start time display
+        - create_timeline_period() - Period row time labels
+
+        Args:
+            time_str: Time string in 24-hour format ("HH:MM:SS")
+
+        Returns:
+            Time string in 12-hour format ("HH:MM AM/PM")
+            Returns original string if parsing fails
+
+        Note:
+            Gracefully handles malformed input by returning original string.
+            Primarily used for user-facing time displays in timeline.
+        """
         try:
             time_obj = datetime.strptime(time_str, "%H:%M:%S")
             return time_obj.strftime("%I:%M %p")
@@ -887,7 +1000,36 @@ class AnalysisFrame(ttk.Frame):
         return timeline_data
 
     def load_more_periods(self):
-        """Load the next batch of periods (50 at a time) into the timeline"""
+        """Load the next batch of timeline periods using pagination.
+
+        Implements incremental loading to prevent UI lag with large datasets.
+        Loads 50 periods at a time from timeline_data_all (set by update_timeline).
+
+        Batch calculation:
+        - start_idx = periods_loaded (tracks how many shown so far)
+        - end_idx = min(start_idx + 50, total_periods)
+        - Renders periods[start_idx:end_idx]
+
+        After rendering batch:
+        - If more periods exist: Shows "Load X More (Y of Z shown)" button
+        - If all loaded and >50 total: Shows "All X periods loaded" message
+        - If ≤50 total: No message (all fit on first page)
+
+        Side effects:
+            - Destroys existing load_more_button if present
+            - Calls _render_timeline_period() for each period in batch
+            - Increments self.periods_loaded by batch size
+            - Creates new load_more_button if more periods remain
+            - Adds "all loaded" message if this was the final batch
+
+        Called by:
+            - update_timeline() for first page load
+            - Load More button click for subsequent pages
+
+        Note:
+            Uses self.periods_per_page = 50 as batch size. This balance was
+            chosen to minimize initial load time while showing meaningful data.
+        """
         # Remove Load More button if it exists
         if self.load_more_button:
             self.load_more_button.destroy()
@@ -901,8 +1043,8 @@ class AnalysisFrame(ttk.Frame):
         periods_to_render = self.timeline_data_all[start_idx:end_idx]
 
         # Render this batch of periods
-        for idx, period in enumerate(periods_to_render, start=start_idx):
-            self._render_timeline_period(period, idx)
+        for period_index, period in enumerate(periods_to_render, start=start_idx):
+            self._render_timeline_period(period, period_index)
 
         # Update loaded count
         self.periods_loaded = end_idx
@@ -932,12 +1074,12 @@ class AnalysisFrame(ttk.Frame):
                     font=("Arial", 10, "italic"),
                 ).pack()
 
-    def _render_timeline_period(self, period, idx):
+    def _render_timeline_period(self, period, row_index):
         """Render a single period row in the timeline
 
         Args:
             period: Period dict with timeline data
-            idx: Row index for grid placement
+            row_index: Row index for grid placement
         """
         # Color code based on type
         if period["type"] == "Active":
@@ -946,7 +1088,7 @@ class AnalysisFrame(ttk.Frame):
             bg_color = COLOR_BREAK_LIGHT_ORANGE
 
         row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
-        row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
+        row_frame.grid(row=row_index, column=0, sticky=(tk.W, tk.E), pady=1)
 
         # NOTE: Removed individual mousewheel binding on row_frame
         # ScrollableFrame's bind_all handler will handle scrolling automatically
@@ -954,11 +1096,11 @@ class AnalysisFrame(ttk.Frame):
         # multiple update_timeline() calls
 
         # Configure row_frame columns for grid layout
-        for col in range(14):  # 14 columns total
-            if col == 13:  # Session Notes (last column) expands
-                row_frame.columnconfigure(col, weight=1)
+        for column_index in range(14):  # 14 columns total
+            if column_index == 13:  # Session Notes (last column) expands
+                row_frame.columnconfigure(column_index, weight=1)
             else:
-                row_frame.columnconfigure(col, weight=0)
+                row_frame.columnconfigure(column_index, weight=0)
 
         # Create label helper function
         col_idx = 0  # Track current column index
@@ -1051,7 +1193,36 @@ class AnalysisFrame(ttk.Frame):
         create_label(period["session_notes"], 21, use_text_widget=True, expand=True)
 
     def update_timeline(self):
-        """Update the timeline display with Load More pagination"""
+        """Refresh the entire timeline display with pagination and sorting.
+
+        Main orchestrator for timeline updates. This method:
+        1. Clears existing timeline widgets (preserves frame for ScrollableFrame)
+        2. Gets all timeline data for selected date range using get_timeline_data()
+        3. Sorts periods by current sort column and direction
+        4. Resets pagination to first page (50 periods)
+        5. Loads first batch via load_more_periods()
+        6. Updates frozen timeline header
+        7. Forces canvas scrollregion recalculation and resets scroll position
+
+        Called by:
+        - Filter changes (sphere, project, status, date range)
+        - Card selection changes
+        - Sort column clicks
+        - Initial timeline creation
+
+        Side effects:
+            - Destroys all child widgets in timeline_frame
+            - Stores full sorted dataset in self.timeline_data_all
+            - Resets self.periods_loaded to 0
+            - Calls load_more_periods() to render first 50 rows
+            - Updates timeline header with sort indicators
+            - Reconfigures canvas scrollregion based on content
+            - Resets scroll position to top (yview_moveto(0))
+
+        CRITICAL: This method clears children, not the frame itself, to avoid
+        breaking ScrollableFrame's canvas reference. After clearing, forces
+        geometry updates and scrollregion recalculation for proper rendering.
+        """
         if not hasattr(self, "timeline_frame") or self.timeline_frame is None:
             return
 
@@ -1137,11 +1308,11 @@ class AnalysisFrame(ttk.Frame):
             widget.destroy()
 
         # Configure timeline_header_frame columns for grid layout
-        for col in range(14):  # 14 columns total
-            if col == 13:  # Session Notes (last column) expands
-                self.timeline_header_frame.columnconfigure(col, weight=1)
+        for column_index in range(14):  # 14 columns total
+            if column_index == 13:  # Session Notes (last column) expands
+                self.timeline_header_frame.columnconfigure(column_index, weight=1)
             else:
-                self.timeline_header_frame.columnconfigure(col, weight=0)
+                self.timeline_header_frame.columnconfigure(column_index, weight=0)
 
         col_idx = 0  # Track current column index
 
@@ -1283,7 +1454,13 @@ class AnalysisFrame(ttk.Frame):
         )
 
     def export_to_csv(self):
-        """Export timeline data to CSV"""
+        """Export timeline data to CSV.
+
+        Note: This method is intentionally longer than typical (280 lines)
+        due to sequential processing of three period types (active, break, idle)
+        with similar but not identical logic. The linear structure maintains
+        clarity for the export workflow.
+        """
         # Get data for selected card's range
         range_name = self.card_ranges[self.selected_card]
         start_date, end_date = self.get_date_range(range_name)
@@ -1321,9 +1498,9 @@ class AnalysisFrame(ttk.Frame):
                 project_name = period.get("project", "")
                 if not project_name and period.get("projects"):
                     # If using projects array, get the primary project name
-                    for proj in period.get("projects", []):
-                        if proj.get("project_primary", True):
-                            project_name = proj.get("name", "")
+                    for project_dict in period.get("projects", []):
+                        if project_dict.get("project_primary", True):
+                            project_name = project_dict.get("name", "")
                             break
 
                 if project_filter != "All Projects" and project_name != project_filter:
@@ -1562,8 +1739,8 @@ class AnalysisFrame(ttk.Frame):
                 "Success", f"Exported {len(periods)} entries to {filename}"
             )
 
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to export CSV: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to export CSV: {error}")
 
     def open_latest_session(self):
         """Open session view from analysis frame"""

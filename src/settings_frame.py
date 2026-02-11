@@ -8,7 +8,7 @@ import platform
 import re
 
 from src.ui_helpers import ScrollableFrame, sanitize_name
-from src.constants import COLOR_LINK_BLUE, COLOR_GRAY_TEXT
+from src.constants import COLOR_LINK_BLUE, COLOR_GRAY_TEXT, DEFAULT_SCREENSHOT_FOLDER
 
 
 def extract_spreadsheet_id_from_url(value):
@@ -71,8 +71,8 @@ class SettingsFrame(ttk.Frame):
         try:
             with open(self.tracker.settings_file, "w") as f:
                 json.dump(self.tracker.settings, f, indent=2)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to save settings: {error}")
 
     def create_widgets(self):
         """Create main settings interface"""
@@ -172,7 +172,40 @@ class SettingsFrame(ttk.Frame):
         )
 
     def create_sphere_section(self, parent):
-        """Create sphere management section"""
+        """Create sphere management UI section with dropdown and filter controls.
+
+        Builds complete sphere management interface with:
+        - Section header with "Spheres" title (16pt bold)
+        - Filter radio buttons (Active/All/Inactive)
+        - Large sphere dropdown (20pt font)
+        - Sphere management frame (shows details when sphere selected)
+
+        Layout:
+        - Row 1: Header + filter buttons (Active/All/Inactive)
+        - Row 2: Sphere dropdown + management frame (initially empty)
+
+        Filter behavior:
+        - Active: Shows only active spheres (default)
+        - All: Shows all spheres regardless of status
+        - Inactive: Shows only archived spheres
+        - Calls refresh_sphere_dropdown() on filter change
+
+        Dropdown bindings:
+        - <<ComboboxSelected>>: Calls on_sphere_selected() to show management UI
+        - <FocusIn>: Clears selection highlight for cleaner appearance
+
+        Side effects:
+            - Creates sphere_var StringVar
+            - Creates sphere_dropdown Combobox (readonly, 20pt font)
+            - Creates sphere_mgmt_frame (populated by on_sphere_selected())
+            - Creates sphere_filter StringVar ("active" default)
+            - Calls refresh_sphere_dropdown() to populate initial options
+            - Increments row counter by 2
+
+        Note:
+            Management buttons (Rename, Archive, Delete, Set Default) are added
+            to sphere_mgmt_frame by on_sphere_selected() when user picks a sphere.
+        """
 
         # Spheres label and filter buttons on same row
         header_frame = ttk.Frame(parent)
@@ -242,7 +275,29 @@ class SettingsFrame(ttk.Frame):
         self.refresh_sphere_dropdown()
 
     def refresh_sphere_dropdown(self):
-        """Refresh the sphere dropdown based on filter"""
+        """Rebuild sphere dropdown based on current filter selection.
+
+        Filters and sorts sphere list according to sphere_filter radio button value.
+        Called when filter changes or spheres are added/modified/deleted.
+
+        Filter logic:
+        - "active": Include spheres where data["active"] == True
+        - "inactive": Include spheres where data["active"] == False
+        - "all": Include all spheres regardless of active status
+
+        Sorting:
+        - Alphabetically by sphere name (case-insensitive)
+
+        Side effects:
+            - Updates sphere_dropdown combobox values
+            - Selects first sphere if list non-empty
+            - Clears selection if list empty
+            - Calls on_sphere_selected() to update management UI
+
+        Note:
+            Always calls on_sphere_selected() after refresh to ensure
+            management frame displays correct sphere or clears if none selected.
+        """
         filter_val = self.sphere_filter.get()
         spheres = self.tracker.settings.get("spheres", {})
 
@@ -453,7 +508,41 @@ class SettingsFrame(ttk.Frame):
         self.refresh_project_section()
 
     def create_project_section(self, parent):
-        """Create project management section"""
+        """Create project management UI section with list and filter controls.
+
+        Builds complete project management interface with:
+        - Section header with "Projects" title
+        - Filter radio buttons (Active/All/Inactive)
+        - Sphere filter dropdown (filter projects by sphere)
+        - Scrollable list of project rows
+        - "Add Project" button
+
+        Each project row contains:
+        - Project name (editable when "Edit" clicked)
+        - Sphere assignment dropdown
+        - Default checkbox (sets as sphere default)
+        - Edit/Save button (toggles edit mode)
+        - Archive/Activate button
+        - Delete button
+
+        Created by refresh_project_section() which is called:
+        - Initially during settings frame creation
+        - When filter changes
+        - When sphere selection changes
+        - When projects are added/edited/deleted
+
+        Side effects:
+            - Creates project_filter StringVar ("active" default)
+            - Creates project_sphere_filter StringVar ("All Spheres" default)
+            - Creates projects_container LabelFrame
+            - Creates scrollable_projects_frame for project rows
+            - Calls refresh_project_section() to populate
+            - Increments row counter
+
+        Note:
+            Actual project list populated by refresh_project_section(), not here.
+            This method just creates the container and filter controls.
+        """
 
         # Projects frame with border
         projects_frame = ttk.LabelFrame(parent, padding=10)
@@ -901,7 +990,51 @@ class SettingsFrame(ttk.Frame):
         self.refresh_project_section()
 
     def create_break_idle_section(self, parent):
-        """Create break actions and idle settings section"""
+        """Create combined break actions and idle detection settings section.
+
+        Two-part section:
+
+        Part 1: Break Actions Management
+        - List of break actions with edit/archive/delete buttons
+        - Default checkbox for each action
+        - "Add Break Action" button
+        - Similar UI to projects but simpler (no sphere association)
+
+        Part 2: Idle Detection Settings
+        - Idle threshold slider (seconds before marking idle)
+        - Idle break threshold slider (seconds before auto-starting break)
+        - Real-time value labels showing current settings
+
+        Part 3: Screenshot Capture Settings
+        - Enable/disable screenshot capture checkbox
+        - Capture on window focus change checkbox
+        - Min seconds between captures input
+        - Screenshot folder path display and browse button
+
+        Break actions rows contain:
+        - Action name (editable when "Edit" clicked)
+        - Default checkbox (sets as default break action)
+        - Edit/Save button
+        - Archive/Activate button
+        - Delete button
+
+        Idle thresholds:
+        - Idle threshold: 30-600 seconds (default 60)
+        - Idle break threshold: 60-1800 seconds (default 300)
+        - Both use Scale widgets with value labels
+
+        Side effects:
+            - Creates break actions list UI
+            - Creates idle threshold scales
+            - Creates screenshot settings controls
+            - Calls refresh_break_actions() to populate list
+            - Binds scale movements to setting updates
+            - Increments row counter multiple times
+
+        Note:
+            Break actions are global (not sphere-specific like projects).
+            Idle thresholds apply to all sessions.
+        """
         # BREAK ACTIONS SECTION (First)
 
         break_frame = ttk.LabelFrame(parent, padding=10)
@@ -1127,7 +1260,7 @@ class SettingsFrame(ttk.Frame):
                 "capture_on_focus_change": capture_on_focus_var.get(),
                 "min_seconds_between_captures": min_seconds_var.get(),
                 "screenshot_path": screenshot_settings.get(
-                    "screenshot_path", "screenshots"
+                    "screenshot_path", DEFAULT_SCREENSHOT_FOLDER
                 ),
             }
             self.save_settings()
@@ -1144,7 +1277,46 @@ class SettingsFrame(ttk.Frame):
             self.bind_mousewheel_func()
 
     def create_google_sheets_section(self, parent):
-        """Create Google Sheets integration settings section"""
+        """Create Google Sheets integration settings UI section.
+
+        Builds interface for configuring Google Sheets upload:
+        - Enable/disable integration checkbox
+        - Spreadsheet URL input with smart extraction button
+        - Sheet name input (tab name within spreadsheet)
+        - Credentials file path display and browse button
+        - Test connection button (validates credentials + access)
+
+        Smart spreadsheet URL extraction:
+        - Detects various Google Sheets URL formats
+        - Extracts spreadsheet ID from full URL
+        - Validates extracted ID before saving
+        - Handles docs.google.com/spreadsheets/d/{ID}/... format
+
+        Credentials file:
+        - Expects credentials.json from Google Cloud Console
+        - Browse button opens file dialog
+        - Path saved relative to project root
+        - Required for Google Sheets API access
+
+        Test connection:
+        - Validates credentials file exists and is valid JSON
+        - Attempts to authenticate with Google Sheets API
+        - Verifies read/write access to specified spreadsheet
+        - Shows success/error messagebox with details
+
+        Side effects:
+            - Creates enable checkbox bound to settings["google_sheets"]["enabled"]
+            - Creates spreadsheet_url_var StringVar
+            - Creates sheet_name_var StringVar (default "Sessions")
+            - Creates credentials_path display
+            - Creates "Extract ID" button (calls extract_spreadsheet_id())
+            - Creates "Test Connection" button (validates credentials)
+            - Increments row counter multiple times
+
+        Security note:
+            Spreadsheet ID stored in settings.json. For production, use
+            environment variable GOOGLE_SHEETS_SPREADSHEET_ID instead.
+        """
         from tkinter import filedialog
 
         google_frame = ttk.LabelFrame(parent, padding=10)
@@ -1308,8 +1480,8 @@ class SettingsFrame(ttk.Frame):
                     status_label.config(text=f"✓ {message}", foreground="green")
                 else:
                     status_label.config(text=f"✗ {message}", foreground="red")
-            except Exception as e:
-                status_label.config(text=f"✗ Error: {str(e)}", foreground="red")
+            except Exception as error:
+                status_label.config(text=f"✗ Error: {str(error)}", foreground="red")
 
             # Restore original settings
             self.tracker.settings["google_sheets"] = old_settings
@@ -1704,15 +1876,15 @@ class SettingsFrame(ttk.Frame):
                         subprocess.Popen(["open", directory])
                     else:  # Linux
                         subprocess.Popen(["xdg-open", directory])
-                except Exception as e:
+                except Exception as error:
                     # Silently fail if can't open directory
                     pass
 
             else:
                 messagebox.showwarning("No Data", "No data rows to export")
 
-        except Exception as e:
-            messagebox.showerror("Export Error", f"Failed to export data:\n{str(e)}")
+        except Exception as error:
+            messagebox.showerror("Export Error", f"Failed to export data:\n{str(error)}")
 
     def create_break_actions_list(self, parent):
         """Create break actions management list"""

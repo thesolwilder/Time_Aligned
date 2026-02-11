@@ -12,6 +12,8 @@ import win32gui
 import win32process
 import psutil
 
+from src.constants import DEFAULT_SCREENSHOT_FOLDER
+
 
 class ScreenshotCapture:
     """Handles screenshot capture on window focus changes"""
@@ -31,7 +33,7 @@ class ScreenshotCapture:
             "screenshot_settings", {}
         ).get("min_seconds_between_captures", 10)
         self.screenshot_base_path = self.settings.get("screenshot_settings", {}).get(
-            "screenshot_path", "screenshots"
+            "screenshot_path", DEFAULT_SCREENSHOT_FOLDER
         )
 
         # State tracking
@@ -107,7 +109,7 @@ class ScreenshotCapture:
                 process_name = "Unknown"
 
             return window_title, process_name
-        except Exception as e:
+        except Exception as error:
             return None, None
 
     def _should_capture(self, window_title, process_name):
@@ -216,7 +218,7 @@ class ScreenshotCapture:
 
             return screenshot_info
 
-        except Exception as e:
+        except Exception as error:
             return None
 
     def _monitor_loop(self):
@@ -233,21 +235,80 @@ class ScreenshotCapture:
                 # Check every 0.5 seconds
                 time.sleep(0.5)
 
-            except Exception as e:
+            except Exception as error:
                 time.sleep(1)
 
     def get_screenshot_folder_path(self):
-        """Get the current screenshot folder path"""
+        """Get the current screenshot folder path for this session.
+
+        Returns the full path to the folder where screenshots are being saved
+        for the current active period. Path format: screenshots/YYYY-MM-DD/
+
+        Called from:
+        - Screenshot display operations
+        - File browser integrations
+        - Screenshot management utilities
+
+        Returns:
+            String path to current screenshot folder
+
+        Note:
+            Folder is created when new period starts via new_period().
+            Returns None if no period has started yet.
+        """
         return self.current_screenshot_folder
 
     def get_current_period_screenshots(self):
-        """Get the list of screenshots captured for the current period"""
+        """Get defensive copy of screenshots captured for current period.
+
+        Returns list of screenshot file paths captured since the current period
+        started. Returns a copy to prevent external code from modifying the
+        internal list.
+
+        Called from:
+        - Screenshot display in completion frame
+        - Session view screenshot gallery
+        - Period screenshot review
+
+        Returns:
+            List of string file paths to screenshots (e.g., ["screenshots/2026-02-11/1625_screenshot.png"])
+            Empty list if no screenshots captured yet
+
+        Note:
+            Returns defensive copy via .copy() to prevent external mutation.
+            List is reset to empty when new_period() is called.
+        """
         return (
             self.current_period_screenshots.copy()
         )  # Return a copy to avoid external modification
 
     def update_settings(self, new_settings):
-        """Update screenshot settings"""
+        """Update screenshot capture settings from new settings dictionary.
+
+        Reloads all screenshot-related settings from the provided settings dict.
+        Updates internal state and restarts monitoring if capture settings changed.
+
+        Called from:
+        - Settings dialog save operation
+        - Settings file reload
+
+        Settings read (with defaults):
+        - enabled: False - Master toggle for screenshot capture
+        - capture_on_focus_change: True - Capture when switching windows
+        - min_seconds_between_captures: 10 - Rate limiting
+        - screenshot_path: "screenshots" - Base folder path
+
+        Args:
+            new_settings: Full settings dictionary from settings.json
+
+        Side effects:
+            - Updates all screenshot configuration attributes
+            - Restarts window monitoring thread if needed
+            - Does NOT affect screenshots already captured
+
+        Note:
+            Safe to call while session active. Monitoring thread auto-restarts.
+        """
         self.settings = new_settings
         self.enabled = self.settings.get("screenshot_settings", {}).get(
             "enabled", False
