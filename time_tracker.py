@@ -41,6 +41,14 @@ from src.completion_frame import CompletionFrame
 from src.settings_frame import SettingsFrame
 from src.analysis_frame import AnalysisFrame
 from src.screenshot_capture import ScreenshotCapture
+from src.constants import (
+    UPDATE_TIMER_INTERVAL_MS,
+    ONE_MINUTE_MS,
+    DEFAULT_IDLE_THRESHOLD_SECONDS,
+    DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+)
 
 
 class TimeTracker:
@@ -72,8 +80,8 @@ class TimeTracker:
         self.last_user_input = time.time()
 
         self.backup_loop_count = 0  # auto back up save end time if crash
-        self.update_timer_interval = 100  # in milliseconds
-        self.one_minute_ms = 60000  # one minute in milliseconds
+        self.update_timer_interval = UPDATE_TIMER_INTERVAL_MS
+        self.one_minute_ms = ONE_MINUTE_MS
         self.backup_frequency = (
             self.one_minute_ms // self.update_timer_interval
         )  # save every minute
@@ -122,8 +130,8 @@ class TimeTracker:
         default_settings = {
             "idle_settings": {
                 "idle_tracking_enabled": True,  # enable/disable idle tracking
-                "idle_threshold": 60,  # seconds before considering idle
-                "idle_break_threshold": 300,  # seconds of idle before auto-break
+                "idle_threshold": DEFAULT_IDLE_THRESHOLD_SECONDS,
+                "idle_break_threshold": DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS,
             },
             "screenshot_settings": {
                 "enabled": False,  # enable/disable screenshot capture
@@ -409,9 +417,9 @@ class TimeTracker:
 
     def format_time(self, seconds):
         """Convert seconds to HH:MM:SS format"""
-        hours = int(seconds // 3600)
-        minutes = int((seconds % 3600) // 60)
-        secs = int(seconds % 60)
+        hours = int(seconds // SECONDS_PER_HOUR)
+        minutes = int((seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE)
+        secs = int(seconds % SECONDS_PER_MINUTE)
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
     def start_input_monitoring(self):

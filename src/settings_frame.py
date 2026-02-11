@@ -8,6 +8,7 @@ import platform
 import re
 
 from src.ui_helpers import ScrollableFrame, sanitize_name
+from src.constants import COLOR_LINK_BLUE, COLOR_GRAY_TEXT
 
 
 def extract_spreadsheet_id_from_url(value):
@@ -1378,7 +1379,7 @@ class SettingsFrame(ttk.Frame):
                 shortcuts_frame,
                 text=hotkey,
                 font=("Consolas", 10, "bold"),
-                foreground="#0066CC",
+                foreground=COLOR_LINK_BLUE,
             )
             hotkey_label.grid(row=row, column=0, sticky=tk.W, padx=(10, 20), pady=5)
 
@@ -1395,7 +1396,7 @@ class SettingsFrame(ttk.Frame):
             shortcuts_frame,
             text="💡 Tip: These shortcuts work system-wide, even when the window is hidden!",
             font=("Arial", 9, "italic"),
-            foreground="#666666",
+            foreground=COLOR_GRAY_TEXT,
         )
         note_label.grid(row=row, column=0, columnspan=2, pady=(10, 0), sticky=tk.W)
 

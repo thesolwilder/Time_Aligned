@@ -5,6 +5,11 @@ import csv
 from datetime import datetime, timedelta
 
 from src.ui_helpers import ScrollableFrame
+from src.constants import (
+    COLOR_ACTIVE_LIGHT_GREEN,
+    COLOR_BREAK_LIGHT_ORANGE,
+    COLOR_GRAY_BACKGROUND,
+)
 
 
 class AnalysisFrame(ttk.Frame):
@@ -209,7 +214,7 @@ class AnalysisFrame(ttk.Frame):
 
         # Timeline header (frozen at top)
         self.timeline_header_frame = tk.Frame(
-            content_frame, relief=tk.RIDGE, borderwidth=1, bg="#d0d0d0"
+            content_frame, relief=tk.RIDGE, borderwidth=1, bg=COLOR_GRAY_BACKGROUND
         )
         self.timeline_header_frame.grid(
             row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
@@ -936,9 +941,9 @@ class AnalysisFrame(ttk.Frame):
         """
         # Color code based on type
         if period["type"] == "Active":
-            bg_color = "#e8f5e9"  # Light green
+            bg_color = COLOR_ACTIVE_LIGHT_GREEN
         else:  # Break or Idle
-            bg_color = "#fff3e0"  # Light orange
+            bg_color = COLOR_BREAK_LIGHT_ORANGE
 
         row_frame = tk.Frame(self.timeline_frame, bg=bg_color)
         row_frame.grid(row=idx, column=0, sticky=(tk.W, tk.E), pady=1)
@@ -1172,7 +1177,7 @@ class AnalysisFrame(ttk.Frame):
             nonlocal col_idx
 
             # For two-row headers, we need a container Frame to stack the labels
-            container = tk.Frame(self.timeline_header_frame, bg="#d0d0d0")
+            container = tk.Frame(self.timeline_header_frame, bg=COLOR_GRAY_BACKGROUND)
             container.grid(row=0, column=col_idx, sticky=tk.W)
 
             # Top row label
@@ -1183,7 +1188,7 @@ class AnalysisFrame(ttk.Frame):
                 width=width,
                 anchor="w",
                 padx=3,
-                bg="#d0d0d0",
+                bg=COLOR_GRAY_BACKGROUND,
             ).pack()
 
             # Bottom row label (slightly smaller font)
@@ -1194,7 +1199,7 @@ class AnalysisFrame(ttk.Frame):
                 width=width,
                 anchor="w",
                 padx=3,
-                bg="#d0d0d0",
+                bg=COLOR_GRAY_BACKGROUND,
             ).pack()
 
             col_idx += 1
@@ -1218,7 +1223,7 @@ class AnalysisFrame(ttk.Frame):
                     width=width,
                     height=1,
                     wrap=tk.NONE,
-                    bg="#d0d0d0",
+                    bg=COLOR_GRAY_BACKGROUND,
                     font=("Arial", 8),
                     relief=tk.FLAT,
                     state=tk.NORMAL,
@@ -1240,7 +1245,7 @@ class AnalysisFrame(ttk.Frame):
                     anchor="w",
                     padx=3,
                     pady=6,  # Vertical padding to center with two-row headers
-                    bg="#d0d0d0",
+                    bg=COLOR_GRAY_BACKGROUND,
                 )
                 if expand:
                     label.grid(row=0, column=col_idx, sticky=(tk.W, tk.E))

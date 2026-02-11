@@ -1,0 +1,67 @@
+"""
+Constants for the Time Aligned application.
+
+This module contains all hardcoded numeric values, time conversions,
+UI colors, and configuration defaults to eliminate magic numbers
+throughout the codebase.
+"""
+
+# =============================================================================
+# Time Conversion Constants
+# =============================================================================
+
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+MINUTES_PER_HOUR = 60
+MILLISECONDS_PER_SECOND = 1000
+
+# Derived time constants
+ONE_MINUTE_MS = SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND
+ONE_MINUTE_SECONDS = SECONDS_PER_MINUTE
+
+# =============================================================================
+# Timer and Update Intervals
+# =============================================================================
+
+UPDATE_TIMER_INTERVAL_MS = 100  # milliseconds between UI updates
+IDLE_CHECK_INTERVAL_SECONDS = 0.5  # seconds between idle checks
+
+# =============================================================================
+# Default Idle Settings
+# =============================================================================
+
+DEFAULT_IDLE_THRESHOLD_SECONDS = 60  # seconds before considering idle
+DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS = 300  # seconds of idle before auto-break
+
+# =============================================================================
+# UI Color Palette
+# =============================================================================
+
+# Status colors for session cards
+COLOR_ACTIVE_LIGHT_GREEN = "#e8f5e9"  # Light green for active sessions
+COLOR_BREAK_LIGHT_ORANGE = "#fff3e0"  # Light orange for break sessions
+COLOR_COMPLETED_LIGHT_GRAY = "#f5f5f5"  # Light gray for completed sessions
+
+# UI accent colors
+COLOR_LINK_BLUE = "#0066CC"  # Hyperlink blue
+COLOR_GRAY_TEXT = "#666666"  # Secondary text gray
+COLOR_GRAY_BACKGROUND = "#d0d0d0"  # Background gray for containers
+
+# =============================================================================
+# UI Dimensions and Layout
+# =============================================================================
+
+DEFAULT_WINDOW_WIDTH = 800
+DEFAULT_WINDOW_HEIGHT = 600
+
+# Mousewheel scrolling sensitivity
+MOUSEWHEEL_DELTA_DIVISOR = 120  # Windows standard for mouse wheel delta
+
+# =============================================================================
+# Default File Paths
+# =============================================================================
+
+DEFAULT_SETTINGS_FILE = "settings.json"
+DEFAULT_DATA_FILE = "data.json"
+DEFAULT_SCREENSHOT_FOLDER = "screenshots"
+DEFAULT_BACKUP_FOLDER = "backups"

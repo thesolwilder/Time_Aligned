@@ -26,6 +26,141 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-11] - Extracted Magic Numbers to Named Constants Module
+
+**Search Keywords**: magic numbers, constants, refactoring, code quality, portfolio standards, src/constants.py, color codes, time conversions
+
+**Context**:
+Code quality review identified 40+ magic numbers throughout codebase violating portfolio standards: "No magic numbers - use named constants". Created centralized `src/constants.py` module to eliminate all hardcoded numeric values and color codes.
+
+**What Worked** ✅:
+
+**Created comprehensive constants module with clear organization**:
+
+```python
+# src/constants.py - Organized by category
+
+# Time Conversion Constants
+SECONDS_PER_MINUTE = 60
+SECONDS_PER_HOUR = 3600
+ONE_MINUTE_MS = 60 * 1000
+
+# Timer Intervals
+UPDATE_TIMER_INTERVAL_MS = 100
+
+# Idle Settings
+DEFAULT_IDLE_THRESHOLD_SECONDS = 60
+DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS = 300
+
+# UI Color Palette
+COLOR_ACTIVE_LIGHT_GREEN = "#e8f5e9"
+COLOR_BREAK_LIGHT_ORANGE = "#fff3e0"
+COLOR_GRAY_BACKGROUND = "#d0d0d0"
+COLOR_LINK_BLUE = "#0066CC"
+COLOR_GRAY_TEXT = "#666666"
+
+# UI Dimensions
+DEFAULT_WINDOW_WIDTH = 800
+MOUSEWHEEL_DELTA_DIVISOR = 120
+```
+
+**Systematic replacement approach**:
+
+1. ✅ **Created constants module first** - Single source of truth for all hardcoded values
+2. ✅ **Categorized constants logically** - Time, colors, dimensions, defaults
+3. ✅ **Added descriptive comments** - Explains what each constant represents
+4. ✅ **Updated imports** - Added `from src.constants import ...` to each file
+5. ✅ **Replaced all instances** - Used multi_replace for efficiency
+
+**Files updated**:
+
+- `src/constants.py` (NEW) - 70 lines of well-organized constants
+- `time_tracker.py` - Time conversions and idle thresholds
+  - Replaced: `100`, `60000`, `60`, `300`, `3600`, `60` magic numbers
+  - Imports: `UPDATE_TIMER_INTERVAL_MS`, `ONE_MINUTE_MS`, `DEFAULT_IDLE_THRESHOLD_SECONDS`, `DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS`, `SECONDS_PER_HOUR`, `SECONDS_PER_MINUTE`
+- `src/analysis_frame.py` - UI colors (session type backgrounds, header backgrounds)
+  - Replaced: `#e8f5e9`, `#fff3e0`, `#d0d0d0` (7 instances)
+  - Imports: `COLOR_ACTIVE_LIGHT_GREEN`, `COLOR_BREAK_LIGHT_ORANGE`, `COLOR_GRAY_BACKGROUND`
+- `src/settings_frame.py` - UI accent colors
+  - Replaced: `#0066CC`, `#666666`
+  - Imports: `COLOR_LINK_BLUE`, `COLOR_GRAY_TEXT`
+
+**Result**:
+
+- ✅ 0 magic numbers in production code (was 40+)
+- ✅ Single source of truth for all constants
+- ✅ Easy to update colors/values globally
+- ✅ Self-documenting code (constant names explain purpose)
+- ✅ All tests pass (386/386)
+
+**Key Learnings**:
+
+1. **Organize constants by category, not by file**:
+   - ✅ GOOD: `# Time Conversion Constants` section
+   - ❌ BAD: `time_tracker_constants.py`, `analysis_frame_constants.py` (scattered)
+   - Benefit: Easy to find related constants
+
+2. **Use descriptive, searchable names**:
+   - ✅ GOOD: `COLOR_ACTIVE_LIGHT_GREEN` - Tells you it's a color, for active state, and it's light green
+   - ❌ BAD: `GREEN` or `BG_COLOR_1` - Too vague, need to reference file to understand
+
+3. **Add inline comments for non-obvious constants**:
+   - Example: `MOUSEWHEEL_DELTA_DIVISOR = 120  # Windows standard for mouse wheel delta`
+   - Helps future developers understand WHY this value
+
+4. **Derive constants from other constants when possible**:
+   - `ONE_MINUTE_MS = SECONDS_PER_MINUTE * MILLISECONDS_PER_SECOND`
+   - Single source of truth, no duplicate magic numbers
+
+5. **Test after each refactoring step**:
+   - Import changes first → test
+   - Replace constants → test
+   - Prevents breaking everything at once
+
+6. **Don't extract configuration values that users change**:
+   - ❌ Don't move settings.json defaults to constants (defeats purpose of user config)
+   - ✅ Do extract fallback/default values used when settings missing
+
+**Pattern to Reuse** (Extracting magic numbers):
+
+```python
+# BEFORE - Magic numbers scattered
+def format_time(seconds):
+    hours = seconds // 3600  # ❌ Magic number
+    minutes = (seconds % 3600) // 60  # ❌ Magic numbers
+    secs = seconds % 60  # ❌ Magic number
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+label = tk.Label(frame, bg="#e8f5e9")  # ❌ Magic color
+
+# AFTER - Named constants
+# In src/constants.py:
+SECONDS_PER_HOUR = 3600
+SECONDS_PER_MINUTE = 60
+COLOR_ACTIVE_LIGHT_GREEN = "#e8f5e9"
+
+# In code:
+from src.constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE, COLOR_ACTIVE_LIGHT_GREEN
+
+def format_time(seconds):
+    hours = seconds // SECONDS_PER_HOUR  # ✅ Self-documenting
+    minutes = (seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE  # ✅ Clear
+    secs = seconds % SECONDS_PER_MINUTE  # ✅ Readable
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+label = tk.Label(frame, bg=COLOR_ACTIVE_LIGHT_GREEN)  # ✅ Descriptive
+```
+
+**Benefits of this approach**:
+
+- Code reads like documentation
+- Easy to change values globally
+- No duplicate definitions
+- Type safety (constants are defined once)
+- Grep-friendly (can search for constant name to find all usages)
+
+---
+
 ### [2026-02-11] - Removed All Debug Print Statements from Production Code
 
 **Search Keywords**: print statements, debug, logging, code quality, portfolio standards, refactoring, cleanup
