@@ -1570,7 +1570,29 @@ class TimeTracker:
                 self.root.title("Time Aligned - Time Tracker")
 
     def create_tray_icon_image(self, state="idle"):
-        """Create icon image for system tray based on state"""
+        """Generate colored circle icon for system tray based on application state.
+
+        Creates 64x64 PIL Image with colored circle indicating current app state.
+        Called by setup_tray_icon() for initial icon and update_tray_icon() for
+        state changes.
+
+        State color mapping:
+        - "idle": Gray (#808080) - No active session
+        - "active": Green (#4CAF50) - Session active, working
+        - "break": Amber/Yellow (#FFC107) - Session active, on break
+        - "paused": Orange (#FF9800) - Currently unused
+
+        Args:
+            state: String state name ("idle", "active", "break", "paused")
+                  Defaults to "idle" if unrecognized state
+
+        Returns:
+            PIL Image object (64x64 RGB) with colored circle on white background
+
+        Note:
+            Circle drawn with 8px margin, 2px black outline for visibility.
+            Image format compatible with pystray.Icon.
+        """
         # Create a simple colored circle icon
         size = 64
         image = Image.new("RGB", (size, size), "white")
@@ -1592,7 +1614,39 @@ class TimeTracker:
         return image
 
     def setup_tray_icon(self):
-        """Setup system tray icon with menu"""
+        """Initialize system tray icon with menu in separate daemon thread.
+
+        Creates pystray system tray icon with context menu for background operation.
+        Allows users to control app without main window visible.
+
+        Menu structure:
+        - Show/Hide Window (default action, double-click)
+        - SEPARATOR
+        - Start Session (enabled only when no session active)
+        - Start Break (enabled only when session active, not on break)
+        - End Break (enabled only when session active, on break)
+        - End Session (enabled only when session active)
+        - SEPARATOR
+        - Settings
+        - Analysis
+        - SEPARATOR
+        - Quit
+
+        Threading:
+        - Runs in separate daemon thread (tray_thread)
+        - Thread calls run_tray() which blocks on tray_icon.run()
+        - Daemon thread exits automatically when main thread exits
+
+        Side effects:
+            - Creates tray_icon (pystray.Icon instance)
+            - Starts tray_thread (daemon Thread)
+            - Stores tray_icon reference for later updates via update_tray_icon()
+            - Initial icon state is "idle" with title "Time Aligned - Ready"
+
+        Note:
+            Menu items use lambda for dynamic enable/disable based on session state.
+            All menu handlers use root.after() for thread-safe tkinter operations.
+        """
 
         def run_tray():
             # Create menu
@@ -1642,7 +1696,31 @@ class TimeTracker:
         self.tray_thread.start()
 
     def update_tray_icon(self):
-        """Update tray icon based on current state"""
+        """Update tray icon appearance and tooltip based on current session state.
+
+        Called every 100ms by update_timers() to reflect real-time state changes.
+        Updates both icon color and tooltip text.
+
+        State transitions:
+        - No session: "idle" state, gray icon, "Time Aligned - Ready"
+        - Session active (working): "active" state, green icon, "Time Aligned - Active (HH:MM:SS)"
+        - Session active (break): "break" state, amber icon, "Time Aligned - Break (HH:MM:SS)"
+
+        Tooltip format:
+        - Shows current timer value in HH:MM:SS format
+        - Active: Shows session_elapsed time
+        - Break: Shows break_elapsed time
+        - Idle: Shows "Ready" (no timer)
+
+        Side effects:
+            - Updates tray_icon.icon via create_tray_icon_image()
+            - Updates tray_icon.title (tooltip text)
+            - No-op if tray_icon is None (not initialized)
+
+        Note:
+            Uses format_time() to convert elapsed seconds to HH:MM:SS string.
+            Called very frequently (10 times per second) so must be efficient.
+        """
         if self.tray_icon is None:
             return
 
@@ -1661,7 +1739,37 @@ class TimeTracker:
         self.tray_icon.title = title
 
     def setup_global_hotkeys(self):
-        """Setup global keyboard shortcuts"""
+        """Register global keyboard shortcuts using pynput library.
+
+        Sets up system-wide hotkeys that work even when app window not focused.
+        Uses pynput.keyboard.GlobalHotKeys listener in separate thread.
+
+        Registered hotkeys:
+        - Ctrl+Shift+S: Start new session (_hotkey_start_session)
+        - Ctrl+Shift+B: Toggle break state (_hotkey_toggle_break)
+        - Ctrl+Shift+E: End current session (_hotkey_end_session)
+        - Ctrl+Shift+W: Show/hide main window (_hotkey_toggle_window)
+
+        Key format:
+        - Uses pynput canonical key format: "<ctrl>+<shift>+<key>"
+        - All keys lowercase, wrapped in angle brackets
+
+        Error handling:
+        - Catches all exceptions during setup (permission issues, conflicts)
+        - Logs error details with traceback
+        - App continues to function without hotkeys if setup fails
+        - Common failure: Another app already registered same hotkey
+
+        Side effects:
+            - Creates hotkey_listener (keyboard.GlobalHotKeys instance)
+            - Starts listener thread (managed by pynput, auto-cleanup)
+            - Stores listener reference for cleanup in on_closing()
+            - Logs success message with hotkey list to console
+
+        Note:
+            All hotkey handlers use root.after(0, func) for thread-safe tkinter calls.
+            Listener stopped in on_closing() via hotkey_listener.stop().
+        """
         try:
             # Define hotkey handlers using proper key format
             hotkeys = {
@@ -1762,7 +1870,47 @@ class TimeTracker:
         self.root.after(0, self.on_closing)
 
     def on_closing(self):
-        """Clean up before closing"""
+        """Cleanup and shutdown handler for application exit.
+
+        Called when user closes main window (X button) or quits from tray menu.
+        Ensures proper cleanup of all resources before app termination.
+
+        Cleanup sequence:
+        1. Disable all ScrollableFrame mouse handlers (set _is_alive = False)
+           - main_frame_container
+           - analysis_frame.scrollable_container
+           - session_view_container
+
+        2. Check for active session:
+           - If active: Show "Quit?" confirmation dialog
+           - If confirmed: Call end_session() to save work
+           - If cancelled: Abort shutdown, return to app
+
+        3. Stop all background threads/listeners:
+           - Stop input monitoring (pynput mouse/keyboard listeners)
+           - Stop hotkey listener (global keyboard shortcuts)
+           - Stop tray icon (system tray menu)
+
+        4. Exit tkinter:
+           - Call root.quit() to exit mainloop
+           - Call root.destroy() to destroy all widgets
+
+        Dialog behavior:
+        - Active session: Shows askokcancel confirmation
+        - No session: Quits immediately without prompt
+
+        Side effects:
+            - Disables all ScrollableFrame instances (_is_alive = False)
+            - May call end_session() if user confirms
+            - Stops input_monitoring via stop_input_monitoring()
+            - Stops hotkey_listener via hotkey_listener.stop()
+            - Stops tray_icon via tray_icon.stop()
+            - Calls root.quit() and root.destroy()
+
+        Note:
+            Critical to call root.quit() BEFORE root.destroy() to properly
+            exit mainloop and prevent tkinter errors.
+        """
         # Disable all ScrollableFrame handlers before destroying
         if hasattr(self, "main_frame_container") and self.main_frame_container:
             self.main_frame_container._is_alive = False
