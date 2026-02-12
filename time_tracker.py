@@ -4,36 +4,10 @@ import time
 import os
 import json
 from datetime import datetime
-import warnings
-import logging
 import sys
 import threading
 from PIL import Image, ImageDraw
 import pystray
-
-# Suppress pynput's harmless Python 3.13 compatibility warnings
-logging.getLogger("pynput").setLevel(logging.ERROR)
-warnings.filterwarnings("ignore", category=DeprecationWarning, module="pynput")
-
-# Monkey-patch to suppress pynput exception output in Python 3.13
-import traceback
-
-_original_print_exception = traceback.print_exception
-
-
-def _patched_print_exception(
-    exc, /, value=None, tb=None, limit=None, file=None, chain=True
-):
-    """Suppress pynput listener callback exceptions that are harmless in Python 3.13"""
-    if value and isinstance(value, (NotImplementedError, TypeError)):
-        exc_str = str(value)
-        if "_thread._ThreadHandle" in exc_str or "listener callback" in str(exc):
-            return  # Suppress this specific pynput error
-    _original_print_exception(exc, value, tb, limit, file, chain)
-
-
-traceback.print_exception = _patched_print_exception
-
 from pynput import mouse, keyboard
 
 from src.ui_helpers import ScrollableFrame
@@ -1378,9 +1352,6 @@ class TimeTracker:
             self.root.title("Time Aligned - Analysis")
         except Exception as error:
             messagebox.showerror("Error", f"Failed to open analysis: {error}")
-            import traceback
-
-            traceback.print_exc()
             # Make sure main frame is visible
             if hasattr(self, "main_frame_container"):
                 self.main_frame_container._is_alive = True  # Re-enable scrolling
@@ -1782,16 +1753,9 @@ class TimeTracker:
             # Start global hotkey listener in a separate thread
             self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
             self.hotkey_listener.start()
-            logging.info("Global hotkeys enabled:")
-            logging.info("  Ctrl+Shift+S - Start session")
-            logging.info("  Ctrl+Shift+B - Toggle break")
-            logging.info("  Ctrl+Shift+E - End session")
-            logging.info("  Ctrl+Shift+W - Show/hide window")
         except Exception as error:
-            logging.error(f"Failed to setup global hotkeys: {error}")
-            import traceback
-
-            traceback.print_exc()
+            # Silently fail - hotkeys are optional convenience feature
+            pass
 
     def _hotkey_start_session(self):
         """Hotkey handler: Start new session if none active (Ctrl+Shift+S)."""
