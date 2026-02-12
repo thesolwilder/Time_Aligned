@@ -49,6 +49,12 @@ COLOR_GRAY_BACKGROUND = "#d0d0d0"  # Background gray for containers
 COLOR_ACTIVE_GREEN = "#2E7D32"  # Active time display
 COLOR_BREAK_ORANGE = "#F57C00"  # Break time display
 
+# System tray icon colors
+COLOR_TRAY_IDLE = "#607D8B"  # Blue-gray for idle state
+COLOR_TRAY_ACTIVE = "#4CAF50"  # Green for active session
+COLOR_TRAY_BREAK = "#FFC107"  # Amber/Yellow for break
+COLOR_TRAY_SESSION_IDLE = "#FFEB3B"  # Yellow for idle during session
+
 # =============================================================================
 # UI Fonts
 # =============================================================================
@@ -71,6 +77,11 @@ DEFAULT_WINDOW_HEIGHT = 600
 
 # Mousewheel scrolling sensitivity
 MOUSEWHEEL_DELTA_DIVISOR = 120  # Windows standard for mouse wheel delta
+
+# Tray icon dimensions
+TRAY_ICON_SIZE = 64  # Icon size in pixels
+TRAY_ICON_MARGIN = 8  # Margin around circle
+TRAY_ICON_OUTLINE_WIDTH = 2  # Circle outline thickness
 
 # =============================================================================
 # Default File Paths

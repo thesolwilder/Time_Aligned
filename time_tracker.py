@@ -29,6 +29,13 @@ from src.constants import (
     COLOR_GRAY_TEXT,
     COLOR_ACTIVE_GREEN,
     COLOR_BREAK_ORANGE,
+    COLOR_TRAY_IDLE,
+    COLOR_TRAY_ACTIVE,
+    COLOR_TRAY_BREAK,
+    COLOR_TRAY_SESSION_IDLE,
+    TRAY_ICON_SIZE,
+    TRAY_ICON_MARGIN,
+    TRAY_ICON_OUTLINE_WIDTH,
     FONT_LINK,
     FONT_SMALL,
     FONT_NORMAL,
@@ -954,10 +961,9 @@ class TimeTracker:
         """Return to main tracker view from any other frame (analysis/completion/session view).
 
         Central navigation hub that cleanly destroys all other frame types and
-        restores the main time tracking interface. Handles 4 possible frame sources:
+        restores the main time tracking interface. Handles 3 possible frame sources:
         - Analysis frame (from viewing statistics)
-        - Completion container (from ending session)
-        - Session view container (from viewing past sessions)
+        - Completion/Session View container (CompletionFrame - from ending session or viewing past sessions)
         - Multiple frames simultaneously (edge case, handles gracefully)
 
         Called from:
@@ -985,20 +991,14 @@ class TimeTracker:
         """
         # Remove analysis frame if present
         if hasattr(self, "analysis_frame") and self.analysis_frame:
-            try:
-                self.analysis_frame.grid_remove()
-                self.analysis_frame.destroy()
-            except:
-                pass
+            self.analysis_frame.grid_remove()
+            self.analysis_frame.destroy()
             self.analysis_frame = None
 
         # Remove completion container (from end session)
         if hasattr(self, "completion_container") and self.completion_container:
-            try:
-                self.completion_container.grid_remove()
-                self.completion_container.destroy()
-            except:
-                pass
+            self.completion_container.grid_remove()
+            self.completion_container.destroy()
             self.completion_container = None
 
         if hasattr(self, "completion_frame") and self.completion_frame:
@@ -1006,11 +1006,8 @@ class TimeTracker:
 
         # Remove session view container (from session view)
         if hasattr(self, "session_view_container") and self.session_view_container:
-            try:
-                self.session_view_container.grid_remove()
-                self.session_view_container.destroy()
-            except:
-                pass
+            self.session_view_container.grid_remove()
+            self.session_view_container.destroy()
             self.session_view_container = None
 
         if hasattr(self, "session_view_frame") and self.session_view_frame:
@@ -1160,7 +1157,6 @@ class TimeTracker:
                 self.total_break_label.config(text="00:00:00")
 
         # save in case computer crashes or runtime stops unexpectedly
-
         if self.backup_loop_count == self.backup_frequency:
             # Update session data
             if self.session_active:
@@ -1246,8 +1242,7 @@ class TimeTracker:
         Displays the analysis view for reviewing session data, statistics, and timeline.
         Handles complex navigation scenarios:
         - Coming from main tracker view (normal case)
-        - Coming from completion frame (prompts to save unsaved data)
-        - Coming from session view (closes session view first)
+        - Coming from completion/session view (CompletionFrame - prompts to save unsaved data)
         - Re-opening analysis while already open (destroys old instance)
 
         Always creates a fresh AnalysisFrame instance to avoid state persistence bugs
@@ -1265,102 +1260,83 @@ class TimeTracker:
             - Creates new AnalysisFrame instance
             - Updates window title to "Time Aligned - Analysis"
 
-        Raises:
-            Shows error messagebox if frame creation fails, ensures main frame
-            is restored to visible state even on error.
-
         Navigation Flow:
             Main → Analysis: Standard open
             Completion → Analysis: Save prompt → sets analysis_from_completion flag
             Session View → Analysis: If analysis exists, just close session view
             Analysis → Analysis: Destroys old instance, creates fresh one
         """
-        try:
-            # Don't allow opening analysis while tracking time
-            if self.session_active:
-                messagebox.showwarning(
-                    "Session Active",
-                    "Cannot open analysis while tracking time. Please end the session first.",
-                )
+        # Don't allow opening analysis while tracking time
+        if self.session_active:
+            messagebox.showwarning(
+                "Session Active",
+                "Cannot open analysis while tracking time. Please end the session first.",
+            )
+            return
+
+        # Special case: if we're in session view and analysis already exists,
+        # just close session view to return to analysis
+        if (
+            hasattr(self, "session_view_frame")
+            and self.session_view_frame is not None
+            and hasattr(self, "analysis_frame")
+            and self.analysis_frame is not None
+        ):
+            self.close_session_view()
+            return
+
+        # CRITICAL: Always create a fresh AnalysisFrame instance
+        # Reusing the old instance causes state persistence bugs (e.g., after CSV export)
+        # If analysis frame already exists, destroy it first
+        if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
+            self.analysis_frame.destroy()
+            self.analysis_frame = None
+
+        # Track if we're coming from completion frame (for proper back navigation)
+        self.analysis_from_completion = False
+
+        # If we're in completion frame or session view, save data first
+        if hasattr(self, "completion_frame") and self.completion_frame:
+            # Ask user to save or skip before going to analysis
+            result = messagebox.askyesnocancel(
+                "Unsaved Changes",
+                "You have unsaved session data. Would you like to save before viewing analysis?\n\nYes = Save and open analysis\nNo = Skip and open analysis\nCancel = Stay here",
+            )
+            if result is None:  # Cancel
                 return
+            elif result:  # Yes - save
+                # Save the completion frame data without navigating
+                if hasattr(self.completion_frame, "save_and_close"):
+                    self.completion_frame.save_and_close(navigate=False)
+            # If No, just continue without saving
 
-            # Special case: if we're in session view and analysis already exists,
-            # just close session view to return to analysis
-            if (
-                hasattr(self, "session_view_frame")
-                and self.session_view_frame is not None
-                and hasattr(self, "analysis_frame")
-                and self.analysis_frame is not None
-            ):
-                self.close_session_view()
-                return
+            # Mark that we came from completion frame
+            self.analysis_from_completion = True
 
-            # CRITICAL: Always create a fresh AnalysisFrame instance
-            # Reusing the old instance causes state persistence bugs (e.g., after CSV export)
-            # If analysis frame already exists, destroy it first
-            if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
-                self.analysis_frame.destroy()
-                self.analysis_frame = None
+        # Hide current frames
+        self.main_frame_container.grid_forget()
+        # Disable main frame scrolling while hidden
+        self.main_frame_container._is_alive = False
 
-            # Track if we're coming from completion frame (for proper back navigation)
-            self.analysis_from_completion = False
+        # Hide completion container if present
+        if hasattr(self, "completion_container") and self.completion_container:
+            self.completion_container.grid_forget()
 
-            # If we're in completion frame or session view, save data first
-            if hasattr(self, "completion_frame") and self.completion_frame:
-                # Ask user to save or skip before going to analysis
-                result = messagebox.askyesnocancel(
-                    "Unsaved Changes",
-                    "You have unsaved session data. Would you like to save before viewing analysis?\n\nYes = Save and open analysis\nNo = Skip and open analysis\nCancel = Stay here",
-                )
-                if result is None:  # Cancel
-                    return
-                elif result:  # Yes - save
-                    # Save the completion frame data without navigating
-                    if hasattr(self.completion_frame, "save_and_close"):
-                        self.completion_frame.save_and_close(navigate=False)
-                # If No, just continue without saving
+        # Close session view if present (don't just hide it)
+        if hasattr(self, "session_view_frame") and self.session_view_frame is not None:
+            # Properly close session view to clear references
+            if hasattr(self, "session_view_container") and self.session_view_container:
+                self.session_view_container.destroy()
+                self.session_view_container = None
+            self.session_view_frame = None
+            self.session_view_from_analysis = False
 
-                # Mark that we came from completion frame
-                self.analysis_from_completion = True
+        # Create analysis frame in main window
+        self.analysis_frame = AnalysisFrame(self.root, self, self.root)
+        self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
-            # Hide current frames
-            self.main_frame_container.grid_forget()
-            # Disable main frame scrolling while hidden
-            self.main_frame_container._is_alive = False
-
-            # Hide completion container if present
-            if hasattr(self, "completion_container") and self.completion_container:
-                self.completion_container.grid_forget()
-
-            # Close session view if present (don't just hide it)
-            if (
-                hasattr(self, "session_view_frame")
-                and self.session_view_frame is not None
-            ):
-                # Properly close session view to clear references
-                if (
-                    hasattr(self, "session_view_container")
-                    and self.session_view_container
-                ):
-                    self.session_view_container.destroy()
-                    self.session_view_container = None
-                self.session_view_frame = None
-                self.session_view_from_analysis = False
-
-            # Create analysis frame in main window
-            self.analysis_frame = AnalysisFrame(self.root, self, self.root)
-            self.analysis_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-
-            # Update window title
-            self.root.title("Time Aligned - Analysis")
-        except Exception as error:
-            messagebox.showerror("Error", f"Failed to open analysis: {error}")
-            # Make sure main frame is visible
-            if hasattr(self, "main_frame_container"):
-                self.main_frame_container._is_alive = True  # Re-enable scrolling
-                self.main_frame_container.grid(
-                    row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
-                )
+        # Update window title
+        self.root.title("Time Aligned - Analysis")
 
     def close_analysis(self):
         """Close analysis frame and return to appropriate previous view.
@@ -1523,14 +1499,12 @@ class TimeTracker:
 
             # Return to analysis frame if we came from there
             if came_from_analysis:
-                # CRITICAL FIX: Don't restore the old hidden analysis frame
-                # It may have corrupted state from CSV export or other operations
-                # Instead, destroy it and create a fresh instance
+                # Destroy existing analysis frame to avoid state persistence bugs
                 if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
                     self.analysis_frame.destroy()
                     self.analysis_frame = None
 
-                # Now call open_analysis to create a fresh instance
+                # Create fresh analysis instance
                 self.open_analysis()
                 self.session_view_from_analysis = False
             else:
@@ -1549,13 +1523,13 @@ class TimeTracker:
         state changes.
 
         State color mapping:
-        - "idle": Gray (#808080) - No active session
+        - "idle": Blue-gray (#607D8B) - No active session
         - "active": Green (#4CAF50) - Session active, working
-        - "break": Amber/Yellow (#FFC107) - Session active, on break
-        - "paused": Orange (#FF9800) - Currently unused
+        - "session_idle": Yellow (#FFEB3B) - Session active but user idle
+        - "break": Amber (#FFC107) - Session active, on break
 
         Args:
-            state: String state name ("idle", "active", "break", "paused")
+            state: String state name ("idle", "active", "session_idle", "break")
                   Defaults to "idle" if unrecognized state
 
         Returns:
@@ -1565,23 +1539,30 @@ class TimeTracker:
             Circle drawn with 8px margin, 2px black outline for visibility.
             Image format compatible with pystray.Icon.
         """
-        # Create a simple colored circle icon
-        size = 64
-        image = Image.new("RGB", (size, size), "white")
+        image = Image.new("RGB", (TRAY_ICON_SIZE, TRAY_ICON_SIZE), "white")
         dc = ImageDraw.Draw(image)
 
-        # Color based on state
         colors = {
-            "idle": "#808080",  # Gray
-            "active": "#4CAF50",  # Green
-            "break": "#FFC107",  # Amber/Yellow
-            "paused": "#FF9800",  # Orange
+            "idle": COLOR_TRAY_IDLE,
+            "active": COLOR_TRAY_ACTIVE,
+            "break": COLOR_TRAY_BREAK,
+            "session_idle": COLOR_TRAY_SESSION_IDLE,
         }
 
-        color = colors.get(state, "#808080")
+        color = colors.get(state, COLOR_TRAY_IDLE)
 
         # Draw circle
-        dc.ellipse([8, 8, size - 8, size - 8], fill=color, outline="black", width=2)
+        dc.ellipse(
+            [
+                TRAY_ICON_MARGIN,
+                TRAY_ICON_MARGIN,
+                TRAY_ICON_SIZE - TRAY_ICON_MARGIN,
+                TRAY_ICON_SIZE - TRAY_ICON_MARGIN,
+            ],
+            fill=color,
+            outline="black",
+            width=TRAY_ICON_OUTLINE_WIDTH,
+        )
 
         return image
 
@@ -1674,8 +1655,9 @@ class TimeTracker:
         Updates both icon color and tooltip text.
 
         State transitions:
-        - No session: "idle" state, gray icon, "Time Aligned - Ready"
+        - No session: "idle" state, blue-gray icon, "Time Aligned - Ready"
         - Session active (working): "active" state, green icon, "Time Aligned - Active (HH:MM:SS)"
+        - Session active (idle): "session_idle" state, yellow icon, "Time Aligned - Idle (HH:MM:SS)"
         - Session active (break): "break" state, amber icon, "Time Aligned - Break (HH:MM:SS)"
 
         Tooltip format:
@@ -1700,6 +1682,9 @@ class TimeTracker:
             if self.break_active:
                 state = "break"
                 title = f"Time Aligned - Break ({self.format_time(int(self.break_elapsed))})"
+            elif self.session_idle:
+                state = "session_idle"
+                title = f"Time Aligned - Idle ({self.format_time(int(self.session_elapsed))})"
             else:
                 state = "active"
                 title = f"Time Aligned - Active ({self.format_time(int(self.session_elapsed))})"
@@ -1726,21 +1711,15 @@ class TimeTracker:
         - Uses pynput canonical key format: "<ctrl>+<shift>+<key>"
         - All keys lowercase, wrapped in angle brackets
 
-        Error handling:
-        - Catches all exceptions during setup (permission issues, conflicts)
-        - Logs error details with traceback
-        - App continues to function without hotkeys if setup fails
-        - Common failure: Another app already registered same hotkey
-
         Side effects:
             - Creates hotkey_listener (keyboard.GlobalHotKeys instance)
             - Starts listener thread (managed by pynput, auto-cleanup)
             - Stores listener reference for cleanup in on_closing()
-            - Logs success message with hotkey list to console
 
         Note:
             All hotkey handlers use root.after(0, func) for thread-safe tkinter calls.
             Listener stopped in on_closing() via hotkey_listener.stop().
+            Hotkeys are optional - app continues if registration fails.
         """
         try:
             # Define hotkey handlers using proper key format
@@ -1755,7 +1734,7 @@ class TimeTracker:
             self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
             self.hotkey_listener.start()
         except Exception:
-            # Silently fail - hotkeys are optional convenience feature
+            # Hotkeys are optional - continue without them if registration fails
             pass
 
     def _hotkey_start_session(self):
@@ -1784,6 +1763,7 @@ class TimeTracker:
                 # Show window when ending session
                 if not self.window_visible:
                     self.toggle_window()
+                self.root.state("zoomed")
                 self.end_session()
 
         self.root.after(0, do_end)
@@ -1793,7 +1773,12 @@ class TimeTracker:
         self.root.after(0, self.toggle_window)
 
     def toggle_window(self, icon=None, item=None):
-        """Show or hide main window, updating visibility tracking flag."""
+        """Show or hide main window, updating visibility tracking flag.
+
+        Args:
+            icon: Pystray icon instance (unused, required for tray menu callback)
+            item: Pystray menu item instance (unused, required for tray menu callback)
+        """
         if self.window_visible:
             self.root.withdraw()
             self.window_visible = False
@@ -1895,7 +1880,7 @@ class TimeTracker:
                     self.hotkey_listener.stop()
                 if self.tray_icon:
                     self.tray_icon.stop()
-                self.root.quit()  # Changed from destroy() to quit()
+                self.root.quit()
                 self.root.destroy()
         else:
             self.stop_input_monitoring()
@@ -1903,7 +1888,7 @@ class TimeTracker:
                 self.hotkey_listener.stop()
             if self.tray_icon:
                 self.tray_icon.stop()
-            self.root.quit()  # Changed from destroy() to quit()
+            self.root.quit()
             self.root.destroy()
 
 

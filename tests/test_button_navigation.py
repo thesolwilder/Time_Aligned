@@ -82,7 +82,7 @@ class TestButtonNavigation(unittest.TestCase):
         self.tracker.save_data(test_data, merge=False)
 
         # Show completion frame
-        self.tracker.show_completion_frame(3600, 3600, 0, 1234567890, 1234571490)
+        self.tracker.show_completion_frame()
 
         # Verify completion frame is shown
         self.assertIsNotNone(self.tracker.completion_frame)
@@ -122,7 +122,7 @@ class TestButtonNavigation(unittest.TestCase):
         self.tracker.save_data(test_data, merge=False)
 
         # Show completion frame
-        self.tracker.show_completion_frame(3600, 3600, 0, 1234567890, 1234571490)
+        self.tracker.show_completion_frame()
 
         # Verify completion frame is shown
         self.assertIsNotNone(self.tracker.completion_frame)
@@ -172,7 +172,7 @@ class TestButtonNavigation(unittest.TestCase):
         self.tracker.save_data(test_data, merge=False)
 
         # Show completion frame
-        self.tracker.show_completion_frame(3600, 3600, 0, 1234567890, 1234571490)
+        self.tracker.show_completion_frame()
 
         # Mock the messagebox to auto-confirm and shutil.copy2 to avoid creating backup files
         with patch("tkinter.messagebox.askyesno", return_value=True):
