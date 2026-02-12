@@ -25,6 +25,17 @@ from src.constants import (
     DEFAULT_SETTINGS_FILE,
     DEFAULT_DATA_FILE,
     DEFAULT_SCREENSHOT_FOLDER,
+    COLOR_LINK_BLUE,
+    COLOR_GRAY_TEXT,
+    COLOR_ACTIVE_GREEN,
+    COLOR_BREAK_ORANGE,
+    FONT_LINK,
+    FONT_SMALL,
+    FONT_NORMAL,
+    FONT_HEADING,
+    FONT_TIMER_LARGE,
+    FONT_TIMER_MEDIUM,
+    FONT_TIMER_SMALL,
 )
 
 
@@ -135,7 +146,7 @@ class TimeTracker:
         try:
             with open(self.settings_file, "r") as f:
                 return json.load(f)
-        except Exception as e:
+        except Exception:
             return default_settings
 
     def _get_default_sphere(self):
@@ -239,7 +250,7 @@ class TimeTracker:
         try:
             with open(self.data_file, "r") as f:
                 return json.load(f)
-        except Exception as error:
+        except Exception:
             return {}
 
     def save_data(self, session_data, merge=True):
@@ -262,7 +273,12 @@ class TimeTracker:
             with open(self.data_file, "w") as f:
                 json.dump(all_data, f, indent=2)
         except Exception as error:
-            pass
+            messagebox.showerror(
+                "Save Error",
+                f"Failed to save session data to {self.data_file}\n\n"
+                f"Error: {error}\n\n"
+                "Your session data may not be saved. Please check file permissions.",
+            )
 
     def create_widgets(self):
         """Create the main GUI elements for the time tracker interface.
@@ -301,9 +317,9 @@ class TimeTracker:
         settings_link = tk.Label(
             top_right_frame,
             text="Settings",
-            fg="#0066CC",
+            fg=COLOR_LINK_BLUE,
             cursor="hand2",
-            font=("Arial", 10, "underline"),
+            font=FONT_LINK,
         )
         settings_link.grid(row=0, column=0, padx=8)
         settings_link.bind("<Button-1>", lambda e: self.open_settings())
@@ -312,9 +328,9 @@ class TimeTracker:
         analysis_link = tk.Label(
             top_right_frame,
             text="Analysis",
-            fg="#0066CC",
+            fg=COLOR_LINK_BLUE,
             cursor="hand2",
-            font=("Arial", 10, "underline"),
+            font=FONT_LINK,
         )
         analysis_link.grid(row=0, column=1, padx=8)
         analysis_link.bind("<Button-1>", lambda e: self.open_analysis())
@@ -323,16 +339,16 @@ class TimeTracker:
         session_view_link = tk.Label(
             top_right_frame,
             text="Session View",
-            fg="#0066CC",
+            fg=COLOR_LINK_BLUE,
             cursor="hand2",
-            font=("Arial", 10, "underline"),
+            font=FONT_LINK,
         )
         session_view_link.grid(row=0, column=2, padx=8)
         session_view_link.bind("<Button-1>", lambda e: self.open_session_view())
 
         # Session start info
         self.session_start_label = ttk.Label(
-            main_frame, text="", font=("Arial", 10), foreground="#666666"
+            main_frame, text="", font=FONT_NORMAL, foreground=COLOR_GRAY_TEXT
         )
         self.session_start_label.grid(row=1, column=0, columnspan=3, pady=(5, 0))
 
@@ -340,10 +356,10 @@ class TimeTracker:
         session_timer_frame = ttk.Frame(main_frame)
         session_timer_frame.grid(row=2, column=0, columnspan=3, pady=(5, 2))
         ttk.Label(
-            session_timer_frame, text="Session Time:", font=("Arial", 12, "bold")
+            session_timer_frame, text="Session Time:", font=FONT_HEADING
         ).pack()
         self.session_timer_label = ttk.Label(
-            session_timer_frame, text="00:00:00", font=("Arial", 48, "bold")
+            session_timer_frame, text="00:00:00", font=FONT_TIMER_LARGE
         )
         self.session_timer_label.pack()
 
@@ -351,10 +367,10 @@ class TimeTracker:
         break_timer_frame = ttk.Frame(main_frame)
         break_timer_frame.grid(row=3, column=0, columnspan=3, pady=2)
         ttk.Label(
-            break_timer_frame, text="Break Time:", font=("Arial", 10, "bold")
+            break_timer_frame, text="Break Time:", font=FONT_NORMAL
         ).pack()
         self.break_timer_label = ttk.Label(
-            break_timer_frame, text="00:00:00", font=("Arial", 28, "bold")
+            break_timer_frame, text="00:00:00", font=FONT_TIMER_MEDIUM
         )
         self.break_timer_label.pack()
 
@@ -365,30 +381,30 @@ class TimeTracker:
         # Total Active Time
         active_frame = ttk.Frame(totals_frame)
         active_frame.pack(side=tk.LEFT, padx=20)
-        ttk.Label(active_frame, text="Total Active:", font=("Arial", 9)).pack()
+        ttk.Label(active_frame, text="Total Active:", font=FONT_SMALL).pack()
         self.total_active_label = ttk.Label(
             active_frame,
             text="00:00:00",
-            font=("Arial", 14, "bold"),
-            foreground="#2E7D32",
+            font=FONT_TIMER_SMALL,
+            foreground=COLOR_ACTIVE_GREEN,
         )
         self.total_active_label.pack()
 
         # Total Break Time
         break_total_frame = ttk.Frame(totals_frame)
         break_total_frame.pack(side=tk.LEFT, padx=20)
-        ttk.Label(break_total_frame, text="Total Break:", font=("Arial", 9)).pack()
+        ttk.Label(break_total_frame, text="Total Break:", font=FONT_SMALL).pack()
         self.total_break_label = ttk.Label(
             break_total_frame,
             text="00:00:00",
-            font=("Arial", 14, "bold"),
-            foreground="#F57C00",
+            font=FONT_TIMER_SMALL,
+            foreground=COLOR_BREAK_ORANGE,
         )
         self.total_break_label.pack()
 
         # Status label
         self.status_label = ttk.Label(
-            main_frame, text="Ready to start", font=("Arial", 10)
+            main_frame, text="Ready to start", font=FONT_NORMAL
         )
         self.status_label.grid(row=5, column=0, columnspan=3, pady=5)
 
@@ -1753,7 +1769,7 @@ class TimeTracker:
             # Start global hotkey listener in a separate thread
             self.hotkey_listener = keyboard.GlobalHotKeys(hotkeys)
             self.hotkey_listener.start()
-        except Exception as error:
+        except Exception:
             # Silently fail - hotkeys are optional convenience feature
             pass
 

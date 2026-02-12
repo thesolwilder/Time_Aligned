@@ -46,6 +46,21 @@ COLOR_COMPLETED_LIGHT_GRAY = "#f5f5f5"  # Light gray for completed sessions
 COLOR_LINK_BLUE = "#0066CC"  # Hyperlink blue
 COLOR_GRAY_TEXT = "#666666"  # Secondary text gray
 COLOR_GRAY_BACKGROUND = "#d0d0d0"  # Background gray for containers
+COLOR_ACTIVE_GREEN = "#2E7D32"  # Active time display
+COLOR_BREAK_ORANGE = "#F57C00"  # Break time display
+
+# =============================================================================
+# UI Fonts
+# =============================================================================
+
+FONT_FAMILY = "Arial"
+FONT_LINK = (FONT_FAMILY, 10, "underline")
+FONT_SMALL = (FONT_FAMILY, 9)
+FONT_NORMAL = (FONT_FAMILY, 10)
+FONT_HEADING = (FONT_FAMILY, 12, "bold")
+FONT_TIMER_LARGE = (FONT_FAMILY, 48, "bold")
+FONT_TIMER_MEDIUM = (FONT_FAMILY, 28, "bold")
+FONT_TIMER_SMALL = (FONT_FAMILY, 14, "bold")
 
 # =============================================================================
 # UI Dimensions and Layout
