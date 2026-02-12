@@ -94,10 +94,6 @@ class CompletionFrame(ttk.Frame):
             []
         )  # Store secondary percentage label references
 
-        # Reference to canvas and mousewheel binding function (set by parent)
-        self.canvas = None
-        self.bind_mousewheel_func = None
-
         self.create_widgets()
 
     def create_widgets(self):
@@ -380,15 +376,6 @@ class CompletionFrame(ttk.Frame):
 
             # Recreate all widgets
             self.create_widgets()
-
-            # Re-apply mousewheel binding to new widgets
-            if self.bind_mousewheel_func:
-                self.bind_mousewheel_func()
-
-            # Update scroll region
-            if self.canvas:
-                self.update_idletasks()
-                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
 
     def _save_new_sphere(self, event):
         """Save inline-created sphere to settings and update UI.

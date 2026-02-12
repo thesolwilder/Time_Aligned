@@ -86,9 +86,7 @@ class AnalysisFrame(ttk.Frame):
     def create_widgets(self):
         """Create all UI elements for the analysis frame"""
         # Create scrollable container for entire frame
-        scrollable_container = ScrollableFrame(
-            self, debug_name="AnalysisFrame Scrollable"
-        )
+        scrollable_container = ScrollableFrame(self)
         scrollable_container.pack(fill="both", expand=True)
 
         content_frame = scrollable_container.get_content_frame()

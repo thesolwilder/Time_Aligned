@@ -118,7 +118,7 @@ def validate_folder_path(path):
 class ScrollableFrame(ttk.Frame):
     """A scrollable frame that can contain other widgets"""
 
-    def __init__(self, parent, debug_name=None, **kwargs):
+    def __init__(self, parent, **kwargs):
         super().__init__(parent)
 
         # Create canvas and scrollbar
@@ -149,9 +149,6 @@ class ScrollableFrame(ttk.Frame):
         # Pack canvas and scrollbar
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
-
-        # Debug name for tracing which instance is which
-        self._debug_name = debug_name or "ScrollableFrame"
 
         # Flag to track if this instance is destroyed
         self._is_alive = True

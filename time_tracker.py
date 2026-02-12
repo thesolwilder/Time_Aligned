@@ -85,6 +85,9 @@ class TimeTracker:
         self.input_listener_running = False
         self.mouse_listener = None
         self.keyboard_listener = None
+        self.input_monitoring_error_shown = (
+            False  # Track if error notification already displayed
+        )
 
         # Screenshot capture
         self.screenshot_capture = ScreenshotCapture(self.settings, self.data_file)
@@ -302,9 +305,7 @@ class TimeTracker:
             This is called once during __init__ to set up the entire main UI.
         """
         # Create scrollable container for main frame
-        self.main_frame_container = ScrollableFrame(
-            self.root, debug_name="MainFrame Scrollable", padding="10"
-        )
+        self.main_frame_container = ScrollableFrame(self.root, padding="10")
         self.main_frame_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         main_frame = self.main_frame_container.get_content_frame()
@@ -355,9 +356,7 @@ class TimeTracker:
         # Session timer
         session_timer_frame = ttk.Frame(main_frame)
         session_timer_frame.grid(row=2, column=0, columnspan=3, pady=(5, 2))
-        ttk.Label(
-            session_timer_frame, text="Session Time:", font=FONT_HEADING
-        ).pack()
+        ttk.Label(session_timer_frame, text="Session Time:", font=FONT_HEADING).pack()
         self.session_timer_label = ttk.Label(
             session_timer_frame, text="00:00:00", font=FONT_TIMER_LARGE
         )
@@ -366,9 +365,7 @@ class TimeTracker:
         # Break timer
         break_timer_frame = ttk.Frame(main_frame)
         break_timer_frame.grid(row=3, column=0, columnspan=3, pady=2)
-        ttk.Label(
-            break_timer_frame, text="Break Time:", font=FONT_NORMAL
-        ).pack()
+        ttk.Label(break_timer_frame, text="Break Time:", font=FONT_NORMAL).pack()
         self.break_timer_label = ttk.Label(
             break_timer_frame, text="00:00:00", font=FONT_TIMER_MEDIUM
         )
@@ -417,6 +414,7 @@ class TimeTracker:
         )
         self.start_button.grid(row=0, column=0, padx=5)
 
+        # Break button disabled until session starts (enabled in start_session())
         self.break_button = ttk.Button(
             button_frame,
             text="Start Break",
@@ -425,6 +423,7 @@ class TimeTracker:
         )
         self.break_button.grid(row=0, column=1, padx=5)
 
+        # End Session button disabled until session starts (enabled in start_session())
         self.end_button = ttk.Button(
             button_frame,
             text="End Session",
@@ -473,10 +472,7 @@ class TimeTracker:
                 - Starts new active period with fresh screenshot capture
                 - Updates active_period_start_time to current time
 
-        Note:
-            Exceptions from pynput callbacks are suppressed to handle harmless
-            Python 3.13 compatibility issues. The monitoring continues even if
-            individual callbacks fail.
+
 
         CRITICAL: This method implements complex state transitions when resuming
         from idle. It must save the active period that ended when idle started,
@@ -509,8 +505,8 @@ class TimeTracker:
                                 - last_idle["start_timestamp"]
                             )
 
-                            # CRITICAL FIX: Save the active period that ended when idle started
-                            # Then start a new active period from when idle ended
+                            # Save the active period that ended when idle started,
+                            # then start a new active period from when idle ended
                             all_data[self.session_name]["active"] = all_data[
                                 self.session_name
                             ].get("active", [])
@@ -565,9 +561,17 @@ class TimeTracker:
                             )
 
                             self.save_data(all_data)
-            except Exception:
-                # Suppress harmless pynput Python 3.13 compatibility exceptions
-                pass
+            except Exception as error:
+                # Show error notification once for user-actionable issues (disk full, permissions)
+                # After first notification, fail silently to avoid spamming on every input event
+                if not self.input_monitoring_error_shown:
+                    self.input_monitoring_error_shown = True
+                    messagebox.showerror(
+                        "Input Monitoring Error",
+                        f"Error saving idle/active period data:\n\n{error}\n\n"
+                        "This could be due to disk space or file permissions.\n"
+                        "Input monitoring will continue, but some data may not be saved.",
+                    )
 
         # Start mouse listener with error suppression
         self.mouse_listener = mouse.Listener(
@@ -776,9 +780,7 @@ class TimeTracker:
         self.total_break_label.config(text="00:00:00")
 
         # Show completion frame to label actions
-        self.show_completion_frame(
-            total_elapsed, active_time, break_time, original_start, end_time
-        )
+        self.show_completion_frame()
 
     def toggle_break(self):
         """Start or end a break period.
@@ -909,25 +911,18 @@ class TimeTracker:
                 self.session_name, "active", active_period_count
             )
 
-    def show_completion_frame(
-        self, total_elapsed, active_time, break_time, original_start, end_time
-    ):
+    def show_completion_frame(self):
         """Display session completion UI for labeling and saving session data.
 
         Called at the end of every session to allow user to categorize the session
         with sphere, project, break actions, and notes. Creates a ScrollableFrame
         container with CompletionFrame inside.
 
+        CompletionFrame loads all session data (times, breaks, etc.) from data.json
+        using self.session_name, so no parameters are needed.
+
         Called from:
         - end_session() - After session ends normally
-        - User clicking "End Session" button
-
-        Args:
-            total_elapsed: Total session duration in seconds
-            active_time: Active (non-break, non-idle) time in seconds
-            break_time: Break time in seconds
-            original_start: Session start time string ("YYYY-MM-DD HH:MM:SS")
-            end_time: Session end time string ("YYYY-MM-DD HH:MM:SS")
 
         Side effects:
             - Hides main_frame_container via grid_remove()
@@ -945,9 +940,7 @@ class TimeTracker:
         self.main_frame_container.grid_remove()
 
         # Create scrollable container for completion frame
-        self.completion_container = ScrollableFrame(
-            self.root, debug_name="CompletionView Scrollable"
-        )
+        self.completion_container = ScrollableFrame(self.root)
         self.completion_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
 
         # Get content frame and create completion frame with session name
@@ -956,12 +949,6 @@ class TimeTracker:
             completion_parent, self, self.session_name
         )
         self.completion_frame.pack(fill="both", expand=True)
-
-        # Store canvas reference for completion frame
-        self.completion_frame.canvas = self.completion_container.canvas
-        self.completion_frame.bind_mousewheel_func = (
-            lambda: None
-        )  # Already handled by ScrollableFrame
 
     def show_main_frame(self):
         """Return to main tracker view from any other frame (analysis/completion/session view).
@@ -1505,9 +1492,7 @@ class TimeTracker:
             self.main_frame_container.grid_forget()
 
         # Create scrollable container for completion frame
-        self.session_view_container = ScrollableFrame(
-            self.root, debug_name="SessionView Scrollable"
-        )
+        self.session_view_container = ScrollableFrame(self.root)
         self.session_view_container.grid(
             row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
         )

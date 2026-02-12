@@ -77,9 +77,7 @@ class SettingsFrame(ttk.Frame):
     def create_widgets(self):
         """Create main settings interface"""
         # Create scrollable container
-        scrollable_container = ScrollableFrame(
-            self, debug_name="SettingsFrame Scrollable", padding="10"
-        )
+        scrollable_container = ScrollableFrame(self, padding="10")
         scrollable_container.pack(fill="both", expand=True)
 
         content_frame = scrollable_container.get_content_frame()
@@ -1884,7 +1882,9 @@ class SettingsFrame(ttk.Frame):
                 messagebox.showwarning("No Data", "No data rows to export")
 
         except Exception as error:
-            messagebox.showerror("Export Error", f"Failed to export data:\n{str(error)}")
+            messagebox.showerror(
+                "Export Error", f"Failed to export data:\n{str(error)}"
+            )
 
     def create_break_actions_list(self, parent):
         """Create break actions management list"""
