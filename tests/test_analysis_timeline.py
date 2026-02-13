@@ -375,9 +375,12 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
                     }
                 ],
                 "idle_periods": [],
-                "session_active_comments": "Overall session was productive",
-                "session_break_idle_comments": "Needed a few breaks",
-                "session_notes": "Good progress today",
+                "session_comments": {
+                    "active_notes": "Overall session was productive",
+                    "break_notes": "Needed a few breaks",
+                    "idle_notes": "",
+                    "session_notes": "Good progress today",
+                },
             }
         }
         self.file_manager.create_test_file(self.test_data_file, test_data)
@@ -673,9 +676,12 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
                         "end_timestamp": 1234573490,
                     }
                 ],
-                "session_active_comments": "Session was very productive",
-                "session_break_idle_comments": "Took good breaks",
-                "session_notes": "Great day overall",
+                "session_comments": {
+                    "active_notes": "Session was very productive",
+                    "break_notes": "Took good breaks",
+                    "idle_notes": "",
+                    "session_notes": "Great day overall",
+                },
             }
         }
         self.file_manager.create_test_file(self.test_data_file, test_data)
@@ -701,7 +707,7 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
 
         # Session-level comments now show contextually:
         # - session_active_comments: only on Active periods
-        # - session_break_idle_comments: only on Break/Idle periods
+        # - session_break_idle_comments: break_notes on Break periods, idle_notes on Idle periods
         # - session_notes: on ALL periods
         expected_session_notes = "Great day overall"
 
@@ -725,17 +731,29 @@ class TestAnalysisTimelineDataStructure(unittest.TestCase):
                     "",
                     f"Active period {period['primary_project']} should NOT have session_break_idle_comments",
                 )
-            # Break/idle comments only on Break/Idle periods
-            elif period["type"] in ["Break", "Idle"]:
+            # Break/idle comments contextually on Break/Idle periods
+            elif period["type"] == "Break":
                 self.assertEqual(
                     period["session_active_comments"],
                     "",
-                    f"{period['type']} period {period['primary_project']} should NOT have session_active_comments",
+                    f"Break period {period['primary_project']} should NOT have session_active_comments",
                 )
                 self.assertEqual(
                     period["session_break_idle_comments"],
                     "Took good breaks",
-                    f"{period['type']} period {period['primary_project']} should have session_break_idle_comments",
+                    f"Break period {period['primary_project']} should have break_notes in session_break_idle_comments",
+                )
+            elif period["type"] == "Idle":
+                self.assertEqual(
+                    period["session_active_comments"],
+                    "",
+                    f"Idle period {period['primary_project']} should NOT have session_active_comments",
+                )
+                # idle_notes is empty in test data, so should be empty
+                self.assertEqual(
+                    period["session_break_idle_comments"],
+                    "",
+                    f"Idle period {period['primary_project']} should have idle_notes (empty) in session_break_idle_comments",
                 )
 
 
@@ -1978,9 +1996,12 @@ class TestAnalysisTimelineCommentWrapping(unittest.TestCase):
                 "total_duration": 3600,
                 "active_duration": 2400,
                 "break_duration": 1200,
-                "session_active_comments": active_comment,
-                "session_break_idle_comments": break_comment,
-                "session_notes": session_notes_text,
+                "session_comments": {
+                    "active_notes": active_comment,
+                    "break_notes": break_comment,
+                    "idle_notes": "",
+                    "session_notes": session_notes_text,
+                },
                 "active": [
                     {
                         "duration": 2400,

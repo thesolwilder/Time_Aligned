@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
 import csv
 from datetime import datetime, timedelta
@@ -210,16 +210,13 @@ class AnalysisFrame(ttk.Frame):
         )
         self.timeline_title.pack(side=tk.LEFT)
 
-        # Timeline header (frozen at top)
+        # Timeline header
         self.timeline_header_frame = tk.Frame(
             content_frame, relief=tk.RIDGE, borderwidth=1, bg=COLOR_GRAY_BACKGROUND
         )
         self.timeline_header_frame.grid(
             row=4, column=0, columnspan=3, sticky=(tk.W, tk.E), padx=10, pady=(5, 2)
         )
-
-        # Headers will be created by update_timeline_header() using grid() layout
-        # Do NOT create initial headers with pack() here - it conflicts with grid()
 
         # Timeline with scrollbar
         timeline_container = ttk.Frame(content_frame)
@@ -233,7 +230,7 @@ class AnalysisFrame(ttk.Frame):
         )
 
         # Create canvas and scrollbar for timeline
-        # Use a simple frame for timeline - no separate scrollbar
+        # a simple frame for timeline - no separate scrollbar
         self.timeline_frame = ttk.Frame(timeline_container)
         self.timeline_frame.pack(fill="both", expand=True)
 
@@ -327,8 +324,6 @@ class AnalysisFrame(ttk.Frame):
         Returns:
             str: Date in YYYY-MM-DD format, or None if cancelled
         """
-        from tkinter import simpledialog
-
         # Ask for date in YYYY-MM-DD format
         date_str = simpledialog.askstring(
             "Custom Date", "Enter date (YYYY-MM-DD):", parent=self.root
@@ -383,25 +378,23 @@ class AnalysisFrame(ttk.Frame):
                 .get("active", True)
             )
 
+            # Filter projects by sphere and status
             for project_name, data in self.tracker.settings.get("projects", {}).items():
-                if data.get("sphere") == sphere:
-                    is_active = data.get("active", True)
+                # Skip if not in selected sphere
+                if data.get("sphere") != sphere:
+                    continue
 
-                    if filter_status == "active":
-                        # Only show active projects
-                        if is_active:
-                            projects.append(project_name)
-                    elif filter_status == "archived":
-                        # If sphere is active, show only inactive projects
-                        # If sphere is inactive, show all projects
-                        if sphere_is_active:
-                            if not is_active:
-                                projects.append(project_name)
-                        else:
-                            projects.append(project_name)
-                    elif filter_status == "all":
-                        # Show all projects
+                is_active = data.get("active", True)
+
+                # Determine if project should be included based on filter status
+                if filter_status == "active" and is_active:
+                    projects.append(project_name)
+                elif filter_status == "archived":
+                    # Show inactive projects if sphere is active, or all projects if sphere inactive
+                    if (sphere_is_active and not is_active) or not sphere_is_active:
                         projects.append(project_name)
+                elif filter_status == "all":
+                    projects.append(project_name)
 
             self.project_filter["values"] = projects
 
@@ -441,16 +434,11 @@ class AnalysisFrame(ttk.Frame):
             is_active = data.get("active", True)
 
             if filter_status == "active":
-                # Only show active spheres
                 if is_active:
                     spheres.append(sphere)
             elif filter_status == "archived":
-                # Show ALL spheres (both active and inactive)
-                # Active spheres will show their inactive projects
-                # Inactive spheres will show all their projects
                 spheres.append(sphere)
             elif filter_status == "all":
-                # Show all spheres
                 spheres.append(sphere)
 
         return spheres
@@ -588,10 +576,6 @@ class AnalysisFrame(ttk.Frame):
         elif range_name == "Last Month":
             end = today.replace(day=1)
             start = (end - timedelta(days=1)).replace(day=1)
-        elif range_name == "Custom Date":
-            # Open dialog to select custom date
-            start = today
-            end = today + timedelta(days=1)
         else:  # All Time
             start = datetime(2000, 1, 1)
             end = datetime(2100, 1, 1)
@@ -633,7 +617,7 @@ class AnalysisFrame(ttk.Frame):
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
 
-        for session_name, session_data in all_data.items():
+        for _, session_data in all_data.items():
             # Check if session is in date range
             session_date = datetime.strptime(
                 session_data.get("date", "2000-01-01"), "%Y-%m-%d"
@@ -714,6 +698,7 @@ class AnalysisFrame(ttk.Frame):
 
         Formats time strings for user-friendly timeline display.
         Converts from 24-hour format ("14:30:00") to 12-hour format ("02:30 PM").
+        Times are displayed in local system timezone (as originally captured).
 
         Called from:
         - render_timeline() - Timeline period start time display
@@ -729,6 +714,7 @@ class AnalysisFrame(ttk.Frame):
         Note:
             Gracefully handles malformed input by returning original string.
             Primarily used for user-facing time displays in timeline.
+            Does not perform timezone conversion - displays times as stored.
         """
         try:
             time_obj = datetime.strptime(time_str, "%H:%M:%S")
@@ -775,7 +761,7 @@ class AnalysisFrame(ttk.Frame):
         # Collect all periods
         timeline_data = []
 
-        for session_name, session_data in all_data.items():
+        for _, session_data in all_data.items():
             # Check if session is in date range
             session_date = datetime.strptime(
                 session_data.get("date", "2000-01-01"), "%Y-%m-%d"
@@ -797,26 +783,11 @@ class AnalysisFrame(ttk.Frame):
             )
 
             # Get session-level comments
-            # Handle both old format (direct fields) and new format (session_comments dict)
             session_comments_dict = session_data.get("session_comments", {})
-            if session_comments_dict:
-                # New format: session comments are in a nested dict
-                session_active_comments = session_comments_dict.get("active_notes", "")
-                break_notes = session_comments_dict.get("break_notes", "")
-                idle_notes = session_comments_dict.get("idle_notes", "")
-                session_notes = session_comments_dict.get("session_notes", "")
-            else:
-                # Old format: session comments are direct fields (backwards compatibility)
-                session_active_comments = session_data.get(
-                    "session_active_comments", ""
-                )
-                # For old format, we can't separate break and idle, so use the combined field for both
-                session_break_idle_comments = session_data.get(
-                    "session_break_idle_comments", ""
-                )
-                break_notes = session_break_idle_comments
-                idle_notes = session_break_idle_comments
-                session_notes = session_data.get("session_notes", "")
+            session_active_comments = session_comments_dict.get("active_notes", "")
+            break_notes = session_comments_dict.get("break_notes", "")
+            idle_notes = session_comments_dict.get("idle_notes", "")
+            session_notes = session_comments_dict.get("session_notes", "")
 
             # Add active periods
             for period in session_data.get("active", []):
@@ -934,7 +905,7 @@ class AnalysisFrame(ttk.Frame):
                         "secondary_project": secondary_action,
                         "secondary_comment": secondary_comment,
                         "session_active_comments": "",  # Don't show active comments on break periods
-                        "session_break_idle_comments": break_notes,  # Only show break notes on break periods
+                        "session_break_idle_comments": break_notes,  # Show break notes on break periods
                         "session_notes": session_notes,
                     }
                 )
@@ -987,7 +958,7 @@ class AnalysisFrame(ttk.Frame):
                             "secondary_project": secondary_action,
                             "secondary_comment": secondary_comment,
                             "session_active_comments": "",  # Don't show active comments on idle periods
-                            "session_break_idle_comments": idle_notes,  # Only show idle notes on idle periods
+                            "session_break_idle_comments": idle_notes,  # Show idle notes on idle periods
                             "session_notes": session_notes,
                         }
                     )
@@ -1103,10 +1074,8 @@ class AnalysisFrame(ttk.Frame):
         # Create label helper function
         col_idx = 0  # Track current column index
 
-        def create_label(
-            text, width, wraplength=0, expand=False, use_text_widget=False
-        ):
-            """Create a label or text widget with optional text wrapping
+        def add_column(text, width, wraplength=0, expand=False, use_text_widget=False):
+            """Add a column to the timeline row using Label or Text widget
 
             Args:
                 text: Text to display
@@ -1153,7 +1122,6 @@ class AnalysisFrame(ttk.Frame):
 
                 # NOTE: ScrollableFrame's bind_all handles mousewheel - no widget-specific binding needed
                 col_idx += 1
-                return txt
             else:
                 lbl = tk.Label(
                     row_frame,
@@ -1172,23 +1140,22 @@ class AnalysisFrame(ttk.Frame):
                     lbl.grid(row=0, column=col_idx, sticky=tk.W)
                 # NOTE: Removed mousewheel binding - ScrollableFrame handles it
                 col_idx += 1
-                return lbl
 
         # Render all columns with proper widths using grid layout
-        create_label(period["date"], 10)
-        create_label(self.format_time_12hr(period["period_start"]), 9)
-        create_label(self.format_duration(period["duration"]), 8)
-        create_label(period.get("sphere", ""), 12)
-        create_label("✓" if period.get("sphere_active", True) else "", 5)
-        create_label("✓" if period.get("project_active", True) else "", 5)
-        create_label(period["type"], 7)
-        create_label(period["primary_project"], 15)
-        create_label(period["primary_comment"], 21, use_text_widget=True)
-        create_label(period["secondary_project"], 15)
-        create_label(period["secondary_comment"], 21, use_text_widget=True)
-        create_label(period["session_active_comments"], 21, use_text_widget=True)
-        create_label(period["session_break_idle_comments"], 21, use_text_widget=True)
-        create_label(period["session_notes"], 21, use_text_widget=True, expand=True)
+        add_column(period["date"], 10)
+        add_column(self.format_time_12hr(period["period_start"]), 9)
+        add_column(self.format_duration(period["duration"]), 8)
+        add_column(period.get("sphere", ""), 12)
+        add_column("✓" if period.get("sphere_active", True) else "", 5)
+        add_column("✓" if period.get("project_active", True) else "", 5)
+        add_column(period["type"], 7)
+        add_column(period["primary_project"], 15)
+        add_column(period["primary_comment"], 21, use_text_widget=True)
+        add_column(period["secondary_project"], 15)
+        add_column(period["secondary_comment"], 21, use_text_widget=True)
+        add_column(period["session_active_comments"], 21, use_text_widget=True)
+        add_column(period["session_break_idle_comments"], 21, use_text_widget=True)
+        add_column(period["session_notes"], 21, use_text_widget=True, expand=True)
 
     def update_timeline(self):
         """Refresh the entire timeline display with pagination and sorting.
@@ -1473,7 +1440,7 @@ class AnalysisFrame(ttk.Frame):
         # Collect all periods
         periods = []
 
-        for session_name, session_data in all_data.items():
+        for _, session_data in all_data.items():
             session_date = datetime.strptime(
                 session_data.get("date", "2000-01-01"), "%Y-%m-%d"
             )

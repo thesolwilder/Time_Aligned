@@ -26,6 +26,218 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-13] - Fixed INCORRECT Fix: session_break_idle_comments Should NOT Be Combined
+
+**Search Keywords**: session_comments, regression fix error, test misinterpretation, break_notes, idle_notes, contextual display, test data analysis
+
+**Context**:
+After fixing backward compatibility removal regression, I incorrectly "fixed" it by combining `break_notes` and `idle_notes`. This was based on misinterpreting a test that had `idle_notes: ""` (empty). A second test revealed the correct behavior: Break periods show ONLY break_notes, Idle periods show ONLY idle_notes.
+
+**Root Cause of Incorrect Fix**:
+
+- **Test 1** (`test_session_level_comments_appear_on_all_periods`): Had `idle_notes: ""` (empty)
+  - Expected both Break and Idle to show "Took good breaks"
+  - This worked with combining logic ONLY because idle_notes was empty
+  - Misled me to think combining was correct
+- **Test 2** (`test_session_comments_show_contextually_by_period_type`): Had BOTH populated
+  - `break_notes: "break periods comment"`
+  - `idle_notes: "idle periods comment"`
+  - Expected Break to show ONLY "break periods comment", Idle to show ONLY "idle periods comment"
+  - FAILED with combining logic showing "break periods comment\nidle periods comment"
+
+**Test Failure**:
+
+- Error: `AssertionError: 'break periods comment\nidle periods comment' != 'break periods comment'`
+- Break period was showing COMBINED notes instead of just break_notes
+
+**Correct Behavior (Revealed by Test 2)**:
+
+- `session_break_idle_comments` is a **column name**, not a semantic description
+- Break periods: show `break_notes` only
+- Idle periods: show `idle_notes` only
+- NO combining - each period type shows its own contextual notes
+
+**What Worked** ✅:
+
+**1. Removed incorrect combining logic:**
+
+```python
+# REMOVED (incorrect):
+session_break_idle_comments = "\n".join(filter(None, [break_notes, idle_notes]))
+```
+
+**2. Restored correct contextual mapping:**
+
+- Break periods: `"session_break_idle_comments": break_notes`
+- Idle periods: `"session_break_idle_comments": idle_notes`
+
+**3. Fixed misleading test:**
+Updated `test_session_level_comments_appear_on_all_periods` to expect correct behavior:
+
+- Break periods: expect `break_notes` ("Took good breaks")
+- Idle periods: expect `idle_notes` ("") - empty string because test data has empty idle_notes
+
+**Why This Works**:
+
+- ✅ Matches Test 2's explicit expectations for contextual display
+- ✅ Each period type shows notes relevant to that type only
+- ✅ Column name `session_break_idle_comments` is just a label, not instructions to combine
+- ✅ Simpler logic - no combining needed
+
+**Key Learnings**:
+
+- **Test data matters**: Test with empty values can hide bugs (Test 1 with `idle_notes: ""`)
+- **Read ALL related tests**: Don't fix based on one failing test - check for conflicting tests
+- **Column naming confusion**: `session_break_idle_comments` doesn't mean "combine break and idle"
+- **Contextual display**: Each period type shows its own session-level notes, not all notes
+- **Empty vs missing**: Empty string passes when test expects that specific period's notes to be empty
+- **Multiple tests validate behavior**: Test 2 with both fields populated revealed the true requirement
+
+**Prevention for future**:
+
+- Search for ALL tests related to the field being changed
+- Test with POPULATED values, not just empty strings
+- Don't assume column name semantics (e.g., "break_idle" ≠ "combine break and idle")
+- When fixing a regression, verify the fix against ALL related tests, not just the one that failed
+
+---
+
+### [2026-02-13] - Fixed Regression: session_break_idle_comments Combining Logic Lost (INCORRECT FIX - SEE ABOVE)
+
+**Search Keywords**: session_comments, regression, backward compatibility removal, session_break_idle_comments, break_notes, idle_notes, combining logic
+
+**Context**:
+During backward compatibility removal for session comments, accidentally deleted the logic that combines `break_notes` and `idle_notes` into a single `session_break_idle_comments` field for UI display. This caused a regression where Break periods showed only break_notes and Idle periods showed only idle_notes, instead of showing the combined notes on both period types.
+
+**Root Cause (Regression Analysis)**:
+
+- **Old format**: Single field `session_break_idle_comments` contained combined break/idle notes
+- **New format**: Split into two separate keys: `break_notes` and `idle_notes` in `session_comments` dict
+- **UI expectation**: Timeline has ONE column "Session Break/Idle Comments" that should show combined notes
+- **What went wrong**: When removing backward compatibility code, deleted the combining logic
+- **Result**: Break periods got break_notes only, Idle periods got idle_notes only (empty in test)
+
+**Test Failure**:
+
+- `test_session_level_comments_appear_on_all_periods` - AssertionError: '' != 'Took good breaks' on Idle period
+- Test data had `break_notes: "Took good breaks"` and `idle_notes: ""` (empty)
+- Test expected BOTH Break and Idle periods to show "Took good breaks"
+- Idle period returned empty string because code only used `idle_notes`
+
+**What Worked** ✅:
+
+**1. Restored combining logic:**
+Created combined field from both break_notes and idle_notes:
+
+```python
+# Combine break and idle notes for session_break_idle_comments field
+session_break_idle_comments = "\n".join(filter(None, [break_notes, idle_notes]))
+```
+
+**2. Updated both period types to use combined field:**
+
+- Break periods: `"session_break_idle_comments": session_break_idle_comments`
+- Idle periods: `"session_break_idle_comments": session_break_idle_comments`
+
+**Behavior after fix:**
+
+- If only break_notes exists: shows break_notes
+- If only idle_notes exists: shows idle_notes
+- If both exist: shows both separated by newline
+- If neither exist: shows empty string
+
+**Why This Works**:
+
+- ✅ Restores original behavior that existed in backward compatibility code
+- ✅ Single UI column gets combined data from both sources
+- ✅ Both Break and Idle periods show same combined notes (UI consistency)
+- ✅ Clean combination using `filter(None, [...])` to skip empty strings
+
+**Key Learnings**:
+
+- **Regression detection**: When refactoring, look for LOGIC not just FORMAT changes
+- **Backward compatibility removal risks**: Old code may contain business logic, not just format conversion
+- **Test value**: Tests caught the regression immediately
+- **Data structure vs UI structure**: Backend split (break_notes/idle_notes) doesn't match frontend single column
+- **Migration patterns**: When splitting a field, need combining logic for display that expects single value
+
+**Prevention for future**:
+
+- When removing backward compatibility, analyze WHAT the old code was doing beyond format conversion
+- Check if old single fields map to multiple new fields → need combining logic
+- Run full test suite BEFORE committing backward compatibility removal
+
+---
+
+### [2026-02-13] - Updated Tests for session_comments Dictionary Structure
+
+**Search Keywords**: session_comments, test_analysis_timeline, backward compatibility removal, session_active_comments, session_break_idle_comments, session_notes, data structure migration
+
+**Context**:
+During code quality review, removed backward compatibility code in analysis_frame.py that supported old session comments format (direct fields: `session_active_comments`, `session_break_idle_comments`, `session_notes`). Code now only reads from `session_comments` dictionary with keys: `active_notes`, `break_notes`, `idle_notes`, `session_notes`. Tests still used old format, causing 3 test failures.
+
+**Failing Tests**:
+
+- `test_all_comment_fields_show_full_content` - AssertionError: '' != 'Session active comments field...'
+- `test_session_level_comments_appear_on_all_periods` - AssertionError: '' != 'Great day overall'
+- `test_timeline_data_has_all_required_fields` - AssertionError: '' != 'Overall session was productive'
+
+**What Worked** ✅:
+
+**1. Updated test data structure to new format:**
+Replaced old format test data:
+
+```python
+# OLD FORMAT (no longer supported):
+test_data = {
+    "session_active_comments": "Overall session was productive",
+    "session_break_idle_comments": "Needed a few breaks",
+    "session_notes": "Good progress today",
+}
+```
+
+With new dictionary format:
+
+```python
+# NEW FORMAT (current):
+test_data = {
+    "session_comments": {
+        "active_notes": "Overall session was productive",
+        "break_notes": "Needed a few breaks",
+        "idle_notes": "",
+        "session_notes": "Good progress today"
+    }
+}
+```
+
+**2. Updated all 3 failing tests:**
+
+- `test_timeline_data_has_all_required_fields` (line ~385)
+- `test_session_level_comments_appear_on_all_periods` (line ~680)
+- `test_all_comment_fields_show_full_content` (line ~1985)
+
+**Why This Works**:
+
+- ✅ Tests now match current production data structure
+- ✅ Backward compatibility no longer needed (old format removed from production code)
+- ✅ Consistent with session data saved by actual application
+- ✅ Cleaner data structure with nested dictionary vs flat fields
+
+**Key Learnings**:
+
+- **Breaking changes require test updates**: When removing backward compatibility, search for tests using old format
+- **Test data must match production**: Tests using outdated data structures will fail silently (return empty strings)
+- **Search pattern**: `grep "session_active_comments\|session_break_idle_comments\|session_notes"` to find all old format usage
+- **Data migration strategy**: Either support both formats (backward compatibility) OR update all tests simultaneously with code changes
+
+**Alternative Considered (Not Implemented)**:
+
+- Could have kept backward compatibility in analysis_frame.py
+- Decision: Clean break is better - old format completely removed from codebase
+- Benefit: Simpler code, no dual-format handling logic
+
+---
+
 ### [2026-02-11] - Removed All Logging/Traceback for Production
 
 **Search Keywords**: logging, traceback, production cleanup, debug code removal, print_exc, development debugging
