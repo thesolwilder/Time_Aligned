@@ -1191,13 +1191,6 @@ class AnalysisFrame(ttk.Frame):
         if not hasattr(self, "timeline_frame") or self.timeline_frame is None:
             return
 
-        # Check if timeline_frame is valid
-        try:
-            if not self.timeline_frame.winfo_exists():
-                return
-        except tk.TclError:
-            return
-
         # CRITICAL FIX: Clear children instead of destroying the frame itself
         # Destroying the frame was breaking the ScrollableFrame's canvas
         for widget in self.timeline_frame.winfo_children():
@@ -1300,7 +1293,7 @@ class AnalysisFrame(ttk.Frame):
                 anchor="w",
                 padx=3,
                 pady=6,  # Vertical padding to center with two-row headers
-                bg="#d0d0d0",
+                bg=COLOR_GRAY_BACKGROUND,
                 cursor="hand2",
             )
             label.grid(row=0, column=col_idx, sticky=tk.W)
@@ -1512,16 +1505,8 @@ class AnalysisFrame(ttk.Frame):
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
-                if session_comments_dict:
-                    session_active_comments = session_comments_dict.get(
-                        "active_notes", ""
-                    )
-                    session_notes = session_comments_dict.get("session_notes", "")
-                else:
-                    session_active_comments = session_data.get(
-                        "session_active_comments", ""
-                    )
-                    session_notes = session_data.get("session_notes", "")
+                session_active_comments = session_comments_dict.get("active_notes", "")
+                session_notes = session_comments_dict.get("session_notes", "")
 
                 periods.append(
                     {
@@ -1575,12 +1560,8 @@ class AnalysisFrame(ttk.Frame):
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
-                if session_comments_dict:
-                    break_notes = session_comments_dict.get("break_notes", "")
-                    session_notes = session_comments_dict.get("session_notes", "")
-                else:
-                    break_notes = session_data.get("session_break_idle_comments", "")
-                    session_notes = session_data.get("session_notes", "")
+                break_notes = session_comments_dict.get("break_notes", "")
+                session_notes = session_comments_dict.get("session_notes", "")
 
                 periods.append(
                     {
@@ -1635,12 +1616,8 @@ class AnalysisFrame(ttk.Frame):
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
-                if session_comments_dict:
-                    idle_notes = session_comments_dict.get("idle_notes", "")
-                    session_notes = session_comments_dict.get("session_notes", "")
-                else:
-                    idle_notes = session_data.get("session_break_idle_comments", "")
-                    session_notes = session_data.get("session_notes", "")
+                idle_notes = session_comments_dict.get("idle_notes", "")
+                session_notes = session_comments_dict.get("session_notes", "")
 
                 periods.append(
                     {
@@ -1669,7 +1646,7 @@ class AnalysisFrame(ttk.Frame):
         filename = filedialog.asksaveasfilename(
             defaultextension=".csv",
             filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            initialfile=f"time_tracker_{range_name.replace(' ', '_')}.csv",
+            initialfile=f"Time_Aligned_{range_name.replace(' ', '_')}.csv",
         )
 
         if not filename:
