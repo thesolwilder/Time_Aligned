@@ -26,6 +26,71 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-14] - Fixed Secondary Dropdown Bug for Interleaved Period Types
+
+**Search Keywords**: secondary_menus, interleaved periods, chronological order, update_project_dropdowns, update_break_action_dropdowns, range bug, period type checking
+
+**Context**:
+Discovered and fixed a bug where secondary dropdowns would get incorrect options after sphere changes or default project changes when periods were chronologically interleaved (Active → Break → Active → Idle → Active).
+
+**The Bug**:
+
+- `_update_project_dropdowns()` used `for i in range(project_count)` to update Active secondary dropdowns
+- `_update_break_action_dropdowns()` used `for i in range(project_count, len(self.secondary_menus))` to update Break/Idle secondary dropdowns
+- This assumed all Active periods come first in `self.secondary_menus`, then all Break/Idle periods
+- **WRONG**: `self.secondary_menus` is populated in chronological order as periods are created in the timeline loop
+- Periods are sorted by timestamp, not by type
+
+**Example That Triggers Bug**:
+Timeline: Active (9:00) → Break (9:15) → Active (9:20) → Idle (9:45) → Active (9:50)
+
+- `self.secondary_menus[0]` = Active secondary (projects)
+- `self.secondary_menus[1]` = Break secondary (actions)
+- `self.secondary_menus[2]` = Active secondary (projects)
+- `self.secondary_menus[3]` = Idle secondary (actions)
+- `self.secondary_menus[4]` = Active secondary (projects)
+
+When `project_count = 3`, `range(3, 5)` updates indices [3, 4]:
+
+- Index 3: Idle secondary ✓ Correct
+- Index 4: **Active secondary** ✗ BUG! Updates project dropdown with break action options
+
+**What Didn't Work**:
+
+- Using index ranges based on `project_count` to separate Active vs Break/Idle dropdowns
+- Assuming periods are grouped by type rather than chronological
+
+**What Worked**:
+
+```python
+# Instead of range-based indexing, iterate through all_periods and check type
+for i, period in enumerate(self.all_periods):
+    if i < len(self.secondary_menus) and period["type"] == "Active":
+        # Update with project options
+    elif i < len(self.secondary_menus) and period["type"] != "Active":
+        # Update with break action options
+```
+
+**Files Changed**:
+
+- `src/completion_frame.py`:
+  - `_update_project_dropdowns()`: Lines ~1582-1591, now iterates through `all_periods` checking type
+  - `_update_break_action_dropdowns()`: Lines ~1646-1655, now iterates through `all_periods` checking type
+- `tests/test_interleaved_periods_secondary_dropdown.py`: Created comprehensive integration test
+
+**Test Coverage**:
+
+- Test with exact scenario: Active → Break → Active → Idle → Active
+- Verifies secondary dropdowns maintain correct options after sphere change
+- Verifies secondary dropdowns maintain correct options after default project change (update_all=True)
+- Checks that Break/Idle secondaries never get project options
+- Checks that Active secondaries never get break action options
+
+**Key Insight**:
+When UI elements are created in a loop that processes chronologically-sorted data, you cannot use index arithmetic to separate by type. Always iterate with type checking when order is temporal, not categorical.
+
+---
+
 ### [2026-02-13] - Fixed INCORRECT Fix: session_break_idle_comments Should NOT Be Combined
 
 **Search Keywords**: session_comments, regression fix error, test misinterpretation, break_notes, idle_notes, contextual display, test data analysis

@@ -1551,7 +1551,13 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _update_project_dropdowns(self, update_all=False):
-        """Update all project dropdown menus when sphere selection changes"""
+        """Update all project dropdown menus when sphere selection changes
+
+        Args:
+            update_all: If True, sets all period dropdowns to match default_project_menu selection.
+                       If False (default), only updates dropdown options while preserving individual selections.
+                       Set to True when default_project_menu changes to sync all periods.
+        """
 
         # Get projects for the currently selected sphere
         active_projects, default_project = self._get_sphere_projects()
@@ -1574,10 +1580,9 @@ class CompletionFrame(ttk.Frame):
                 menu.set("Select Project")
 
         # Update secondary project dropdowns' options (but not their selection)
-        # Only update the ones that correspond to Active periods
-        project_count = len(self.project_menus)
-        for i in range(project_count):
-            if i < len(self.secondary_menus):
+        # Check period type to handle chronologically interleaved Active/Break/Idle periods
+        for i, period in enumerate(self.all_periods):
+            if i < len(self.secondary_menus) and period["type"] == "Active":
                 menu = self.secondary_menus[i]
                 current_val = menu.get()
                 menu["values"] = project_options
@@ -1599,7 +1604,13 @@ class CompletionFrame(ttk.Frame):
             self.default_project_menu.set("Select Project")
 
     def _update_break_action_dropdowns(self, update_all=False):
-        """Update all break action dropdown menus when break action selection changes"""
+        """Update all break action dropdown menus when break action selection changes
+
+        Args:
+            update_all: If True, sets all period dropdowns to match default_action_menu selection.
+                       If False (default), only updates dropdown options while preserving individual selections.
+                       Set to True when default_action_menu changes to sync all periods.
+        """
         break_actions, default_break_action = self.tracker.get_active_break_actions()
         action_options = list(break_actions) + ["Add New Break Action..."]
 
@@ -1617,7 +1628,9 @@ class CompletionFrame(ttk.Frame):
             else:
                 menu.set("Select Break Action")
 
-        # Update default action menu (once, outside loop)
+        # Update default action menu's options and preserve valid selection
+        # Handles changes to break action availability (e.g., newly added or removed actions)
+        # Falls back to default action or placeholder if current selection is no longer valid
         current_default = self.default_action_menu.get()
         self.default_action_menu.config(values=action_options)
 
@@ -1629,15 +1642,15 @@ class CompletionFrame(ttk.Frame):
             self.default_action_menu.set("Select Break Action")
 
         # Update secondary break/idle action dropdowns' options (but not their selection)
-        # Only update the ones that correspond to Break/Idle periods
-        project_count = len(self.project_menus)
-        for i in range(project_count, len(self.secondary_menus)):
-            menu = self.secondary_menus[i]
-            current_val = menu.get()
-            menu["values"] = action_options
-            # Keep current selection if still valid, otherwise clear
-            if current_val and current_val not in action_options:
-                menu.set("")
+        # Check period type to handle chronologically interleaved Active/Break/Idle periods
+        for i, period in enumerate(self.all_periods):
+            if i < len(self.secondary_menus) and period["type"] != "Active":
+                menu = self.secondary_menus[i]
+                current_val = menu.get()
+                menu["values"] = action_options
+                # Keep current selection if still valid, otherwise clear
+                if current_val and current_val not in action_options:
+                    menu.set("")
 
     def _create_session_notes(self):
         """Create the notes input section"""

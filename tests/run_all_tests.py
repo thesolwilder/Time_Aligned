@@ -14,6 +14,7 @@ import unittest
 import sys
 import os
 import gc
+import time
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -116,7 +117,10 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Discovering tests in: {test_dir}")
     print(f"Pattern: {pattern}\n")
 
+    start_time = time.time()
     result = runner.run(suite)
+    end_time = time.time()
+    total_seconds = end_time - start_time
 
     # Print failed/errored tests details
     if result.failures or result.errors:
@@ -129,22 +133,22 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
             for test, traceback in result.failures:
                 print(f"\n  - {test}")
                 # Extract the actual AssertionError message
-                lines = traceback.strip().split('\n')
-                
+                lines = traceback.strip().split("\n")
+
                 # Find the AssertionError line (contains the actual error message)
                 assertion_error = None
                 assertion_line = None
-                
+
                 for i, line in enumerate(lines):
-                    if line.strip().startswith('AssertionError:'):
+                    if line.strip().startswith("AssertionError:"):
                         assertion_error = line.strip()
                         # Look backwards for the assertion call
-                        for j in range(i-1, max(i-5, -1), -1):
-                            if 'self.assert' in lines[j]:
+                        for j in range(i - 1, max(i - 5, -1), -1):
+                            if "self.assert" in lines[j]:
                                 assertion_line = lines[j].strip()
                                 break
                         break
-                
+
                 if assertion_error:
                     if assertion_line:
                         print(f"    Failed: {assertion_line}")
@@ -161,12 +165,16 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
             for test, traceback in result.errors:
                 print(f"\n  - {test}")
                 # Extract the exception type and message
-                lines = traceback.strip().split('\n')
-                
+                lines = traceback.strip().split("\n")
+
                 # Find the actual exception line (usually last non-empty line)
                 for line in reversed(lines):
                     stripped = line.strip()
-                    if stripped and not stripped.startswith('File ') and ':' in stripped:
+                    if (
+                        stripped
+                        and not stripped.startswith("File ")
+                        and ":" in stripped
+                    ):
                         print(f"    {stripped}")
                         break
 
@@ -181,9 +189,7 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Failures: {len(result.failures)}")
     print(f"Errors: {len(result.errors)}")
     print(f"Skipped: {len(result.skipped)}")
-    print(f"{'='*70}\n")
-
-    return result
+    print(f"Total time: {total_seconds:.2f} seconds ({total_seconds/60:.2f} minutes)")
 
 
 def run_specific_test(test_name, verbosity=2):
@@ -253,6 +259,8 @@ Usage Examples:
 
 if __name__ == "__main__":
     # Parse command line arguments
+    result = None
+
     if len(sys.argv) > 1:
         arg = sys.argv[1]
 
@@ -277,4 +285,4 @@ if __name__ == "__main__":
         result = run_all_tests(verbosity=2)
 
     # Exit with appropriate code
-    sys.exit(0 if result.wasSuccessful() else 1)
+    sys.exit(0 if result and result.wasSuccessful() else 1)
