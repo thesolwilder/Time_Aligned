@@ -34,12 +34,14 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 Updated `google_sheets_integration.py` `_load_settings()` method to use production-quality error handling with specific exception types (FileNotFoundError, JSONDecodeError, PermissionError) and user-facing error dialogs via `messagebox.showerror()`. However, this caused tests to block waiting for user interaction when intentionally testing error conditions.
 
 **The Problem**:
+
 - Production code now calls `messagebox.showerror()` for JSON/permission errors
 - During tests, these dialogs block execution until user clicks "OK"
 - Tests that intentionally create invalid JSON files (empty files, malformed JSON) now require user interaction
 - Cannot run tests in CI/CD or headless environments
 
 **What Didn't Work**:
+
 - ❌ Using `messagebox.showerror()` directly in production code without considering test environments
 - ❌ Not mocking tkinter dialogs in tests that trigger error conditions
 
@@ -58,9 +60,9 @@ def test_load_settings_with_invalid_json(self, mock_error):
     """Test that invalid JSON triggers error dialog"""
     # Create empty/invalid JSON file
     invalid_file = self.file_manager.create_test_file("invalid.json", "")
-    
+
     uploader = GoogleSheetsUploader(invalid_file)
-    
+
     # Verify error dialog was called
     mock_error.assert_called_once()
     call_args = mock_error.call_args[0]
@@ -68,17 +70,20 @@ def test_load_settings_with_invalid_json(self, mock_error):
 ```
 
 **Files Changed**:
+
 - `src/google_sheets_integration.py`: Added `messagebox.showerror()` calls for JSONDecodeError, PermissionError, and general exceptions
 - `tests/test_google_sheets.py`: Added `@patch('src.google_sheets_integration.messagebox.showerror')` to all tests that trigger error conditions
 
 **Test Coverage Added**:
+
 - Test invalid JSON file handling (JSONDecodeError)
-- Test permission denied handling (PermissionError) 
+- Test permission denied handling (PermissionError)
 - Test unexpected errors handling (general Exception)
 - Verify error dialog messages are user-friendly
 - Verify FileNotFoundError doesn't show dialog (silent fallback)
 
 **Key Learnings**:
+
 1. **Always mock UI dialogs in tests** - messagebox, filedialog, any blocking tkinter components
 2. **Consider test environments** when adding user-facing error handling
 3. **Test the error handling itself** - verify dialogs are called with correct messages

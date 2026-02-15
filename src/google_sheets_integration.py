@@ -71,7 +71,7 @@ class GoogleSheetsUploader:
 
     def _load_settings(self):
         """Load settings from file with proper error handling.
-        
+
         Returns:
             dict: Settings dictionary, or empty dict if file doesn't exist or is invalid
         """
@@ -84,19 +84,19 @@ class GoogleSheetsUploader:
         except json.JSONDecodeError as e:
             messagebox.showerror(
                 "Settings Error",
-                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(e)}"
+                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(e)}",
             )
             return {}
         except PermissionError:
             messagebox.showerror(
                 "Settings Error",
-                f"Permission denied reading settings file:\n{self.settings_file}"
+                f"Permission denied reading settings file:\n{self.settings_file}",
             )
             return {}
         except Exception as e:
             messagebox.showerror(
                 "Settings Error",
-                f"Unexpected error loading settings:\n{type(e).__name__}: {str(e)}"
+                f"Unexpected error loading settings:\n{type(e).__name__}: {str(e)}",
             )
             return {}
 
@@ -246,7 +246,18 @@ class GoogleSheetsUploader:
             try:
                 with open(token_file, "rb") as token:
                     creds = pickle.load(token)
-            except Exception as error:
+            except PermissionError:
+                messagebox.showwarning(
+                    "Google Sheets Authentication",
+                    f"Permission denied reading authentication token:\n{token_file}\n\n"
+                    "You may need to check file permissions or run as administrator.",
+                )
+                creds = None
+            except (pickle.UnpicklingError, EOFError, ValueError):
+                # Corrupted/invalid token file - will re-authenticate automatically
+                creds = None
+            except Exception:
+                # Unexpected error - will attempt re-authentication
                 creds = None
 
         # If credentials are invalid or don't exist, get new ones

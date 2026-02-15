@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch, MagicMock, mock_open
 import json
 import os
 import sys
+import pickle
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -106,9 +107,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             from src.google_sheets_integration import GoogleSheetsUploader
 
             # Create file with invalid JSON (empty file)
-            invalid_file = self.file_manager.create_test_file(
-                "invalid_json.json", ""
-            )
+            invalid_file = self.file_manager.create_test_file("invalid_json.json", "")
 
             uploader = GoogleSheetsUploader(invalid_file)
 
@@ -187,7 +186,6 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             self.assertEqual(uploader.settings, {})
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
-
 
     @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
@@ -285,7 +283,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
             # Create uploader before patching open (so settings are loaded normally)
             uploader = GoogleSheetsUploader(self.test_settings_file)
-            
+
             # Now mock open only for the token file operation
             with patch("builtins.open", mock_open()):
                 result = uploader.authenticate()
@@ -299,7 +297,9 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
     @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_authentication_fails_without_credentials_file(self, mock_exists, mock_error):
+    def test_authentication_fails_without_credentials_file(
+        self, mock_exists, mock_error
+    ):
         """Test that authentication fails gracefully without credentials file"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -312,6 +312,59 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
             self.assertFalse(result)
             mock_error.assert_not_called()
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showwarning")
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
+    @patch("builtins.open", side_effect=PermissionError("Access denied"))
+    def test_authenticate_token_permission_error(
+        self, mock_open, mock_exists, mock_error, mock_warning
+    ):
+        """Test that permission errors on token file show warning"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+            result = uploader.authenticate()
+
+            # Should show warning for permission error
+            mock_warning.assert_called_once()
+            call_args = mock_warning.call_args[0]
+            self.assertIn("Permission denied", call_args[1])
+            self.assertIn("token", call_args[1].lower())
+
+            # Should attempt to continue (returns False since no credentials_file)
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showwarning")
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch(
+        "src.google_sheets_integration.pickle.load",
+        side_effect=pickle.UnpicklingError("Corrupted"),
+    )
+    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
+    def test_authenticate_corrupted_token_silent(
+        self, mock_exists, mock_pickle_load, mock_error, mock_warning
+    ):
+        """Test that corrupted token file doesn't show warning (auto-recovers)"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            with patch("builtins.open", mock_open()):
+                result = uploader.authenticate()
+
+            # Should NOT show any warnings for corrupted token (will re-auth)
+            mock_warning.assert_not_called()
+            mock_error.assert_not_called()
+
+            # Will fail because no credentials file, but that's expected
+            self.assertFalse(result)
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
