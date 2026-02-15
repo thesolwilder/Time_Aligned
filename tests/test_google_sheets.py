@@ -84,9 +84,115 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
         self.assertFalse(reloaded["google_sheets"]["enabled"])
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_load_settings_with_missing_file(self, mock_error):
+        """Test that missing settings file doesn't show error dialog (silent fallback)"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Use a file path that doesn't exist
+            uploader = GoogleSheetsUploader("nonexistent_file.json")
+
+            # Should return empty dict, no error dialog
+            self.assertEqual(uploader.settings, {})
+            mock_error.assert_not_called()
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_load_settings_with_invalid_json(self, mock_error):
+        """Test that invalid JSON triggers error dialog"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Create file with invalid JSON (empty file)
+            invalid_file = self.file_manager.create_test_file(
+                "invalid_json.json", ""
+            )
+
+            uploader = GoogleSheetsUploader(invalid_file)
+
+            # Should show error dialog for JSONDecodeError
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Settings Error")
+            self.assertIn("Invalid JSON", call_args[1])
+            self.assertIn(invalid_file, call_args[1])
+
+            # Should still return empty dict as fallback
+            self.assertEqual(uploader.settings, {})
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_load_settings_with_malformed_json(self, mock_error):
+        """Test that malformed JSON triggers error dialog"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Create file with malformed JSON
+            malformed_file = self.file_manager.create_test_file(
+                "malformed.json", '{"key": invalid}'
+            )
+
+            uploader = GoogleSheetsUploader(malformed_file)
+
+            # Should show error dialog
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertIn("Invalid JSON", call_args[1])
+
+            # Should return empty dict as fallback
+            self.assertEqual(uploader.settings, {})
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("builtins.open", side_effect=PermissionError("Access denied"))
+    def test_load_settings_with_permission_error(self, mock_open, mock_error):
+        """Test that permission errors trigger error dialog"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader("protected_file.json")
+
+            # Should show error dialog for PermissionError
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Settings Error")
+            self.assertIn("Permission denied", call_args[1])
+
+            # Should return empty dict as fallback
+            self.assertEqual(uploader.settings, {})
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("builtins.open", side_effect=OSError("Disk error"))
+    def test_load_settings_with_unexpected_error(self, mock_open, mock_error):
+        """Test that unexpected errors trigger error dialog"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader("problem_file.json")
+
+            # Should show error dialog for unexpected Exception
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Settings Error")
+            self.assertIn("Unexpected error", call_args[1])
+            self.assertIn("OSError", call_args[1])
+
+            # Should return empty dict as fallback
+            self.assertEqual(uploader.settings, {})
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
     @patch("src.google_sheets_integration.build")
-    def test_uploader_initialization(self, mock_build, mock_exists):
+    def test_uploader_initialization(self, mock_build, mock_exists, mock_error):
         """Test GoogleSheetsUploader initialization"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -96,11 +202,14 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             # Verify settings loaded
             self.assertIsNotNone(uploader.settings)
             self.assertEqual(uploader.settings_file, self.test_settings_file)
+            # No error dialog should be shown for valid settings
+            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_is_enabled_check(self, mock_exists):
+    def test_is_enabled_check(self, mock_exists, mock_error):
         """Test checking if Google Sheets upload is enabled"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -118,11 +227,14 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
             uploader2 = GoogleSheetsUploader(disabled_file)
             self.assertFalse(uploader2.is_enabled())
+            # No error dialogs for valid settings
+            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_get_spreadsheet_id(self, mock_exists):
+    def test_get_spreadsheet_id(self, mock_exists, mock_error):
         """Test retrieving spreadsheet ID from settings"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -131,11 +243,13 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             spreadsheet_id = uploader.get_spreadsheet_id()
 
             self.assertEqual(spreadsheet_id, "test_spreadsheet_123")
+            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_get_sheet_name(self, mock_exists):
+    def test_get_sheet_name(self, mock_exists, mock_error):
         """Test retrieving sheet name from settings"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -144,15 +258,16 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             sheet_name = uploader.get_sheet_name()
 
             self.assertEqual(sheet_name, "Sessions")
+            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    @patch("src.google_sheets_integration.os.path.exists")
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.build")
-    @patch("builtins.open", new_callable=mock_open)
     @patch("src.google_sheets_integration.pickle.load")
+    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
     def test_authenticate_with_existing_token(
-        self, mock_pickle_load, mock_file, mock_build, mock_exists
+        self, mock_exists, mock_pickle_load, mock_build, mock_error
     ):
         """Test authentication when valid token exists"""
         try:
@@ -164,24 +279,27 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             mock_creds.expired = False
             mock_pickle_load.return_value = mock_creds
 
-            # Mock file existence
-            mock_exists.return_value = True
-
             # Mock service build
             mock_service = Mock()
             mock_build.return_value = mock_service
 
+            # Create uploader before patching open (so settings are loaded normally)
             uploader = GoogleSheetsUploader(self.test_settings_file)
-            result = uploader.authenticate()
+            
+            # Now mock open only for the token file operation
+            with patch("builtins.open", mock_open()):
+                result = uploader.authenticate()
 
-            self.assertTrue(result)
-            self.assertIsNotNone(uploader.credentials)
-            self.assertIsNotNone(uploader.service)
+                self.assertTrue(result)
+                self.assertIsNotNone(uploader.credentials)
+                self.assertIsNotNone(uploader.service)
+                mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_authentication_fails_without_credentials_file(self, mock_exists):
+    def test_authentication_fails_without_credentials_file(self, mock_exists, mock_error):
         """Test that authentication fails gracefully without credentials file"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -193,6 +311,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             result = uploader.authenticate()
 
             self.assertFalse(result)
+            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 

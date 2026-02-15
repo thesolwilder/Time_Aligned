@@ -10,11 +10,14 @@ import json
 import pickle
 import re
 from datetime import datetime
+from tkinter import messagebox
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from src.constants import DEFAULT_SETTINGS_FILE
 
 # Scopes for Google Sheets API
 # Use read-only scope for viewing, full scope for editing
@@ -51,7 +54,7 @@ def escape_for_sheets(text):
 class GoogleSheetsUploader:
     """Handles uploading session data to Google Sheets"""
 
-    def __init__(self, settings_file="settings.json", read_only=False):
+    def __init__(self, settings_file=DEFAULT_SETTINGS_FILE, read_only=False):
         """
         Initialize the Google Sheets uploader
 
@@ -67,11 +70,34 @@ class GoogleSheetsUploader:
         self.scopes = SCOPES_READONLY if read_only else SCOPES_FULL
 
     def _load_settings(self):
-        """Load settings from file"""
+        """Load settings from file with proper error handling.
+        
+        Returns:
+            dict: Settings dictionary, or empty dict if file doesn't exist or is invalid
+        """
         try:
-            with open(self.settings_file, "r") as f:
+            with open(self.settings_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as error:
+        except FileNotFoundError:
+            # Settings file missing is acceptable - use defaults
+            return {}
+        except json.JSONDecodeError as e:
+            messagebox.showerror(
+                "Settings Error",
+                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(e)}"
+            )
+            return {}
+        except PermissionError:
+            messagebox.showerror(
+                "Settings Error",
+                f"Permission denied reading settings file:\n{self.settings_file}"
+            )
+            return {}
+        except Exception as e:
+            messagebox.showerror(
+                "Settings Error",
+                f"Unexpected error loading settings:\n{type(e).__name__}: {str(e)}"
+            )
             return {}
 
     def is_enabled(self):

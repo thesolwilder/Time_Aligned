@@ -819,6 +819,32 @@ def test_widget_width(self):
 - **Backups**: `backups/` directory
 - **Screenshots**: `screenshots/` directory (user data)
 - **Credentials**: `.gitignore` - never commit!
+- **Test credentials**: `tests/credentials.json` and `tests/token.pickle` exist for Google Sheets integration tests but are gitignored
+
+**⚠️ IMPORTANT: Test Google Sheets Files**
+
+The `tests/` directory contains duplicate Google Sheets authentication files:
+
+- `tests/credentials.json` - OAuth credentials for test Google Sheets
+- `tests/token.pickle` - Saved authentication token for tests
+
+These files are:
+
+- Required for Google Sheets integration tests to pass
+- Located in `tests/` directory (NOT root)
+- Excluded from git via `.gitignore`
+- Must exist for `test_google_sheets.py` to authenticate
+
+**Running Google Sheets Tests**:
+
+```bash
+# Must run from tests directory or with proper path
+cd tests
+python test_google_sheets.py
+
+# Or from root with proper venv
+.venv\Scripts\python.exe -m unittest tests.test_google_sheets
+```
 
 ### Adding New Files
 

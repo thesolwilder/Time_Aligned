@@ -37,10 +37,9 @@ DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS = 300  # seconds of idle before auto-break
 # UI Color Palette
 # =============================================================================
 
-# Status colors for session cards
+# Status colors for timeline (used in analysis_frame.py)
 COLOR_ACTIVE_LIGHT_GREEN = "#e8f5e9"  # Light green for active sessions
 COLOR_BREAK_LIGHT_ORANGE = "#fff3e0"  # Light orange for break sessions
-COLOR_COMPLETED_LIGHT_GRAY = "#f5f5f5"  # Light gray for completed sessions
 
 # UI accent colors
 COLOR_LINK_BLUE = "#0066CC"  # Hyperlink blue
@@ -95,3 +94,4 @@ DEFAULT_SETTINGS_FILE = "settings.json"
 DEFAULT_DATA_FILE = "data.json"
 DEFAULT_SCREENSHOT_FOLDER = "screenshots"
 DEFAULT_BACKUP_FOLDER = "backups"
+DEFAULT_GOOGLE_CREDENTIALS_FILE = "credentials.json"
