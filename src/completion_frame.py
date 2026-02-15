@@ -10,6 +10,8 @@ from datetime import datetime
 from tkinter import messagebox
 import os
 import subprocess
+import shutil
+import datetime as dt
 
 from src.constants import (
     DEFAULT_BACKUP_FOLDER,
@@ -1778,37 +1780,20 @@ class CompletionFrame(ttk.Frame):
             start_ts = period["start_timestamp"]
 
             # Get the primary text box value for this period
-            comment = (
-                self.text_boxes[idx].get().strip() if idx < len(self.text_boxes) else ""
-            )
+            comment = self.text_boxes[idx].get().strip()
 
             # Get secondary dropdown value if exists
-            secondary_value = ""
-            if idx < len(self.secondary_menus):
-                secondary_value = self.secondary_menus[idx].get().strip()
+            secondary_value = self.secondary_menus[idx].get().strip()
 
-            # Get percentage value for secondary (default 50 if not set)
-            secondary_percentage = 50
-            if idx < len(self.percentage_spinboxes):
-                try:
-                    secondary_percentage = int(self.percentage_spinboxes[idx].get())
-                except (ValueError, tk.TclError):
-                    secondary_percentage = 50
+            # Get percentage value for secondary
+            secondary_percentage = int(self.percentage_spinboxes[idx].get())
 
             # get the secondary text box value for this period
-            comment_secondary = (
-                self.secondary_text_boxes[idx].get().strip()
-                if idx < len(self.secondary_text_boxes)
-                else ""
-            )
+            comment_secondary = self.secondary_text_boxes[idx].get().strip()
 
             # Find and update the corresponding period in the session data
             if period_type == "Active":
-                project = (
-                    self.project_menus[project_idx].get()
-                    if project_idx < len(self.project_menus)
-                    else ""
-                )
+                project = self.project_menus[project_idx].get()
                 project_idx += 1
 
                 # Find matching active period by timestamp
@@ -1843,7 +1828,8 @@ class CompletionFrame(ttk.Frame):
                                     "project_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-project format keys
+                            # when switching to projects array (prevents conflicting data)
                             active_period.pop("project", None)
                             active_period.pop("comment", None)
                             active_period.pop("comment_secondary", None)
@@ -1856,17 +1842,14 @@ class CompletionFrame(ttk.Frame):
                             active_period["project"] = project
                             if comment:
                                 active_period["comment"] = comment
-                            # Remove projects array if it exists
+                            # Bidirectional format migration: remove projects array format
+                            # when switching to single project (prevents conflicting data)
                             active_period.pop("projects", None)
                             active_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Break":
-                break_action = (
-                    self.break_action_menus[break_action_idx].get()
-                    if break_action_idx < len(self.break_action_menus)
-                    else ""
-                )
+                break_action = self.break_action_menus[break_action_idx].get()
                 break_action_idx += 1
 
                 # Find matching break period by timestamp
@@ -1901,7 +1884,8 @@ class CompletionFrame(ttk.Frame):
                                     "break_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-action format keys
+                            # when switching to actions array (prevents conflicting data)
                             break_period.pop("action", None)
                             break_period.pop("comment", None)
                             break_period.pop("comment_secondary", None)
@@ -1914,17 +1898,14 @@ class CompletionFrame(ttk.Frame):
                             break_period["action"] = break_action
                             if comment:
                                 break_period["comment"] = comment
-                            # Remove actions array if it exists
+                            # Bidirectional format migration: remove actions array format
+                            # when switching to single action (prevents conflicting data)
                             break_period.pop("actions", None)
                             break_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Idle":
-                idle_action = (
-                    self.idle_action_menus[idle_action_idx].get()
-                    if idle_action_idx < len(self.idle_action_menus)
-                    else ""
-                )
+                idle_action = self.idle_action_menus[idle_action_idx].get()
                 idle_action_idx += 1
 
                 # Find matching idle period by timestamp
@@ -1959,7 +1940,8 @@ class CompletionFrame(ttk.Frame):
                                     "idle_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-action format keys
+                            # when switching to actions array (prevents conflicting data)
                             idle_period.pop("action", None)
                             idle_period.pop("comment", None)
                             idle_period.pop("comment_secondary", None)
@@ -1972,7 +1954,8 @@ class CompletionFrame(ttk.Frame):
                             idle_period["action"] = idle_action
                             if comment:
                                 idle_period["comment"] = comment
-                            # Remove actions array if it exists
+                            # Bidirectional format migration: remove actions array format
+                            # when switching to single action (prevents conflicting data)
                             idle_period.pop("actions", None)
                             idle_period.pop("comment_secondary", None)
                         break
@@ -1995,14 +1978,8 @@ class CompletionFrame(ttk.Frame):
         if not navigate:
             return
 
-        # Check if we're in session view mode
-        if (
-            hasattr(self.tracker, "session_view_frame")
-            and self.tracker.session_view_frame == self
-        ):
-            self.tracker.close_session_view()
-        else:
-            self.tracker.show_main_frame()
+        # Always navigate to main frame
+        self.tracker.show_main_frame()
 
     def _upload_to_google_sheets(self, session_data):
         """
@@ -2017,22 +1994,15 @@ class CompletionFrame(ttk.Frame):
             uploader = GoogleSheetsUploader(self.tracker.settings_file)
 
             if uploader.is_enabled():
-                success = uploader.upload_session(session_data, self.session_name)
+                uploader.upload_session(session_data, self.session_name)
         except ImportError:
             pass
-        except Exception as e:
+        except Exception:
             pass
 
     def skip_and_close(self):
-        """Return to appropriate frame without saving"""
-        # Check if we're in session view mode
-        if (
-            hasattr(self.tracker, "session_view_frame")
-            and self.tracker.session_view_frame == self
-        ):
-            self.tracker.close_session_view()
-        else:
-            self.tracker.show_main_frame()
+        """Return to main frame without saving"""
+        self.tracker.show_main_frame()
 
     def _delete_session(self):
         """Delete the current session after confirmation"""
@@ -2057,16 +2027,11 @@ class CompletionFrame(ttk.Frame):
 
             # Delete the session if it exists
             if self.session_name in all_data:
-                # Create backup before deletion
-                import shutil
-                import datetime
-                import os
-
                 # Ensure backups directory exists
                 backup_dir = DEFAULT_BACKUP_FOLDER
                 os.makedirs(backup_dir, exist_ok=True)
 
-                backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 backup_file = os.path.join(backup_dir, backup_filename)
                 try:
                     shutil.copy2(self.tracker.data_file, backup_file)

@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
 from src.completion_frame import CompletionFrame
-from tests.test_helpers import TestFileManager
+from tests.test_helpers import TestFileManager, safe_teardown_tk_root
 
 
 class TestInterleavedPeriodsSecondaryDropdowns(unittest.TestCase):
@@ -30,7 +30,7 @@ class TestInterleavedPeriodsSecondaryDropdowns(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        # DO NOT use self.addCleanup(self.root.destroy) - causes Tcl_AsyncDelete crashes!
 
         test_data = {}
         settings = {
@@ -288,6 +288,11 @@ class TestInterleavedPeriodsSecondaryDropdowns(unittest.TestCase):
             "BUG: Break secondary has project options after default project change!",
         )
         self.assertNotIn("Project B", break_secondary_values)
+
+    def tearDown(self):
+        """Clean up after tests - CRITICAL: Use safe_teardown_tk_root to avoid Tcl_AsyncDelete crashes"""
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
 
 
 if __name__ == "__main__":
