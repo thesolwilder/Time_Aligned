@@ -1482,5 +1482,196 @@ class TestProjectSphereChangeIntegration(unittest.TestCase):
         self.assertIn("Project1B", sphere2_projects)
 
 
-if __name__ == "__main__":
-    unittest.main()
+class TestIdleSettingsValidation(unittest.TestCase):
+    """Test validation for idle settings input - following TDD"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_idle_validation.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        # Create a minimal validation function to test
+        # This allows tests to RUN and FAIL, not ERROR
+
+    def tearDown(self):
+        """Clean up test files"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_validate_idle_threshold_function_exists(self):
+        """Test that validate_idle_threshold helper function exists in settings_frame"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Function should exist
+        self.assertIsNotNone(validate_idle_threshold)
+
+        # Should be callable
+        self.assertTrue(callable(validate_idle_threshold))
+
+    def test_validate_idle_threshold_accepts_valid_value(self):
+        """Test that validate_idle_threshold accepts valid numeric string"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test with valid value - should return integer
+        result = validate_idle_threshold("120")
+
+        # Should return the integer value, not None
+        self.assertEqual(result, 120)
+
+    def test_validate_idle_threshold_rejects_invalid_string(self):
+        """Test that validate_idle_threshold rejects non-numeric string"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test with invalid string
+        result = validate_idle_threshold("invalid_text")
+
+        # Should return None (validation failed)
+        self.assertIsNone(result)
+
+    def test_validate_idle_threshold_rejects_negative_value(self):
+        """Test that validate_idle_threshold rejects negative values"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test with negative value
+        result = validate_idle_threshold("-10")
+
+        # Should return None (validation failed)
+        self.assertIsNone(result)
+
+    def test_validate_idle_threshold_rejects_zero(self):
+        """Test that validate_idle_threshold rejects zero"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test with zero
+        result = validate_idle_threshold("0")
+
+        # Should return None (validation failed)
+        self.assertIsNone(result)
+
+    def test_validate_idle_threshold_accepts_boundary_values(self):
+        """Test that validate_idle_threshold accepts min (1) and max (600)"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test minimum value
+        result_min = validate_idle_threshold("1")
+        self.assertEqual(result_min, 1)
+
+        # Test maximum value
+        result_max = validate_idle_threshold("600")
+        self.assertEqual(result_max, 600)
+
+    def test_validate_idle_threshold_rejects_too_large_value(self):
+        """Test that validate_idle_threshold rejects values > 600"""
+        from src.settings_frame import validate_idle_threshold
+
+        # Test with value over max
+        result = validate_idle_threshold("601")
+
+        # Should return None (validation failed)
+        self.assertIsNone(result)
+
+
+class TestIdleSettingsUI(unittest.TestCase):
+    """Test idle settings UI displays values correctly"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        # Create settings with specific idle threshold
+        settings = TestDataGenerator.create_settings_data()
+        settings["idle_settings"] = {
+            "idle_tracking_enabled": True,
+            "idle_threshold": 120,  # Set to 120 for testing
+            "idle_break_threshold": 300,
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_idle_ui.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+
+    def tearDown(self):
+        """Clean up test files"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_idle_settings_loads_from_json(self):
+        """Test that idle settings from JSON are loaded correctly"""
+        # Verify tracker loaded settings correctly
+        self.assertEqual(self.tracker.settings["idle_settings"]["idle_threshold"], 120)
+
+        # Now create settings frame
+        frame = SettingsFrame(self.root, self.tracker, self.root)
+
+        # The frame should have created UI with the value 120
+        # We can verify by checking if save would work with the initial value
+        self.assertEqual(self.tracker.settings["idle_settings"]["idle_threshold"], 120)
+
+    def test_idle_threshold_spinbox_shows_value_from_settings(self):
+        """Test that idle threshold spinbox displays the value from settings.json on load"""
+        # Create settings frame - this should load settings and display in UI
+        frame = SettingsFrame(self.root, self.tracker, self.root)
+
+        # Force widget updates
+        self.root.update_idletasks()
+        self.root.update()
+
+        # Search through the frame to find the idle settings spinbox
+        found_spinbox = None
+        found_label = False
+
+        # The spinbox is in a LabelFrame created by _create_idle_settings_subsection
+        def find_widgets(widget, depth=0):
+            nonlocal found_spinbox, found_label
+
+            if depth > 10:  # Prevent infinite recursion
+                return
+
+            for child in widget.winfo_children():
+                # Look for the "Idle Threshold (seconds):" label to confirm we're in the right area
+                if isinstance(child, ttk.Label):
+                    label_text = child.cget("text")
+                    if "Idle Threshold (seconds)" in str(label_text):
+                        found_label = True
+
+                # Look for Spinbox widget
+                if (
+                    isinstance(child, ttk.Spinbox)
+                    and found_label
+                    and found_spinbox is None
+                ):
+                    # This should be the idle threshold spinbox (first spinbox after the label)
+                    found_spinbox = child
+                    return
+
+                # Recursively search children
+                find_widgets(child, depth + 1)
+
+        find_widgets(frame)
+
+        # Verify we found the spinbox
+        self.assertIsNotNone(
+            found_spinbox,
+            "Could not find idle threshold spinbox. Make sure _create_idle_settings_subsection creates the widget.",
+        )
+
+        # Get the displayed value
+        displayed_value = found_spinbox.get()
+
+        # The spinbox should display "120" from our test settings
+        self.assertEqual(
+            displayed_value,
+            "120",
+            f"Spinbox should display '120' from settings.json but displays '{displayed_value}'. "
+            f"Check that idle_threshold_spin.set() is called after widget creation.",
+        )

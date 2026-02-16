@@ -26,6 +26,492 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-16] - ACTUAL FIX: ttk.Spinbox with from\_/to CANNOT use textvariable!
+
+**Search Keywords**: spinbox blank, ttk.Spinbox display issue, textvariable with from\_/to, spinbox not showing value, idle threshold blank, spinbox from to range, delete insert spinbox
+
+**Context**:
+Spinbox with `from_=1, to=600` and `textvariable=IntVar(value=60)` displayed BLANK even though:
+
+- IntVar contained correct value (debug: `IntVar.get() = 5`)
+- `spinbox.get()` returned correct value ('5')
+- Value just wouldn't display in UI
+- User: "when i hit the up arrow once, it starts at 1" - ignoring initial value
+
+**Root Cause**:
+**ttk.Spinbox with `from_/to` range CANNOT use `textvariable` parameter!**
+The textvariable and from\_/to parameters conflict - spinbox displays blank when both present.
+
+**WORKING SOLUTION**:
+
+```python
+# Remove textvariable, use delete/insert instead
+idle_threshold_value = idle_settings.get("idle_threshold", 60)
+idle_threshold_spin = ttk.Spinbox(
+    idle_frame, from_=1, to=600, width=10  # NO textvariable!
+)
+idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
+# Set value AFTER grid
+idle_threshold_spin.delete(0, "end")
+idle_threshold_spin.insert(0, str(idle_threshold_value))
+```
+
+**What Didn't Work**:
+
+- ❌ `textvariable=IntVar(value=60)` - blank
+- ❌ `textvariable=StringVar(value="60")` - blank
+- ❌ `spinbox.set(value)` with textvariable - blank
+- ❌ All combinations of .set() before/after grid - blank
+
+**Key Learning**:
+**ttk.Spinbox TWO modes:**
+
+1. `values=(...)` mode: Use textvariable + `.set()` (discrete values)
+2. `from_/to` mode: NO textvariable, use `.delete()` + `.insert()` (numeric ranges)
+
+**Validation Still Works**: `spinbox.get()` returns string regardless of textvariable.
+
+**Files Modified**: `src/settings_frame.py` (line ~1092-1100)
+
+---
+
+### [2026-02-16] - SUPERSEDED: Wrong Diagnosis About IntVar vs StringVar
+
+**This entry was WRONG - StringVar doesn't work with ttk.Spinbox**
+
+**Search Keywords**: spinbox, ttk.Spinbox, textvariable, IntVar, blank spinbox, initial value not showing, idle threshold, settings display fix, validation
+
+**Context**:
+After adding validation for idle threshold, spinbox stopped displaying initial value from settings.json. User reported spinbox was blank when opening settings. It was working BEFORE validation was added.
+
+**Problem**:
+
+- Added `.set()` call to explicitly set spinbox value
+- Tried moving `.set()` before/after `.grid()`
+- None of these approaches worked
+- Original code WITHOUT `.set()` worked fine!
+
+**What Didn't Work**:
+❌ **Adding explicit `.set()` call after creating spinbox**:
+
+```python
+idle_threshold_spin = ttk.Spinbox(...)
+idle_threshold_spin.set(idle_settings.get("idle_threshold", 60))  # Didn't help!
+```
+
+❌ **Calling `.set()` after `.grid()`**:
+
+```python
+idle_threshold_spin.grid(...)
+idle_threshold_spin.set(idle_settings.get("idle_threshold", 60))  # Still didn't work!
+```
+
+**What Worked**:
+✅ **Keep ORIGINAL code - just use textvariable binding, NO .set() call needed**:
+
+```python
+# This is what WORKS (original code before validation):
+idle_threshold_var = tk.IntVar(
+    master=self.root, value=idle_settings.get("idle_threshold", 60)
+)
+idle_threshold_spin = ttk.Spinbox(
+    idle_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
+)
+idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
+# NO .set() call needed!
+```
+
+**Validation Implementation**:
+
+- Read from `idle_threshold_spin.get()` (widget) for validation (catches invalid text)
+- Keep `textvariable=idle_threshold_var` binding (handles initial display from settings)
+- IntVar binding works automatically - no manual `.set()` required!
+
+**Key Learnings**:
+
+1. **textvariable Binding Works Automatically**:
+   - When IntVar is created with value AND bound to widget with `textvariable`, it displays automatically
+   - No need for explicit `.set()` call
+   - Adding `.set()` doesn't help and may interfere
+
+2. **Validation Must Read from Widget, Not IntVar**:
+   - User can type invalid strings in Spinbox (e.g., "abc")
+   - IntVar will keep old valid value, but widget shows invalid text
+   - Must call `.get()` on widget to validate what user actually typed
+   - Cannot rely on IntVar for validation of user input
+
+3. **Hybrid Approach for Spinbox with Validation**:
+   - Use `textvariable=IntVar` for initial display from settings
+   - Read from widget `.get()` for validation of user changes
+   - Save validated value back to settings
+
+4. **Don't Fix What Isn't Broken**:
+   - Original code worked fine with just textvariable binding
+   - Adding "fixes" like `.set()` made it worse
+   - When adding validation, keep original display logic intact
+
+**Test Results**:
+
+- ✅ Spinbox displays initial value from settings.json
+- ✅ Validation catches invalid text input
+- ✅ All tests pass
+
+**Files Modified**:
+
+- `src/settings_frame.py`:
+  - Removed `.set()` call (lines ~1098) - reverted to original
+  - Validation reads from `idle_threshold_spin.get()` (line ~1130)
+
+**Related Entries**:
+
+- Search "validation" for input validation patterns
+- Search "IntVar" for other variable-bound widgets
+- Search "TDD" for test-driven development approach used
+
+---
+
+### [2026-02-16] - Added Input Validation with TDD for Idle Settings
+
+**Search Keywords**: TDD, test-driven development, input validation, idle threshold, spinbox validation, settings_frame, proper TDD, failing tests, DEVELOPMENT.md directives
+
+**Context**:
+User reported bug: Entering non-numeric string in idle threshold spinbox and clicking save showed no error message. Settings saved invalid data silently. Need to add validation following TDD approach from DEVELOPMENT.md.
+
+**Problem**:
+
+- User entered string ("invalid_text") in idle threshold spinbox
+- Clicked "Save Idle Settings" button
+- No error message appeared
+- No feedback that input was invalid
+- Silently failed to save or corrupted settings
+
+**What Didn't Work**:
+❌ **Writing tests that import non-existent functions**:
+
+- Initially tried to test `validate_idle_threshold` function that didn't exist
+- Got ImportError, not a failing test
+- This violates DEVELOPMENT.md directive: "Tests must RUN (not error), then FAIL, then PASS"
+- ImportError is a broken test, not a failing test
+- Corrected approach: Create stub function first, then write tests that FAIL
+
+**What Worked**:
+✅ **Following proper TDD workflow from DEVELOPMENT.md**:
+
+**Step 1: Write Import Test (Smoke Test)**
+
+- Created stub function `validate_idle_threshold()` that returns None
+- Wrote test to verify function exists and is callable
+- Test PASSED ✅
+
+**Step 2: Write Unit Tests (Should FAIL)**
+
+- Wrote 7 unit tests for validation function:
+  - `test_validate_idle_threshold_accepts_valid_value` - expects 120, got None ❌
+  - `test_validate_idle_threshold_rejects_invalid_string` - expects None ✅
+  - `test_validate_idle_threshold_rejects_negative_value` - expects None ✅
+  - `test_validate_idle_threshold_rejects_zero` - expects None ✅
+  - `test_validate_idle_threshold_accepts_boundary_values` - expects 1 and 600, got None ❌
+  - `test_validate_idle_threshold_rejects_too_large_value` - expects None ✅
+- Tests RAN (no ImportError) and FAILED (2 failures, 5 passes) ✅
+- This is correct TDD: tests run but fail because implementation is incomplete
+
+**Step 3: Implement Validation Function**
+
+- Added validation logic to `validate_idle_threshold()`:
+  ```python
+  def validate_idle_threshold(value_str):
+      try:
+          value = int(value_str)
+          if value < 1 or value > 600:
+              return None
+          return value
+      except (ValueError, TypeError):
+          return None
+  ```
+- All 7 validation tests now PASS ✅
+
+**Step 4: Integrate into save_idle_settings()**
+
+- Added validation call before saving:
+
+  ```python
+  def save_idle_settings():
+      threshold_str = idle_threshold_spin.get()
+      validated_threshold = validate_idle_threshold(threshold_str)
+
+      if validated_threshold is None:
+          messagebox.showerror(
+              "Invalid Idle Threshold",
+              f"Idle Threshold must be a numeric value between 1 and 600 seconds.\n\nYou entered: '{threshold_str}'"
+          )
+          return
+
+      # Continue with save...
+  ```
+
+- Now shows error message when validation fails
+- User gets clear feedback about what's wrong
+
+**Test Results**:
+
+- ✅ All 7 new validation tests pass
+- ✅ All 59 existing tests still pass
+- ✅ Total: 66 tests, 48.741 seconds, no regressions
+
+**Key Learnings**:
+
+1. **DEVELOPMENT.md TDD Directive Must Be Followed**:
+   - Tests must RUN (not throw ImportError)
+   - Tests should FAIL (incorrect behavior)
+   - Then implement to make them PASS
+   - ImportError = broken test, not failing test
+
+2. **Proper TDD Workflow**:
+   - Create stub/minimal implementation first
+   - Write tests that can RUN
+   - Verify tests FAIL for right reasons
+   - Implement to make tests PASS
+
+3. **Input Validation Pattern**:
+   - Extract validation into separate testable function
+   - Test validation function in isolation (unit tests)
+   - Integrate into UI save handlers
+   - Show clear error messages with what was entered
+
+4. **Spinbox Validation**:
+   - Spinbox allows any text entry, not just numbers
+   - Must validate with `.get()` before converting to int
+   - Return None for invalid, return int for valid
+   - Check both type (numeric) and range (1-600)
+
+5. **User Feedback is Critical**:
+   - Don't silently fail validation
+   - Show error dialog with specific problem
+   - Include what user entered in error message
+   - Only show success message after save completes
+
+**Files Modified**:
+
+- `src/settings_frame.py`:
+  - Added `validate_idle_threshold(value_str)` function (lines ~30-50)
+  - Modified `save_idle_settings()` nested function to validate before saving (lines ~1127-1155)
+- `tests/test_settings_frame.py`:
+  - Added `TestIdleSettingsValidation` class with 7 unit tests (lines ~1490-1580)
+
+**Related Entries**:
+
+- Search "validation" for other input validation patterns
+- Search "TDD" for test-driven development examples
+- Search "spinbox" for other numeric input widgets
+
+---
+
+### [2026-02-16] - Removed Unnecessary Wrapper Method (Dead Code Elimination)
+
+**Search Keywords**: dead code, unnecessary abstraction, wrapper method, create_break_idle_section, code quality, YAGNI (You Aren't Gonna Need It), over-engineering, settings_frame
+
+**Context**:
+After refactoring `create_break_idle_section()` from 288 lines into 4 methods, user identified that the resulting 11-line orchestrator method was unnecessary - it was just a thin wrapper calling 3 subsection methods with separators. The subsection calls could go directly in `create_widgets()` where they're actually used.
+
+**Problem**:
+
+- `create_break_idle_section()` added no value - just forwarded calls to private methods
+- Created unnecessary indirection level (extra method call)
+- Violated YAGNI principle (You Aren't Gonna Need It)
+- Only called once from `create_widgets()` - no reuse benefit
+
+**What Didn't Work**:
+N/A - Implemented on first try
+
+**What Worked**:
+✅ **Inlined the wrapper method calls directly into create_widgets()**:
+
+**Before** (unnecessary indirection):
+
+```python
+def create_widgets(self):
+    # ...
+    self.create_break_idle_section(content_frame)
+    # ...
+
+def create_break_idle_section(self, parent):
+    """Orchestrator that just calls other methods."""
+    self._create_break_actions_subsection(parent)
+    self._add_settings_separator(parent)
+    self._create_idle_settings_subsection(parent)
+    self._add_settings_separator(parent)
+    self._create_screenshot_settings_subsection(parent)
+```
+
+**After** (direct calls):
+
+```python
+def create_widgets(self):
+    # ...
+    # Break actions, idle settings, and screenshot settings
+    self._create_break_actions_subsection(content_frame)
+    self._add_settings_separator(content_frame)
+    self._create_idle_settings_subsection(content_frame)
+    self._add_settings_separator(content_frame)
+    self._create_screenshot_settings_subsection(content_frame)
+    # ...
+```
+
+**Implementation**:
+
+1. Moved 5 method calls from `create_break_idle_section()` into `create_widgets()`
+2. Deleted `create_break_idle_section()` method entirely
+3. Added comment documenting what the subsections are
+4. No logic changes - just removed unnecessary indirection
+
+**Test Results**:
+
+- ✅ All 59 tests pass (28.556 seconds)
+- ✅ No regressions
+- ✅ All subsections still function correctly
+- ✅ Code is cleaner and more direct
+
+**Key Learnings**:
+
+1. **YAGNI principle**: Don't create abstractions "just in case" - add them when actually needed
+2. **Single-use orchestrators are code smell**: If method is only called once and just forwards calls, inline it
+3. **Refactoring isn't always about adding abstractions**: Sometimes best refactoring is removing unnecessary ones
+4. **User feedback is valuable**: After refactoring, step back and evaluate if ALL changes add value
+5. **Dead code elimination**: Thin wrapper methods with no reuse are dead code disguised as abstraction
+
+**When Wrapper Methods Make Sense**:
+
+- ✅ Called from multiple places (code reuse)
+- ✅ Adds logic (validation, error handling, state management)
+- ✅ Part of public API (stable interface)
+- ✅ Simplifies complex parameter passing
+
+**When to Inline Instead**:
+
+- ❌ Only called once
+- ❌ Just forwards calls with no added logic
+- ❌ Creates unnecessary indirection
+- ❌ Doesn't improve readability (comment is clearer)
+
+**Files Modified**:
+
+1. **src/settings_frame.py** (lines 150-165, 1003-1018):
+   - Inlined 5 method calls from `create_break_idle_section()` into `create_widgets()`
+   - Deleted `create_break_idle_section()` method (11 lines removed)
+   - Added comment: "# Break actions, idle settings, and screenshot settings"
+   - Net result: Cleaner code, one fewer method, same functionality
+
+**Related Entries**:
+
+- [2026-02-16] - Refactored Large Method: 288 Lines → 4 Methods (the refactoring that created this wrapper)
+- Demonstrates importance of reviewing refactorings for over-engineering
+
+---
+
+### [2026-02-16] - Refactored Large Method: 288 Lines → 4 Methods (Single Responsibility Principle)
+
+**Search Keywords**: refactoring, large functions, Single Responsibility Principle, function decomposition, create_break_idle_section, settings_frame, code quality, PEP 8, 50 line guideline, method extraction, nested functions, closure
+
+**Context**:
+User identified `create_break_idle_section()` method as violating best practices - 288 lines performing THREE distinct responsibilities (Break Actions, Idle Settings, Screenshot Settings). Unlike the "[2026-02-11] - Decision: Leave Large Functions As-Is" entry for functions with intentional sequential logic, this method had clear boundaries between independent sections making it an ideal candidate for refactoring.
+
+**Problem**:
+
+- `create_break_idle_section()` was 288 lines (5.7x over ~50 line guideline)
+- **Violated Single Responsibility Principle**: Method did 3 unrelated things
+- Hard to test subsections independently
+- Three sections separated by comment blocks + Separator widgets (clear boundaries)
+- Zero interdependence between sections
+
+**What Didn't Work**:
+N/A - Implemented on first try
+
+**What Worked**:
+✅ **Extracted 4 methods with clear separation of concerns**:
+
+1. **Main orchestrator** (11 lines):
+
+```python
+def create_break_idle_section(self, parent):
+    """Create combined settings section for breaks, idle detection, and screenshots.
+
+    Orchestrates three independent subsections with separators between them.
+    Each subsection is self-contained and can be tested independently.
+    """
+    self._create_break_actions_subsection(parent)
+    self._add_settings_separator(parent)
+    self._create_idle_settings_subsection(parent)
+    self._add_settings_separator(parent)
+    self._create_screenshot_settings_subsection(parent)
+```
+
+2. **\_add_settings_separator()** (6 lines): Helper for horizontal separators
+
+3. **\_create_break_actions_subsection()** (26 lines): Break actions management UI
+
+4. **\_create_idle_settings_subsection()** (94 lines): Idle detection settings with nested save handler
+
+5. **\_create_screenshot_settings_subsection()** (113 lines): Screenshot settings with nested toggle/save handlers
+
+**Implementation Pattern**:
+
+- Main method = high-level orchestration (what happens, not how)
+- Private methods (\_prefix) = implementation details
+- Nested functions within subsections = save/toggle handlers using closure
+- Each subsection: creates frame, adds widgets, defines nested handlers, increments row counter
+- Clear docstrings documenting purpose and closure usage
+
+**Test Results**:
+
+- ✅ All 59 tests pass (31.636 seconds)
+- ✅ No regressions
+- ✅ Break actions, idle settings, screenshot settings all functional
+- ✅ Row counter increments correctly across all subsections
+
+**Key Learnings**:
+
+1. **When to refactor vs. when not to**:
+   - DON'T refactor: Sequential logic with interdependence (export workflows)
+   - DO refactor: Independent sections with clear boundaries (UI subsections)
+
+2. **Refactoring checklist**:
+   - ✅ Clear boundaries between sections (comment blocks, separators)
+   - ✅ Zero interdependence (can reorder subsections)
+   - ✅ Each section self-contained (own frame, own variables)
+   - ✅ Low risk (just code movement)
+
+3. **Method naming conventions**:
+   - Public orchestrator: `create_break_idle_section()`
+   - Private helpers: `_create_idle_settings_subsection()`
+   - Nested handlers: `save_idle_settings()` (closure over variables)
+
+4. **Benefits realized**:
+   - Main method = 11-line overview (readable at a glance)
+   - Each subsection 26-113 lines (reasonable range)
+   - Can test subsections independently
+   - Method names document what each section does
+   - Nested functions keep handlers with their widgets
+
+5. **Closure pattern consistency**: Same pattern as recent toggle_project_edit refactoring - nested functions access parent scope, no parameter passing needed
+
+**Files Modified**:
+
+1. **src/settings_frame.py** (lines 1004-1291):
+   - Replaced 288-line method with 5 methods (total ~250 lines with added docstrings)
+   - Main method: 11 lines
+   - Separator helper: 6 lines
+   - Break actions subsection: 26 lines
+   - Idle settings subsection: 94 lines
+   - Screenshot settings subsection: 113 lines
+   - Net result: Better structure, improved readability, testable subsections
+
+**Related Entries**:
+
+- [2026-02-16] - Refactored Project Edit Function: 11 Parameters → Nested Function with Closure (same closure pattern)
+- [2026-02-11] - Decision: Leave Large Functions As-Is (Pragmatic Refactoring) (contrast: when NOT to refactor)
+
+---
+
 ### [2026-02-16] - Refactored Project Edit Function: 11 Parameters → Nested Function with Closure
 
 **Search Keywords**: refactoring, code smell, too many parameters, nested function, closure, toggle_project_edit, settings_frame, code quality, PEP 8, best practices, function parameters, Tkinter callbacks

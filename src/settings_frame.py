@@ -28,6 +28,30 @@ from src.constants import (
 )
 
 
+def validate_idle_threshold(value_str):
+    """
+    Validate idle threshold input.
+
+    Args:
+        value_str: String value from spinbox input
+
+    Returns:
+        int: Valid threshold value (1-600) if validation passes
+        None: If validation fails
+    """
+    try:
+        value = int(value_str)
+
+        # Check range: must be between 1 and 600 seconds
+        if value < 1 or value > 600:
+            return None
+
+        return value
+    except (ValueError, TypeError):
+        # Not a valid integer
+        return None
+
+
 def extract_spreadsheet_id_from_url(value):
     """
     Extract spreadsheet ID from Google Sheets URL or return value unchanged.
@@ -125,10 +149,7 @@ class SettingsFrame(ttk.Frame):
         back_button_top.bind("<Button-1>", lambda e: self.tracker.close_settings())
         self.row += 1
 
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # Sphere management section
         self.create_sphere_section(content_frame)
@@ -140,49 +161,39 @@ class SettingsFrame(ttk.Frame):
         self.create_project_section(content_frame)
         self.row += 20  # Reserve space for project section
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
-        # Break actions and idle settings
-        self.create_break_idle_section(content_frame)
+        # Break actions, idle settings, and screenshot settings
+        self._create_break_actions_subsection(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
+
+        self._create_idle_settings_subsection(content_frame)
+
+        self._add_settings_separator(content_frame)
+
+        self._create_screenshot_settings_subsection(content_frame)
+
+        self._add_settings_separator(content_frame)
 
         # Google Sheets integration section
         self.create_google_sheets_section(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # Keyboard shortcuts reference section
         self.create_keyboard_shortcuts_section(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # CSV Export section
         self.create_csv_export_section(content_frame)
 
-        # Back button
+        
         self.row += 1
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
+        # Back button
         back_button_bottom = tk.Label(
             content_frame,
             text="← Back to Tracker",
@@ -1001,54 +1012,23 @@ class SettingsFrame(ttk.Frame):
         self.save_settings()
         self.refresh_project_section()
 
-    def create_break_idle_section(self, parent):
-        """Create combined break actions and idle detection settings section.
+    def _add_settings_separator(self, parent):
+        """Add horizontal separator between settings sections."""
+        ttk.Separator(parent, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
 
-        Two-part section:
+    def _create_break_actions_subsection(self, parent):
+        """Create break actions management UI subsection.
 
-        Part 1: Break Actions Management
-        - List of break actions with edit/archive/delete buttons
-        - Default checkbox for each action
-        - "Add Break Action" button
-        - Similar UI to projects but simpler (no sphere association)
+        Creates a labeled frame containing the break actions list with:
+        - Add break action button
+        - List of break actions (editable, archivable, deletable)
+        - Default break action selection
 
-        Part 2: Idle Detection Settings
-        - Idle threshold slider (seconds before marking idle)
-        - Idle break threshold slider (seconds before auto-starting break)
-        - Real-time value labels showing current settings
-
-        Part 3: Screenshot Capture Settings
-        - Enable/disable screenshot capture checkbox
-        - Capture on window focus change checkbox
-        - Min seconds between captures input
-        - Screenshot folder path display and browse button
-
-        Break actions rows contain:
-        - Action name (editable when "Edit" clicked)
-        - Default checkbox (sets as default break action)
-        - Edit/Save button
-        - Archive/Activate button
-        - Delete button
-
-        Idle thresholds:
-        - Idle threshold: 30-600 seconds (default 60)
-        - Idle break threshold: 60-1800 seconds (default 300)
-        - Both use Scale widgets with value labels
-
-        Side effects:
-            - Creates break actions list UI
-            - Creates idle threshold scales
-            - Creates screenshot settings controls
-            - Calls refresh_break_actions() to populate list
-            - Binds scale movements to setting updates
-            - Increments row counter multiple times
-
-        Note:
-            Break actions are global (not sphere-specific like projects).
-            Idle thresholds apply to all sessions.
+        Note: Break actions are global (not sphere-specific like projects).
         """
-        # BREAK ACTIONS SECTION (First)
-
         break_frame = ttk.LabelFrame(parent, padding=10)
         break_frame.grid(
             row=self.row,
@@ -1065,13 +1045,17 @@ class SettingsFrame(ttk.Frame):
 
         self.create_break_actions_list(break_frame)
 
-        # SEPARATOR
-        ttk.Separator(parent, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+    def _create_idle_settings_subsection(self, parent):
+        """Create idle detection settings UI subsection.
 
-        # IDLE SETTINGS SECTION (Second)
+        Creates a labeled frame with controls for:
+        - Enable/disable idle tracking
+        - Idle threshold (seconds before marking idle)
+        - Auto-break threshold (seconds idle before auto-starting break)
+        - Save button with nested handler
+
+        Uses nested save function to access variables via closure.
+        """
         idle_frame = ttk.LabelFrame(parent, padding=10)
         idle_frame.grid(
             row=self.row,
@@ -1110,13 +1094,17 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
-        idle_threshold_var = tk.IntVar(
-            master=self.root, value=idle_settings.get("idle_threshold", 60)
-        )
+        # Get value from settings, textvariable= doesn't work well with validation, 
+        # so we'll set value manually after creating the Spinbox
+        idle_threshold_value = idle_settings.get("idle_threshold", 60)
         idle_threshold_spin = ttk.Spinbox(
-            idle_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
+            idle_frame, from_=1, to=600, width=10
         )
         idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
+
+        # Set value after grid using insert
+        idle_threshold_spin.delete(0, "end")
+        idle_threshold_spin.insert(0, str(idle_threshold_value))
         idle_row += 1
 
         # Idle break threshold
@@ -1146,14 +1134,28 @@ class SettingsFrame(ttk.Frame):
         idle_break_combo.pack()
         idle_row += 1
 
-        # Save idle settings button
+        # Define nested save function with closure over widget variables
         def save_idle_settings():
+            """Save idle settings - uses closure to access parent scope variables."""
+            # Validate idle threshold - read from spinbox widget (to catch invalid text input)
+            # User can type invalid strings even though it's bound to IntVar
+            threshold_str = idle_threshold_spin.get()
+            validated_threshold = validate_idle_threshold(threshold_str)
+
+            if validated_threshold is None:
+                messagebox.showerror(
+                    "Invalid Idle Threshold",
+                    f"Idle Threshold must be a numeric value between 1 and 600 seconds.\n\nYou entered: '{threshold_str}'",
+                )
+                return
+
+            # All validation passed - save settings
             self.tracker.settings["idle_settings"][
                 "idle_tracking_enabled"
             ] = idle_enabled_var.get()
             self.tracker.settings["idle_settings"][
                 "idle_threshold"
-            ] = idle_threshold_var.get()
+            ] = validated_threshold
 
             break_val = idle_break_var.get()
             if break_val == "Never":
@@ -1170,13 +1172,18 @@ class SettingsFrame(ttk.Frame):
             idle_frame, text="Save Idle Settings", command=save_idle_settings
         ).grid(row=idle_row, column=0, columnspan=2, pady=10)
 
-        # SEPARATOR
-        ttk.Separator(parent, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+    def _create_screenshot_settings_subsection(self, parent):
+        """Create screenshot capture settings UI subsection.
 
-        # SCREENSHOT SETTINGS SECTION (Third)
+        Creates a labeled frame with controls for:
+        - Enable/disable screenshot capture
+        - Warning message about sensitive data (conditionally shown)
+        - Capture on window focus change
+        - Min seconds between captures
+        - Save button with nested handler
+
+        Uses nested functions for toggle_warning and save handlers via closure.
+        """
         screenshot_frame = ttk.LabelFrame(parent, padding=10)
         screenshot_frame.grid(
             row=self.row,
@@ -1216,7 +1223,9 @@ class SettingsFrame(ttk.Frame):
             justify=tk.LEFT,
         )
 
+        # Define nested toggle function with closure over warning_label
         def toggle_warning():
+            """Toggle warning visibility - uses closure to access warning_label."""
             if screenshot_enabled_var.get():
                 warning_label.grid(
                     row=screenshot_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
@@ -1265,8 +1274,9 @@ class SettingsFrame(ttk.Frame):
         min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, padx=5)
         screenshot_row += 1
 
-        # Save screenshot settings button
+        # Define nested save function with closure over widget variables
         def save_screenshot_settings():
+            """Save screenshot settings - uses closure to access parent scope variables."""
             self.tracker.settings["screenshot_settings"] = {
                 "enabled": screenshot_enabled_var.get(),
                 "capture_on_focus_change": capture_on_focus_var.get(),
