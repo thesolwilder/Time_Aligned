@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 import pystray
 from pynput import mouse, keyboard
 
-from src.ui_helpers import ScrollableFrame
+from src.ui_helpers import ScrollableFrame, get_frame_background
 from src.completion_frame import CompletionFrame
 from src.settings_frame import SettingsFrame
 from src.analysis_frame import AnalysisFrame
@@ -321,11 +321,15 @@ class TimeTracker:
         top_right_frame = ttk.Frame(main_frame)
         top_right_frame.grid(row=0, column=2, sticky=tk.E, pady=5)
 
+        # Get background color to match frame
+        frame_bg = get_frame_background()
+
         # Settings link (top right)
         settings_link = tk.Label(
             top_right_frame,
             text="Settings",
             fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
             cursor="hand2",
             font=FONT_LINK,
         )
@@ -337,6 +341,7 @@ class TimeTracker:
             top_right_frame,
             text="Analysis",
             fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
             cursor="hand2",
             font=FONT_LINK,
         )
@@ -348,6 +353,7 @@ class TimeTracker:
             top_right_frame,
             text="Session View",
             fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
             cursor="hand2",
             font=FONT_LINK,
         )

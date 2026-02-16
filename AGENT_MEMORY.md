@@ -14,10 +14,10 @@
 
 When working on a task, search for:
 
-- **Module/file names**: "analysis_frame", "timeline", "backup", "export"
-- **Technologies**: "tkinter", "pandas", "CSV", "JSON", "Google Sheets"
+- **Module/file names**: "analysis_frame", "timeline", "backup", "export", "screenshot_capture"
+- **Technologies**: "tkinter", "pandas", "CSV", "JSON", "Google Sheets", "threading"
 - **Error keywords**: "geometry manager", "headless", "width", "TclError", "UnboundLocalError", "bind_all", "unbind_all"
-- **Feature areas**: "columns", "filtering", "sorting", "radio buttons"
+- **Feature areas**: "columns", "filtering", "sorting", "radio buttons", "screenshots", "monitoring"
 - **Component types**: "header", "row", "canvas", "frame", "label", "ScrollableFrame"
 
 Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to find known issues.
@@ -25,6 +25,256 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 ---
 
 ## Recent Changes
+
+### [2026-02-16] - Added Unit Tests for extract_spreadsheet_id_from_url Utility Function
+
+**Search Keywords**: extract_spreadsheet_id_from_url tests, Google Sheets URL parsing, spreadsheet ID extraction, regex URL parsing, settings_frame tests, utility function tests
+
+**Context**:
+User requested adding tests for settings_frame module following TDD workflow (#t shortcut). Existing test_settings_frame.py had comprehensive UI tests but was missing tests for the `extract_spreadsheet_id_from_url()` utility function that parses Google Sheets URLs.
+
+**The Problem**:
+
+- `extract_spreadsheet_id_from_url()` had no unit tests
+- Function handles multiple URL formats and edge cases (plain IDs, URLs with parameters, invalid URLs)
+- No validation that regex pattern correctly extracts IDs from various URL formats
+- Missing coverage for edge cases (None, empty string, invalid URLs)
+
+**What Worked** ✅:
+
+**1. Added 9 comprehensive unit tests for URL parsing:**
+
+File: [tests/test_settings_frame.py](tests/test_settings_frame.py) - New class `TestExtractSpreadsheetIdFromUrl`
+
+**Test coverage (all 9 tests passing):**
+
+```python
+class TestExtractSpreadsheetIdFromUrl(unittest.TestCase):
+    - test_extract_from_standard_url           # Standard /edit URL
+    - test_extract_from_url_with_gid          # URL with #gid=0 parameter
+    - test_extract_from_url_with_range        # URL with cell range
+    - test_plain_id_returned_unchanged        # Plain ID passthrough
+    - test_empty_string_returns_empty         # Empty string → ""
+    - test_none_returns_empty                 # None → ""
+    - test_invalid_url_returned_unchanged     # Non-Sheets URL passthrough
+    - test_id_with_hyphens_and_underscores   # IDs with - and _
+    - test_url_without_edit_suffix           # URL without /edit
+```
+
+**2. Test pattern for utility functions:**
+
+```python
+def test_extract_from_standard_url(self):
+    """Test extraction from standard Google Sheets URL"""
+    from src.settings_frame import extract_spreadsheet_id_from_url
+
+    url = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+    result = extract_spreadsheet_id_from_url(url)
+
+    self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+```
+
+**3. Tested all URL format variations:**
+
+- ✅ Standard URL with /edit: `https://docs.google.com/.../d/ID/edit`
+- ✅ URL with gid parameter: `.../edit#gid=0`
+- ✅ URL with range: `.../edit#gid=0&range=A1:B2`
+- ✅ URL without /edit suffix: `.../d/ID` (no /edit)
+- ✅ Plain ID: `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms`
+- ✅ IDs with hyphens/underscores: `ABC123-def_456-GHI`
+
+**4. Edge cases covered:**
+
+- Empty string → returns ""
+- None → returns ""
+- Invalid URL → returns unchanged (passthrough)
+
+**Test Results**:
+
+```
+Ran 9 tests in 0.001s
+OK
+```
+
+- ✅ All 9 tests PASS
+- ✅ No tkinter components involved (pure utility function)
+- ✅ Fast execution (0.001s - no UI overhead)
+- ✅ No mocking required (pure function with no side effects)
+
+**What Didn't Work** ❌:
+
+None - tests passed on first run. Utility function testing is straightforward when function is pure (no side effects, no external dependencies).
+
+**Key Learnings**:
+
+1. **Utility functions are easy to test**: Pure functions with no side effects = simple, fast tests
+2. **Test all input variations**: URLs with/without parameters, plain IDs, None, empty strings
+3. **No tkinter overhead**: Utility function tests run in 0.001s vs UI tests taking seconds
+4. **Edge case testing critical**: None and empty string handling prevents production bugs
+5. **Regex validation**: Tests verify regex pattern handles all valid Google Sheets URL formats
+6. **No mocking needed**: Pure functions with string input/output don't need complex mocking
+
+**Prevention for Future**:
+
+- Always add unit tests for utility functions BEFORE they're used in production
+- Test all expected input formats (URLs, IDs, edge cases)
+- Test error cases (None, empty, invalid) to prevent crashes
+- Pure utility functions should be tested independently from UI components
+- Document expected URL formats in tests (serves as living documentation)
+
+**Related Entries**:
+
+- See entry above ([2026-02-16] - screenshot_capture tests) for TDD workflow with complex lifecycle
+- Settings frame has existing comprehensive UI tests (9 test classes with tkinter components)
+
+---
+
+### [2026-02-16] - Added Comprehensive Unit Tests for ScreenshotCapture Module
+
+**Search Keywords**: screenshot tests, screenshot_capture testing, TDD screenshot, unit tests screenshots, monitoring lifecycle, settings hot-reload, session management, defensive copy, threading tests
+
+**Context**:
+User requested adding tests for screenshot_capture module following TDD workflow (#t shortcut). Existing test_screenshots.py only had 2 basic configuration tests. Added 14 comprehensive unit tests covering initialization, monitoring lifecycle, session management, and settings updates.
+
+**The Problem**:
+
+- screenshot_capture.py had minimal test coverage (only 2 settings tests)
+- No tests for monitoring start/stop lifecycle
+- No tests for session/period folder creation
+- No tests for settings hot-reload (update_settings)
+- No tests for defensive copy pattern in get_current_period_screenshots
+
+**What Worked** ✅:
+
+**1. Followed TDD workflow - wrote tests FIRST before any implementation:**
+
+File: [tests/test_screenshots.py](tests/test_screenshots.py)
+
+**Test progression (16 total tests, all passing):**
+
+```python
+# 1. Import/Settings Tests (existing + expanded)
+class TestScreenshotSettings(unittest.TestCase):
+    - test_screenshot_settings_exist
+    - test_min_seconds_setting
+
+# 2. Initialization Tests (NEW)
+class TestScreenshotCaptureInit(unittest.TestCase):
+    - test_init_loads_settings          # Verify settings loaded correctly
+    - test_init_with_enabled_screenshots  # Test enabled=True path
+    - test_init_state_variables          # Verify all state initialized
+
+# 3. Monitoring Lifecycle Tests (NEW)
+class TestScreenshotMonitoring(unittest.TestCase):
+    - test_start_monitoring_when_enabled   # Verify thread starts
+    - test_start_monitoring_when_disabled  # Verify no thread when disabled
+    - test_start_monitoring_idempotent    # Multiple calls = same thread
+    - test_stop_monitoring                 # Clean shutdown
+
+# 4. Session Management Tests (NEW)
+class TestScreenshotSessionManagement(unittest.TestCase):
+    - test_set_current_session_creates_folder  # Folder path construction
+    - test_set_current_session_with_none_clears_folder  # None clears state
+    - test_get_screenshot_folder_path          # Getter returns correct path
+    - test_get_current_period_screenshots_returns_copy  # Defensive copy
+
+# 5. Settings Update Tests (NEW)
+class TestScreenshotSettingsUpdate(unittest.TestCase):
+    - test_update_settings_reloads_config  # Hot-reload all settings
+    - test_update_settings_starts_monitoring_when_enabled  # Auto-start
+    - test_update_settings_stops_monitoring_when_disabled  # Auto-stop
+```
+
+**Key testing patterns used:**
+
+```python
+# Pattern 1: Mock os.makedirs to avoid filesystem operations
+@patch("os.makedirs")
+def test_set_current_session_creates_folder(self, mock_makedirs):
+    capture.set_current_session("2026-02-16_143022", "active", 0)
+    mock_makedirs.assert_called_once_with(expected_path, exist_ok=True)
+
+# Pattern 2: Test defensive copy (prevent external mutation)
+def test_get_current_period_screenshots_returns_copy(self):
+    screenshots = capture.get_current_period_screenshots()
+    screenshots.append({"filepath": "test3.png"})  # Modify copy
+    # Verify original not modified
+    self.assertEqual(len(capture.current_period_screenshots), 2)
+
+# Pattern 3: Test settings hot-reload with monitoring thread lifecycle
+def test_update_settings_starts_monitoring_when_enabled(self):
+    new_settings["screenshot_settings"]["enabled"] = True
+    capture.update_settings(new_settings)
+    self.assertTrue(capture.monitoring)  # Thread auto-started
+    capture.stop_monitoring()  # Clean up
+```
+
+**2. Used TestFileManager and TestDataGenerator from test_helpers:**
+
+```python
+def setUp(self):
+    self.file_manager = TestFileManager()
+    settings = TestDataGenerator.create_settings_data()
+    self.test_settings_file = self.file_manager.create_test_file(
+        "test_settings.json", settings
+    )
+
+def tearDown(self):
+    self.file_manager.cleanup()  # Auto-cleanup
+```
+
+**3. Verified TestDataGenerator defaults before writing assertions:**
+
+- Found TestDataGenerator sets `enabled: True` and `min_seconds: 5` by default
+- Updated test assertions to match actual test data instead of assuming defaults
+- **Key Learning**: Always check test helpers before writing assertions!
+
+**Test Results**:
+
+```
+Ran 16 tests in 2.845s
+OK
+```
+
+- ✅ All 16 tests PASS
+- ✅ Started with 2 tests, now 16 tests (14 new tests added)
+- ✅ Full coverage of: init, monitoring lifecycle, session mgmt, settings reload
+- ✅ No real filesystem operations (mocked os.makedirs)
+- ✅ No blocking operations (monitoring threads properly cleaned up)
+
+**What Didn't Work** ❌:
+
+**1. Initial test assertions assumed wrong defaults:**
+
+- Assumed `enabled: False` and `min_seconds: 10`
+- Actually TestDataGenerator uses `enabled: True` and `min_seconds: 5`
+- **Fix**: Read test_helpers.py to verify actual test data structure
+
+**Key Learnings**:
+
+1. **TDD workflow works well for screenshot_capture**: Write tests first, verify they test the right behavior
+2. **Mock filesystem operations**: Use `@patch("os.makedirs")` to avoid creating real folders in tests
+3. **Test defensive copies**: Verify `get_current_period_screenshots()` returns copy, not reference
+4. **Test hot-reload patterns**: Settings updates should start/stop monitoring threads automatically
+5. **Always verify test data generators**: Don't assume defaults - read the helper to see actual values
+6. **Clean up threads in tests**: Call `capture.stop_monitoring()` in tests that start monitoring
+7. **No messagebox mocking needed**: screenshot_capture has NO user-facing dialogs (background automation)
+
+**Prevention for Future**:
+
+- Before writing test assertions, check TestDataGenerator/test helpers for actual values
+- Always test defensive copy patterns when returning mutable collections
+- Test both enabled and disabled paths for conditional features
+- Mock filesystem operations to avoid test pollution
+- Test thread lifecycle (start, stop, idempotent start)
+- Verify hot-reload mechanisms update state AND trigger side effects (like starting/stopping threads)
+
+**Related Entries**:
+
+- See entry below ([2026-02-16] - upload_session error messages) for TDD pattern with mock requirements
+- See entry below ([2026-02-16] - test_connection error messages) for similar TDD workflow
+
+---
 
 ### [2026-02-16] - Added User-Actionable Error Messages to upload_session() Method
 

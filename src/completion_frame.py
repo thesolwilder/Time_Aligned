@@ -13,6 +13,8 @@ import subprocess
 import shutil
 import datetime as dt
 
+from src.ui_helpers import get_frame_background
+
 from src.constants import (
     DEFAULT_BACKUP_FOLDER,
     FONT_TITLE,
@@ -21,6 +23,8 @@ from src.constants import (
     FONT_NORMAL,
     FONT_NORMAL_BOLD,
     FONT_NORMAL_ITALIC,
+    COLOR_LINK_BLUE,
+    FONT_LINK,
 )
 
 
@@ -110,6 +114,9 @@ class CompletionFrame(ttk.Frame):
         """Create all UI elements for the completion frame"""
         self.current_row = 0
 
+        # Navigation links at top
+        self._create_navigation_links()
+
         # Title and sphere selection
         self._title_and_sphere()
 
@@ -146,6 +153,41 @@ class CompletionFrame(ttk.Frame):
             row=self.current_row, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=15
         )
         self.current_row += 1
+
+    def _create_navigation_links(self):
+        """Create navigation links at top of frame"""
+        nav_frame = ttk.Frame(self)
+        nav_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=(0, 10)
+        )
+        self.current_row += 1
+
+        # Get background color to match frame
+        frame_bg = get_frame_background()
+
+        # Back to Tracker link
+        back_link = tk.Label(
+            nav_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_link.pack(side=tk.LEFT, padx=(0, 15))
+        back_link.bind("<Button-1>", lambda e: self.tracker.show_main_frame())
+
+        # Analysis link
+        analysis_link = tk.Label(
+            nav_frame,
+            text="Analysis",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        analysis_link.pack(side=tk.LEFT, padx=(0, 15))
+        analysis_link.bind("<Button-1>", lambda e: self.tracker.open_analysis())
 
     # title and sphere selection method
     def _title_and_sphere(self):
@@ -1748,7 +1790,12 @@ class CompletionFrame(ttk.Frame):
         ).grid(row=0, column=2, padx=5)
 
         ttk.Button(
-            button_frame, text="Analysis", command=self.tracker.open_analysis
+            button_frame,
+            text="Save & Go to Analysis Frame",
+            command=lambda: (
+                self.save_and_close(navigate=False),
+                self.tracker.open_analysis(),
+            ),
         ).grid(row=0, column=3, padx=5)
 
     def save_and_close(self, navigate=True):

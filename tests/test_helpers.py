@@ -158,7 +158,7 @@ class TestDataGenerator:
                 "enabled": True,
                 "capture_on_focus_change": True,
                 "min_seconds_between_captures": 5,
-                "screenshot_path": "test_screenshots",
+                "screenshot_path": "tests/screenshots",
             },
             "spheres": {
                 default_sphere: {"is_default": True, "active": True},

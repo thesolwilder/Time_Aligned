@@ -165,8 +165,8 @@ class ScreenshotCapture:
             text_width = bbox[2] - bbox[0]
             text_height = bbox[3] - bbox[1]
 
-            # Get image dimensions for bottom left positioning
-            img_width, img_height = screenshot.size
+            # Get image height for bottom left positioning
+            _, img_height = screenshot.size
 
             # Draw semi-transparent background rectangle at bottom left
             padding = 8

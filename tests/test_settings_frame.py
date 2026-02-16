@@ -1236,5 +1236,88 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
         self.assertTrue(found_project2)
 
 
+class TestExtractSpreadsheetIdFromUrl(unittest.TestCase):
+    """Test extract_spreadsheet_id_from_url utility function"""
+
+    def test_extract_from_standard_url(self):
+        """Test extraction from standard Google Sheets URL"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        url = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit"
+        result = extract_spreadsheet_id_from_url(url)
+
+        self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+
+    def test_extract_from_url_with_gid(self):
+        """Test extraction from URL with sheet ID (gid parameter)"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        url = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0"
+        result = extract_spreadsheet_id_from_url(url)
+
+        self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+
+    def test_extract_from_url_with_range(self):
+        """Test extraction from URL with cell range"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        url = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms/edit#gid=0&range=A1:B2"
+        result = extract_spreadsheet_id_from_url(url)
+
+        self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+
+    def test_plain_id_returned_unchanged(self):
+        """Test that plain spreadsheet ID is returned unchanged"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        plain_id = "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+        result = extract_spreadsheet_id_from_url(plain_id)
+
+        self.assertEqual(result, plain_id)
+
+    def test_empty_string_returns_empty(self):
+        """Test that empty string returns empty string"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        result = extract_spreadsheet_id_from_url("")
+
+        self.assertEqual(result, "")
+
+    def test_none_returns_empty(self):
+        """Test that None returns empty string"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        result = extract_spreadsheet_id_from_url(None)
+
+        self.assertEqual(result, "")
+
+    def test_invalid_url_returned_unchanged(self):
+        """Test that invalid URL is returned unchanged"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        invalid_url = "https://example.com/not-a-sheet"
+        result = extract_spreadsheet_id_from_url(invalid_url)
+
+        self.assertEqual(result, invalid_url)
+
+    def test_id_with_hyphens_and_underscores(self):
+        """Test extraction of ID containing hyphens and underscores"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        url = "https://docs.google.com/spreadsheets/d/ABC123-def_456-GHI/edit"
+        result = extract_spreadsheet_id_from_url(url)
+
+        self.assertEqual(result, "ABC123-def_456-GHI")
+
+    def test_url_without_edit_suffix(self):
+        """Test extraction from URL without /edit suffix"""
+        from src.settings_frame import extract_spreadsheet_id_from_url
+
+        url = "https://docs.google.com/spreadsheets/d/1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+        result = extract_spreadsheet_id_from_url(url)
+
+        self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
+
+
 if __name__ == "__main__":
     unittest.main()

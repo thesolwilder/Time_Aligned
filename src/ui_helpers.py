@@ -6,6 +6,20 @@ import re
 import traceback
 
 
+def get_frame_background():
+    """
+    Get the background color for ttk frames based on current theme.
+
+    Returns:
+        str: Hex color code for frame background (e.g., "#d9d9d9")
+
+    Note:
+        Must be called after tkinter root window is initialized.
+    """
+    style = ttk.Style()
+    return style.lookup("TFrame", "background")
+
+
 def sanitize_name(name, max_length=50):
     """
     Sanitize user input for names (spheres, projects, break actions).

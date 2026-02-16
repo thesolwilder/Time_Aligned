@@ -1,3 +1,11 @@
+"""
+Settings Frame Module
+
+Provides the settings interface for configuring the time tracker application.
+Includes settings for spheres, projects, actions, Google Sheets integration,
+backup configuration, screenshot capture, and idle tracking.
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 import json
@@ -7,8 +15,13 @@ import subprocess
 import platform
 import re
 
-from src.ui_helpers import ScrollableFrame, sanitize_name
-from src.constants import COLOR_LINK_BLUE, COLOR_GRAY_TEXT, DEFAULT_SCREENSHOT_FOLDER
+from src.ui_helpers import ScrollableFrame, sanitize_name, get_frame_background
+from src.constants import (
+    COLOR_LINK_BLUE,
+    COLOR_GRAY_TEXT,
+    DEFAULT_SCREENSHOT_FOLDER,
+    FONT_LINK,
+)
 
 
 def extract_spreadsheet_id_from_url(value):
@@ -92,10 +105,20 @@ class SettingsFrame(ttk.Frame):
 
         self.row = 0
 
+        # Get background color to match frame
+        frame_bg = get_frame_background()
+
         # Back button at top
-        ttk.Button(
-            content_frame, text="Back to Tracker", command=self.tracker.close_settings
-        ).grid(row=self.row, column=0, columnspan=3, pady=10)
+        back_button_top = tk.Label(
+            content_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_button_top.grid(row=self.row, column=0, pady=10, sticky=tk.W)
+        back_button_top.bind("<Button-1>", lambda e: self.tracker.close_settings())
         self.row += 1
 
         ttk.Separator(content_frame, orient="horizontal").grid(
@@ -156,9 +179,16 @@ class SettingsFrame(ttk.Frame):
         )
         self.row += 1
 
-        ttk.Button(
-            content_frame, text="Back to Tracker", command=self.tracker.close_settings
-        ).grid(row=self.row, column=0, columnspan=3, pady=10)
+        back_button_bottom = tk.Label(
+            content_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_button_bottom.grid(row=self.row, column=0, pady=10, sticky=tk.W)
+        back_button_bottom.bind("<Button-1>", lambda e: self.tracker.close_settings())
 
         # Store references
         self.content_frame = content_frame

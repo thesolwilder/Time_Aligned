@@ -4,11 +4,13 @@ import json
 import csv
 from datetime import datetime, timedelta
 
-from src.ui_helpers import ScrollableFrame
+from src.ui_helpers import ScrollableFrame, get_frame_background
 from src.constants import (
     COLOR_ACTIVE_LIGHT_GREEN,
     COLOR_BREAK_LIGHT_ORANGE,
     COLOR_GRAY_BACKGROUND,
+    COLOR_LINK_BLUE,
+    FONT_LINK,
 )
 
 
@@ -102,13 +104,32 @@ class AnalysisFrame(ttk.Frame):
             row=0, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
 
-        ttk.Button(
-            header_frame, text="Back to Tracker", command=self.tracker.close_analysis
-        ).pack(side=tk.LEFT, padx=5)
+        # Get background color to match frame
+        frame_bg = get_frame_background()
 
-        ttk.Button(
-            header_frame, text="Session View", command=self.open_latest_session
-        ).pack(side=tk.LEFT, padx=5)
+        # Back to Tracker link
+        back_link = tk.Label(
+            header_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_link.pack(side=tk.LEFT, padx=5)
+        back_link.bind("<Button-1>", lambda e: self.tracker.close_analysis())
+
+        # Session View link
+        session_view_link = tk.Label(
+            header_frame,
+            text="Session View",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        session_view_link.pack(side=tk.LEFT, padx=5)
+        session_view_link.bind("<Button-1>", lambda e: self.open_latest_session())
 
         ttk.Button(header_frame, text="Export to CSV", command=self.export_to_csv).pack(
             side=tk.RIGHT, padx=5
