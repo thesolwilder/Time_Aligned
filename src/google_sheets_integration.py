@@ -81,10 +81,10 @@ class GoogleSheetsUploader:
         except FileNotFoundError:
             # Settings file missing is acceptable - use defaults
             return {}
-        except json.JSONDecodeError as e:
+        except json.JSONDecodeError as error:
             messagebox.showerror(
                 "Settings Error",
-                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(e)}",
+                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(error)}",
             )
             return {}
         except PermissionError:
@@ -93,10 +93,10 @@ class GoogleSheetsUploader:
                 f"Permission denied reading settings file:\n{self.settings_file}",
             )
             return {}
-        except Exception as e:
+        except Exception as error:
             messagebox.showerror(
                 "Settings Error",
-                f"Unexpected error loading settings:\n{type(e).__name__}: {str(e)}",
+                f"Unexpected error loading settings:\n{type(error).__name__}: {str(error)}",
             )
             return {}
 
@@ -270,6 +270,12 @@ class GoogleSheetsUploader:
 
             if not creds:
                 if not os.path.exists(credentials_file):
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Credentials file not found:\n{credentials_file}\n\n"
+                        "Download credentials.json from Google Cloud Console:\n"
+                        "https://console.cloud.google.com/apis/credentials",
+                    )
                     return False
 
                 try:
@@ -278,7 +284,24 @@ class GoogleSheetsUploader:
                         credentials_file, self.scopes
                     )
                     creds = flow.run_local_server(port=0)
+                except ValueError as error:
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Invalid credentials file format:\n{credentials_file}\n\n"
+                        f"Error: {str(error)}\n\n"
+                        "Re-download credentials.json from Google Cloud Console.",
+                    )
+                    return False
                 except Exception as error:
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Authentication failed: {str(error)}\n\n"
+                        "Possible fixes:\n"
+                        "• Check your internet connection\n"
+                        "• Complete the browser authentication flow\n"
+                        "• Verify credentials.json is valid\n"
+                        "• Try again",
+                    )
                     return False
 
             # Save the credentials for the next run
@@ -295,6 +318,11 @@ class GoogleSheetsUploader:
             self.service = build("sheets", "v4", credentials=self.credentials)
             return True
         except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Connection",
+                f"Failed to connect to Google Sheets API: {str(error)}\n\n"
+                "Check your internet connection and try again.",
+            )
             return False
 
     def _is_safe_file_path(self, file_path):
@@ -321,9 +349,37 @@ class GoogleSheetsUploader:
         """
         Ensure the spreadsheet has proper headers
         Creates headers if sheet is empty
+        Validates headers if they exist
         """
         if not self.service:
             return False
+
+        # Define expected headers
+        expected_headers = [
+            "Session ID",
+            "Date",
+            "Sphere",
+            "Session Start Time",
+            "Session End Time",
+            "Session Total Duration (min)",
+            "Session Active Duration (min)",
+            "Session Break Duration (min)",
+            "Type",
+            "Project",
+            "Project Comment",
+            "Secondary Project",
+            "Secondary Comment",
+            "Secondary Percentage",
+            "Activity Start",
+            "Activity End",
+            "Activity Duration (min)",
+            "Break Action",
+            "Secondary Action",
+            "Active Notes",
+            "Break Notes",
+            "Idle Notes",
+            "Session Notes",
+        ]
 
         try:
             spreadsheet_id = self.get_spreadsheet_id()
@@ -342,33 +398,7 @@ class GoogleSheetsUploader:
 
             # If no headers exist, add them
             if not values:
-                headers = [
-                    "Session ID",
-                    "Date",
-                    "Sphere",
-                    "Session Start Time",
-                    "Session End Time",
-                    "Session Total Duration (min)",
-                    "Session Active Duration (min)",
-                    "Session Break Duration (min)",
-                    "Type",
-                    "Project",
-                    "Secondary Project",
-                    "Secondary Comment",
-                    "Secondary Percentage",
-                    "Activity Start",
-                    "Activity End",
-                    "Activity Duration (min)",
-                    "Activity Comment",
-                    "Break Action",
-                    "Secondary Action",
-                    "Active Notes",
-                    "Break Notes",
-                    "Idle Notes",
-                    "Session Notes",
-                ]
-
-                body = {"values": [headers]}
+                body = {"values": [expected_headers]}
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
@@ -379,6 +409,23 @@ class GoogleSheetsUploader:
 
                 return True
 
+            # Validate existing headers match expected order
+            current_headers = values[0]
+            if current_headers != expected_headers:
+                # Format the complete expected header list for display
+                expected_list = "\n".join(
+                    [f"{i+1}. {header}" for i, header in enumerate(expected_headers)]
+                )
+
+                messagebox.showerror(
+                    "Google Sheets Column Order Error",
+                    f"Column order has been changed in Google Sheets.\n\n"
+                    f"Correct column order (1-23):\n{expected_list}\n\n"
+                    f"Please restore the original column order or delete the sheet\n"
+                    f"to let the app recreate it with correct columns.",
+                )
+                return False
+
             return True
 
         except HttpError as error:
@@ -387,10 +434,34 @@ class GoogleSheetsUploader:
                 try:
                     self._create_sheet()
                     return self._ensure_sheet_headers()
-                except:
-                    pass
+                except HttpError as create_error:
+                    if create_error.resp.status == 403:
+                        messagebox.showerror(
+                            "Google Sheets Permission Error",
+                            f"Permission denied creating sheet '{self.get_sheet_name()}'.\n\n"
+                            "Make sure you have edit access to the spreadsheet.\n"
+                            "Share the spreadsheet with your Google account with Editor permissions.",
+                        )
+                    return False
+                except Exception:
+                    # Unexpected error during sheet creation
+                    return False
+            elif error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Permission Error",
+                    f"Permission denied accessing spreadsheet.\n\n"
+                    "Make sure you have access to the spreadsheet.\n"
+                    "Check the spreadsheet ID in settings.",
+                )
+            elif error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Error",
+                    f"Spreadsheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    "Check the spreadsheet ID in settings.",
+                )
             return False
-        except Exception as e:
+        except Exception as error:
             return False
 
     def _create_sheet(self):
@@ -412,7 +483,16 @@ class GoogleSheetsUploader:
 
             return True
 
-        except Exception as e:
+        except HttpError as error:
+            # Re-raise HttpError so caller can provide specific error message
+            raise
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Error",
+                f"Failed to create sheet '{sheet_name}'.\n\n"
+                f"Error: {str(error)}\n\n"
+                "Check your spreadsheet configuration and try again.",
+            )
             return False
 
     def upload_session(self, session_data, session_id):
@@ -509,13 +589,15 @@ class GoogleSheetsUploader:
                         break_duration,
                         "active",
                         primary_project,
+                        escape_for_sheets(
+                            active.get("comment", "")
+                        ),  # primary project comment
                         secondary_project,
                         secondary_comment,
                         secondary_percentage,
                         active.get("start", ""),
                         active.get("end", ""),
                         round(active.get("duration", 0) / 60, 2),
-                        escape_for_sheets(active.get("comment", "")),
                         "",  # break_action
                         "",  # secondary_action
                         active_notes,
@@ -564,13 +646,15 @@ class GoogleSheetsUploader:
                         break_duration,
                         "break",
                         "",  # project
+                        escape_for_sheets(
+                            brk.get("comment", "")
+                        ),  # primary action comment
                         "",  # secondary_project
                         secondary_comment,
                         secondary_percentage,
                         brk.get("start", ""),
                         "",  # activity_end
                         round(brk.get("duration", 0) / 60, 2),
-                        escape_for_sheets(brk.get("comment", "")),
                         primary_action,
                         secondary_action,
                         active_notes,
@@ -594,13 +678,13 @@ class GoogleSheetsUploader:
                         break_duration,
                         "idle",
                         "",  # project
+                        "",  # project_comment
                         "",  # secondary_project
                         "",  # secondary_comment
                         "",  # secondary_percentage
                         idle.get("start", ""),
                         idle.get("end", ""),
                         round(idle.get("duration", 0) / 60, 2),
-                        "",  # activity_comment
                         "",  # break_action
                         "",  # secondary_action
                         active_notes,
@@ -623,13 +707,13 @@ class GoogleSheetsUploader:
                     break_duration,
                     "session_summary",
                     "",  # project
+                    "",  # project_comment
                     "",  # secondary_project
                     "",  # secondary_comment
                     "",  # secondary_percentage
                     "",  # activity_start
                     "",  # activity_end
                     0,  # activity_duration
-                    "",  # activity_comment
                     "",  # break_action
                     "",  # secondary_action
                     active_notes,
@@ -647,34 +731,98 @@ class GoogleSheetsUploader:
 
                 body = {"values": rows}
 
-                result = (
-                    self.service.spreadsheets()
-                    .values()
-                    .append(
-                        spreadsheetId=spreadsheet_id,
-                        range=range_name,
-                        valueInputOption="USER_ENTERED",
-                        insertDataOption="INSERT_ROWS",
-                        body=body,
-                    )
-                    .execute()
-                )
+                self.service.spreadsheets().values().append(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    valueInputOption="USER_ENTERED",
+                    insertDataOption="INSERT_ROWS",
+                    body=body,
+                ).execute()
 
                 return True
             else:
                 return False
 
         except HttpError as error:
+            if error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Permission denied uploading to spreadsheet.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Share the spreadsheet with your Google account\n"
+                    f"• Make sure you have 'Editor' access (not just Viewer)\n"
+                    f"• Check that the spreadsheet hasn't been made read-only",
+                )
+            elif error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Spreadsheet or sheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Check that the sheet '{self.get_sheet_name()}' exists\n"
+                    f"• Make sure the spreadsheet hasn't been deleted",
+                )
+            elif error.resp.status == 400:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Invalid data format or request.\n\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check that the sheet structure hasn't changed\n"
+                    f"• Verify column headers are correct\n"
+                    f"• Try using 'Create Sheet' to reset the sheet",
+                )
+            else:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Failed to upload session data.\n\n"
+                    f"HTTP Status: {error.resp.status}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check your internet connection\n"
+                    f"• Verify spreadsheet settings\n"
+                    f"• Try again in a few moments",
+                )
             return False
-        except Exception as e:
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Upload Error",
+                f"Unexpected error uploading session.\n\n"
+                f"Error: {str(error)}\n\n"
+                f"Possible fixes:\n"
+                f"• Check your internet connection\n"
+                f"• Verify your Google Sheets settings\n"
+                f"• Try re-authenticating with Google\n"
+                f"• Check that the session data is valid",
+            )
             return False
 
     def test_connection(self):
         """
         Test the connection to Google Sheets
 
+        Attempts to authenticate and read spreadsheet properties to verify
+        connectivity and access permissions.
+
+        Called from: Settings frame "Test Connection" button
+        
+        User Feedback:
+            - Error dialogs (messagebox.showerror) displayed in Settings frame for:
+              • 404 Not Found: Spreadsheet ID doesn't exist or was deleted
+              • 403 Permission Denied: User lacks access to spreadsheet
+              • Other HTTP errors: Network issues or API problems
+              • Unexpected exceptions: General failures (ValueError, etc.)
+            - Success/failure also shown in status label below the button
+
         Returns:
             tuple: (success: bool, message: str)
+                - (True, "Connected to spreadsheet: {title}") on success
+                - (False, error_description) on failure
         """
         if not self.get_spreadsheet_id():
             return (False, "No spreadsheet ID configured")
@@ -694,7 +842,47 @@ class GoogleSheetsUploader:
 
         except HttpError as error:
             if error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Connection Error",
+                    f"Spreadsheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Check that the spreadsheet still exists\n"
+                    f"• Make sure the spreadsheet hasn't been deleted",
+                )
                 return (False, "Spreadsheet not found. Check the spreadsheet ID.")
-            return (False, f"HTTP Error: {error}")
-        except Exception as e:
-            return (False, f"Error: {str(e)}")
+            elif error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Permission Error",
+                    f"Permission denied accessing spreadsheet.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Share the spreadsheet with your Google account\n"
+                    f"• Make sure you have at least 'Viewer' access\n"
+                    f"• Check that the spreadsheet ID is correct",
+                )
+                return (False, "Permission denied. Check spreadsheet access.")
+            else:
+                messagebox.showerror(
+                    "Google Sheets Connection Error",
+                    f"Failed to connect to Google Sheets.\n\n"
+                    f"HTTP Status: {error.resp.status}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check your internet connection\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Try again in a few moments",
+                )
+                return (False, f"HTTP Error {error.resp.status}: {error}")
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Connection Error",
+                f"Unexpected error testing connection.\n\n"
+                f"Error: {str(error)}\n\n"
+                f"Possible fixes:\n"
+                f"• Check your internet connection\n"
+                f"• Verify your Google Sheets settings\n"
+                f"• Try re-authenticating with Google",
+            )
+            return (False, f"Error: {str(error)}")

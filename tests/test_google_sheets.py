@@ -300,7 +300,7 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
     def test_authentication_fails_without_credentials_file(
         self, mock_exists, mock_error
     ):
-        """Test that authentication fails gracefully without credentials file"""
+        """Test that authentication fails and shows error when credentials file missing"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
 
@@ -310,8 +310,11 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
             uploader = GoogleSheetsUploader(self.test_settings_file)
             result = uploader.authenticate()
 
+            # Should now show error dialog for missing credentials
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertIn("Credentials file not found", call_args[1])
             self.assertFalse(result)
-            mock_error.assert_not_called()
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
@@ -346,9 +349,8 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
         "src.google_sheets_integration.pickle.load",
         side_effect=pickle.UnpicklingError("Corrupted"),
     )
-    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
     def test_authenticate_corrupted_token_silent(
-        self, mock_exists, mock_pickle_load, mock_error, mock_warning
+        self, mock_pickle_load, mock_error, mock_warning
     ):
         """Test that corrupted token file doesn't show warning (auto-recovers)"""
         try:
@@ -356,14 +358,28 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
             uploader = GoogleSheetsUploader(self.test_settings_file)
 
-            with patch("builtins.open", mock_open()):
-                result = uploader.authenticate()
+            # Mock exists: token exists (corrupted), credentials missing
+            def exists_side_effect(path):
+                if "token.pickle" in path:
+                    return True  # Token exists but corrupted
+                return False  # credentials.json missing
 
-            # Should NOT show any warnings for corrupted token (will re-auth)
+            with patch(
+                "src.google_sheets_integration.os.path.exists",
+                side_effect=exists_side_effect,
+            ):
+                with patch("builtins.open", mock_open()):
+                    result = uploader.authenticate()
+
+            # Should NOT show warning for corrupted token (auto-recovers)
             mock_warning.assert_not_called()
-            mock_error.assert_not_called()
 
-            # Will fail because no credentials file, but that's expected
+            # Will show error for missing credentials file (expected)
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertIn("Credentials file not found", call_args[1])
+
+            # Will fail because no credentials file after token corruption
             self.assertFalse(result)
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
@@ -446,6 +462,465 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
 
             # Should default to "Sessions"
             self.assertEqual(sheet_name, "Sessions")
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.os.path.exists", return_value=False)
+    def test_authenticate_missing_credentials_file_shows_error(
+        self, mock_exists, mock_error
+    ):
+        """Test that missing credentials file shows error dialog with Google Cloud Console link"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+            result = uploader.authenticate()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+
+            # Verify error message content
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Authentication")
+            self.assertIn("Credentials file not found", call_args[1])
+            self.assertIn("credentials.json", call_args[1])
+            self.assertIn(
+                "https://console.cloud.google.com/apis/credentials", call_args[1]
+            )
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch(
+        "src.google_sheets_integration.InstalledAppFlow.from_client_secrets_file",
+        side_effect=ValueError("client_secret is missing"),
+    )
+    def test_authenticate_invalid_credentials_format_shows_error(
+        self, mock_flow, mock_error
+    ):
+        """Test that invalid credentials.json format shows error dialog with re-download instructions"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock os.path.exists to return True for credentials file, False for token
+            def exists_side_effect(path):
+                if "credentials.json" in path:
+                    return True
+                return False  # token.pickle doesn't exist
+
+            with patch(
+                "src.google_sheets_integration.os.path.exists",
+                side_effect=exists_side_effect,
+            ):
+                result = uploader.authenticate()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+
+            # Verify error message content
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Authentication")
+            self.assertIn("Invalid credentials file format", call_args[1])
+            self.assertIn("credentials.json", call_args[1])
+            self.assertIn("client_secret is missing", call_args[1])
+            self.assertIn("Re-download credentials.json", call_args[1])
+            self.assertIn("Google Cloud Console", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch(
+        "src.google_sheets_integration.InstalledAppFlow.from_client_secrets_file",
+        side_effect=Exception("Network timeout"),
+    )
+    def test_authenticate_oauth_flow_failure_shows_helpful_error(
+        self, mock_flow, mock_error
+    ):
+        """Test that OAuth flow failures show error dialog with actionable troubleshooting steps"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock os.path.exists to return True for credentials file, False for token
+            def exists_side_effect(path):
+                if "credentials.json" in path:
+                    return True
+                return False  # token.pickle doesn't exist
+
+            with patch(
+                "src.google_sheets_integration.os.path.exists",
+                side_effect=exists_side_effect,
+            ):
+                result = uploader.authenticate()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+
+            # Verify error message content with troubleshooting steps
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Authentication")
+            self.assertIn("Authentication failed", call_args[1])
+            self.assertIn("Network timeout", call_args[1])
+            self.assertIn("Possible fixes", call_args[1])
+            self.assertIn("internet connection", call_args[1])
+            self.assertIn("browser authentication", call_args[1])
+            self.assertIn("credentials.json is valid", call_args[1])
+            self.assertIn("Try again", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch(
+        "src.google_sheets_integration.build",
+        side_effect=Exception("API connection failed"),
+    )
+    @patch("src.google_sheets_integration.pickle.load")
+    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
+    def test_authenticate_api_build_failure_shows_connection_error(
+        self, mock_exists, mock_pickle_load, mock_build, mock_error
+    ):
+        """Test that Google Sheets API connection failures show error dialog"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Mock valid credentials
+            mock_creds = Mock()
+            mock_creds.valid = True
+            mock_creds.expired = False
+            mock_pickle_load.return_value = mock_creds
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            with patch("builtins.open", mock_open()):
+                result = uploader.authenticate()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+
+            # Verify error message content
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Connection")
+            self.assertIn("Failed to connect to Google Sheets API", call_args[1])
+            self.assertIn("API connection failed", call_args[1])
+            self.assertIn("internet connection", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.pickle.load")
+    @patch("src.google_sheets_integration.os.path.exists", return_value=True)
+    def test_authenticate_successful_no_error_dialogs(
+        self, mock_exists, mock_pickle_load, mock_build, mock_error
+    ):
+        """Test that successful authentication shows NO error dialogs"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            # Mock valid credentials
+            mock_creds = Mock()
+            mock_creds.valid = True
+            mock_creds.expired = False
+            mock_pickle_load.return_value = mock_creds
+
+            # Mock service build success
+            mock_service = Mock()
+            mock_build.return_value = mock_service
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            with patch("builtins.open", mock_open()):
+                result = uploader.authenticate()
+
+            # Should NOT show any error dialogs
+            mock_error.assert_not_called()
+
+            # Should return True
+            self.assertTrue(result)
+            self.assertIsNotNone(uploader.service)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_ensure_headers_permission_denied_shows_error(self, mock_error):
+        """Test that 403 permission error when accessing spreadsheet shows helpful error"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service that raises 403 permission error
+            mock_service = Mock()
+            mock_resp = Mock()
+            mock_resp.status = 403
+            http_error = HttpError(mock_resp, b"Permission denied")
+
+            mock_service.spreadsheets().values().get().execute.side_effect = http_error
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Permission Error")
+            self.assertIn("Permission denied accessing spreadsheet", call_args[1])
+            self.assertIn("access to the spreadsheet", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_ensure_headers_spreadsheet_not_found_shows_error(self, mock_error):
+        """Test that 404 error shows spreadsheet ID and helpful message"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service that raises 404 not found error
+            mock_service = Mock()
+            mock_resp = Mock()
+            mock_resp.status = 404
+            http_error = HttpError(mock_resp, b"Not found")
+
+            mock_service.spreadsheets().values().get().execute.side_effect = http_error
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should show error dialog ONCE with spreadsheet ID
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Error")
+            self.assertIn("Spreadsheet not found", call_args[1])
+            self.assertIn("test_spreadsheet_123", call_args[1])  # From settings
+            self.assertIn("Check the spreadsheet ID", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_create_sheet_permission_denied_shows_error(self, mock_error):
+        """Test that 403 error when creating sheet shows specific error"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service that raises 400 (sheet doesn't exist), then 403 on create
+            mock_service = Mock()
+            mock_resp_400 = Mock()
+            mock_resp_400.status = 400
+            http_error_400 = HttpError(mock_resp_400, b"Sheet not found")
+
+            mock_resp_403 = Mock()
+            mock_resp_403.status = 403
+            http_error_403 = HttpError(mock_resp_403, b"Permission denied")
+
+            # First call raises 400, create_sheet raises 403
+            mock_service.spreadsheets().values().get().execute.side_effect = (
+                http_error_400
+            )
+            mock_service.spreadsheets().batchUpdate().execute.side_effect = (
+                http_error_403
+            )
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should show error dialog ONCE about creating sheet
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Permission Error")
+            self.assertIn("Permission denied creating sheet", call_args[1])
+            self.assertIn("Sessions", call_args[1])  # Sheet name
+            self.assertIn("edit access", call_args[1])
+            self.assertIn("Editor permissions", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_ensure_headers_creates_sheet_if_needed(self, mock_error):
+        """Test that missing sheet gets created automatically (no error dialog)"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service that raises 400 on first call, succeeds on retry
+            mock_service = Mock()
+            mock_resp_400 = Mock()
+            mock_resp_400.status = 400
+            http_error_400 = HttpError(mock_resp_400, b"Sheet not found")
+
+            # First get() raises 400, create succeeds, second get() returns empty headers
+            mock_service.spreadsheets().values().get().execute.side_effect = [
+                http_error_400,  # First call - sheet doesn't exist
+                {"values": []},  # After creation - no headers yet
+            ]
+            mock_service.spreadsheets().batchUpdate().execute.return_value = {}
+            mock_service.spreadsheets().values().update().execute.return_value = {}
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should NOT show error dialog (automatic recovery)
+            mock_error.assert_not_called()
+
+            # Should return True (created successfully)
+            self.assertTrue(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_create_sheet_unexpected_error_shows_message(self, mock_error):
+        """Test that unexpected error during sheet creation shows helpful error"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service that raises an unexpected error (not HttpError)
+            mock_service = Mock()
+            mock_service.spreadsheets().batchUpdate().execute.side_effect = Exception(
+                "Unexpected network error"
+            )
+            uploader.service = mock_service
+
+            result = uploader._create_sheet()
+
+            # Should show error dialog ONCE
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Error")
+            self.assertIn("Failed to create sheet", call_args[1])
+            self.assertIn("Sessions", call_args[1])  # Sheet name
+            self.assertIn("Unexpected network error", call_args[1])
+            self.assertIn("Check your spreadsheet configuration", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_ensure_headers_validates_column_order(self, mock_error):
+        """Test that header validation detects when columns are rearranged"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service with WRONG column order (Date and Sphere swapped)
+            mock_service = Mock()
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Sphere",  # WRONG - should be "Date"
+                        "Date",  # WRONG - should be "Sphere"
+                        "Session Start Time",
+                        "Session End Time",
+                    ]
+                ]
+            }
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should show error dialog showing expected column order
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Column Order Error")
+            self.assertIn("Column order has been changed", call_args[1])
+            self.assertIn("Correct column order", call_args[1])
+            # Check that it shows the complete numbered list
+            self.assertIn("1. Session ID", call_args[1])
+            self.assertIn("2. Date", call_args[1])
+            self.assertIn("3. Sphere", call_args[1])
+            self.assertIn("23. Session Notes", call_args[1])  # Last column
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_ensure_headers_accepts_correct_column_order(self, mock_error):
+        """Test that header validation passes when columns are in correct order"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            uploader = GoogleSheetsUploader(self.test_settings_file)
+
+            # Mock service with CORRECT column order
+            mock_service = Mock()
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
+            uploader.service = mock_service
+
+            result = uploader._ensure_sheet_headers()
+
+            # Should NOT show error dialog
+            mock_error.assert_not_called()
+
+            # Should return True
+            self.assertTrue(result)
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
@@ -595,7 +1070,35 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             # Mock values.get() for header check
             mock_get = Mock()
             mock_values.get.return_value = mock_get
-            mock_get.execute.return_value = {"values": [["Headers"]]}
+            mock_get.execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
 
             # Create session data with new detailed format
             session_data = {
@@ -657,7 +1160,7 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             self.assertEqual(row[2], "Work")  # sphere
             self.assertEqual(row[8], "active")  # type
             self.assertEqual(row[9], "Testing")  # project
-            self.assertEqual(row[16], "Working on tests")  # activity_comment
+            self.assertEqual(row[10], "Working on tests")  # project_comment
 
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
@@ -999,7 +1502,8 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
-    def test_upload_session_data_format(self):
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    def test_upload_session_data_format(self, mock_error):
         """Test that session data is formatted correctly for upload"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -1064,8 +1568,9 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_connection_no_spreadsheet_id(self, mock_exists):
+    def test_connection_no_spreadsheet_id(self, mock_exists, mock_error):
         """Test connection test fails without spreadsheet ID"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -1088,9 +1593,10 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.os.path.exists")
     @patch.dict(os.environ, {}, clear=False)
-    def test_connection_success(self, mock_exists):
+    def test_connection_success(self, mock_exists, mock_error):
         """Test successful connection message format"""
         try:
             # Clear any Google Sheets env vars that might interfere
@@ -1120,6 +1626,612 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
             self.assertFalse(success)
             # Message should indicate authentication failure
             self.assertIn("Authentication", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_connection_404_not_found_error(self, mock_auth, mock_error):
+        """Test connection shows user-actionable error for 404 Not Found"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "invalid_spreadsheet_id",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_connection_404.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Mock authenticate to return True without actually authenticating
+            mock_auth.return_value = True
+
+            # Mock service to raise 404 HttpError
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 404
+            http_error = HttpError(mock_response, b"Not Found")
+            mock_service.spreadsheets().get().execute.side_effect = http_error
+            uploader.service = mock_service
+
+            # Test connection
+            success, message = uploader.test_connection()
+
+            # Should show error dialog with helpful troubleshooting
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Connection Error")
+            self.assertIn("Spreadsheet not found", call_args[1])
+            self.assertIn("invalid_spreadsheet_id", call_args[1])  # Shows ID
+            self.assertIn("Verify the spreadsheet ID", call_args[1])
+            self.assertIn("Check that the spreadsheet still exists", call_args[1])
+
+            # Should return False with descriptive message
+            self.assertFalse(success)
+            self.assertIn("not found", message.lower())
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_connection_403_permission_error(self, mock_auth, mock_error):
+        """Test connection shows user-actionable error for 403 Permission Denied"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "restricted_spreadsheet_id",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_connection_403.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Mock authenticate to return True without actually authenticating
+            mock_auth.return_value = True
+
+            # Mock service to raise 403 HttpError
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 403
+            http_error = HttpError(mock_response, b"Permission Denied")
+            mock_service.spreadsheets().get().execute.side_effect = http_error
+            uploader.service = mock_service
+
+            # Test connection
+            success, message = uploader.test_connection()
+
+            # Should show error dialog with helpful troubleshooting
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Permission Error")
+            self.assertIn("Permission denied", call_args[1])
+            self.assertIn("restricted_spreadsheet_id", call_args[1])  # Shows ID
+            self.assertIn(
+                "Share the spreadsheet with your Google account", call_args[1]
+            )
+            self.assertIn("Viewer", call_args[1])
+
+            # Should return False with descriptive message
+            self.assertFalse(success)
+            self.assertIn("Permission denied", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_connection_http_error_generic(self, mock_auth, mock_error):
+        """Test connection shows user-actionable error for generic HTTP errors"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_spreadsheet_id",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_connection_http_error.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Mock authenticate to return True without actually authenticating
+            mock_auth.return_value = True
+
+            # Mock service to raise 500 HttpError (server error)
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 500
+            http_error = HttpError(mock_response, b"Internal Server Error")
+            mock_service.spreadsheets().get().execute.side_effect = http_error
+            uploader.service = mock_service
+
+            # Test connection
+            success, message = uploader.test_connection()
+
+            # Should show error dialog with helpful troubleshooting
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Connection Error")
+            self.assertIn("Failed to connect", call_args[1])
+            self.assertIn("HTTP Status: 500", call_args[1])  # Shows status code
+            self.assertIn("Check your internet connection", call_args[1])
+            self.assertIn("Verify the spreadsheet ID", call_args[1])
+
+            # Should return False with descriptive message
+            self.assertFalse(success)
+            self.assertIn("HTTP Error 500", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_connection_unexpected_exception(self, mock_auth, mock_error):
+        """Test connection shows user-actionable error for unexpected exceptions"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_spreadsheet_id",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_connection_exception.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Mock authenticate to return True without actually authenticating
+            mock_auth.return_value = True
+
+            # Mock service to raise unexpected exception (not HttpError)
+            # The test_connection method calls: service.spreadsheets().get(spreadsheetId=...).execute()
+            mock_service = Mock()
+            mock_spreadsheets = Mock()
+            mock_get_result = Mock()
+            mock_get_result.execute.side_effect = ValueError("Unexpected network error")
+            mock_spreadsheets.get.return_value = mock_get_result
+            mock_service.spreadsheets.return_value = mock_spreadsheets
+            uploader.service = mock_service
+
+            # Test connection
+            success, message = uploader.test_connection()
+
+            # Should show error dialog with helpful troubleshooting
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Connection Error")
+            self.assertIn("Unexpected error", call_args[1])
+            self.assertIn(
+                "Unexpected network error", call_args[1]
+            )  # Shows actual error
+            self.assertIn("Check your internet connection", call_args[1])
+            self.assertIn("Try re-authenticating", call_args[1])
+
+            # Should return False with descriptive message
+            self.assertFalse(success)
+            self.assertIn("Error:", message)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_upload_session_403_permission_error(self, mock_auth, mock_error):
+        """Test upload_session shows user-actionable error for 403 Permission Denied"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_spreadsheet_id",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_upload_403.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+
+            # Mock authenticate to return True
+            mock_auth.return_value = True
+
+            # Mock service to raise 403 on append
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 403
+            http_error = HttpError(mock_response, b"Permission Denied")
+
+            # Mock the entire chain: service.spreadsheets().values().append().execute()
+            mock_append = Mock()
+            mock_append.execute.side_effect = http_error
+            mock_service.spreadsheets().values().append.return_value = mock_append
+
+            # Mock header check to pass
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
+
+            uploader.service = mock_service
+
+            # Create test session
+            session_data = {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "sphere": "Work",
+                "total_duration": 1800,
+                "active_duration": 1500,
+                "break_duration": 300,
+                "session_comments": {},
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Test Project",
+                        "comment": "Test",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+
+            # Upload should fail
+            result = uploader.upload_session(session_data, "test_session_123")
+
+            # Should show error dialog
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Upload Error")
+            self.assertIn("Permission denied", call_args[1])
+            self.assertIn("test_spreadsheet_id", call_args[1])
+            self.assertIn("Editor", call_args[1])
+            self.assertIn("Share the spreadsheet", call_args[1])
+
+            # Should return False
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_upload_session_404_not_found_error(self, mock_auth, mock_error):
+        """Test upload_session shows user-actionable error for 404 Not Found"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "invalid_id",
+                "sheet_name": "MissingSheet",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_upload_404.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+            mock_auth.return_value = True
+
+            # Mock service to raise 404 on append
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 404
+            http_error = HttpError(mock_response, b"Not Found")
+
+            mock_append = Mock()
+            mock_append.execute.side_effect = http_error
+            mock_service.spreadsheets().values().append.return_value = mock_append
+
+            # Mock header check to pass
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
+
+            uploader.service = mock_service
+
+            session_data = {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "sphere": "Work",
+                "total_duration": 1800,
+                "active_duration": 1500,
+                "break_duration": 300,
+                "session_comments": {},
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Test",
+                        "comment": "",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+
+            result = uploader.upload_session(session_data, "test_session_123")
+
+            # Should show error dialog
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Upload Error")
+            self.assertIn("not found", call_args[1].lower())
+            self.assertIn("invalid_id", call_args[1])
+            self.assertIn("MissingSheet", call_args[1])
+
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_upload_session_400_bad_request_error(self, mock_auth, mock_error):
+        """Test upload_session shows user-actionable error for 400 Bad Request"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+            from googleapiclient.errors import HttpError
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_id",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_upload_400.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+            mock_auth.return_value = True
+
+            # Mock service to raise 400 on append
+            mock_service = Mock()
+            mock_response = Mock()
+            mock_response.status = 400
+            http_error = HttpError(mock_response, b"Bad Request")
+
+            mock_append = Mock()
+            mock_append.execute.side_effect = http_error
+            mock_service.spreadsheets().values().append.return_value = mock_append
+
+            # Mock header check to pass
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
+
+            uploader.service = mock_service
+
+            session_data = {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "sphere": "Work",
+                "total_duration": 1800,
+                "active_duration": 1500,
+                "break_duration": 300,
+                "session_comments": {},
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Test",
+                        "comment": "",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+
+            result = uploader.upload_session(session_data, "test_session_123")
+
+            # Should show error dialog
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Upload Error")
+            self.assertIn("Invalid data format", call_args[1])
+            self.assertIn("sheet structure", call_args[1])
+
+            self.assertFalse(result)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.GoogleSheetsUploader.authenticate")
+    def test_upload_session_unexpected_exception(self, mock_auth, mock_error):
+        """Test upload_session shows user-actionable error for unexpected exceptions"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_id",
+                "sheet_name": "Sessions",
+            }
+
+            test_file = self.file_manager.create_test_file(
+                "test_upload_exception.json", settings
+            )
+
+            uploader = GoogleSheetsUploader(test_file)
+            mock_auth.return_value = True
+
+            # Mock service to raise unexpected exception
+            mock_service = Mock()
+            mock_append = Mock()
+            mock_append.execute.side_effect = ValueError("Unexpected network error")
+            mock_service.spreadsheets().values().append.return_value = mock_append
+
+            # Mock header check to pass
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
+            }
+
+            uploader.service = mock_service
+
+            session_data = {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "10:30:00",
+                "sphere": "Work",
+                "total_duration": 1800,
+                "active_duration": 1500,
+                "break_duration": 300,
+                "session_comments": {},
+                "active": [
+                    {
+                        "start": "10:00:00",
+                        "end": "10:25:00",
+                        "duration": 1500,
+                        "project": "Test",
+                        "comment": "",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+
+            result = uploader.upload_session(session_data, "test_session_123")
+
+            # Should show error dialog
+            mock_error.assert_called_once()
+            call_args = mock_error.call_args[0]
+            self.assertEqual(call_args[0], "Google Sheets Upload Error")
+            self.assertIn("Unexpected error", call_args[1])
+            self.assertIn("Unexpected network error", call_args[1])
+            self.assertIn("Try re-authenticating", call_args[1])
+
+            self.assertFalse(result)
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
@@ -1166,6 +2278,8 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
                 except Exception:
                     pass  # Silently ignore config file errors
 
+    @patch("src.google_sheets_integration.GoogleSheetsUploader._ensure_sheet_headers")
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @unittest.skipUnless(
         (
             os.path.exists(
@@ -1185,8 +2299,11 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         ),
         "Requires Google API credentials (credentials.json and token.pickle)",
     )
-    def test_real_upload_to_google_sheets(self):
+    def test_real_upload_to_google_sheets(self, mock_error, mock_headers):
         """Integration test: Actually upload to Google Sheets (REQUIRES CREDENTIALS)"""
+        # Mock header validation to always pass (this test validates upload mechanics, not header order)
+        mock_headers.return_value = True
+
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
 
@@ -1244,7 +2361,13 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
             # Actually upload (requires authentication)
             result = uploader.upload_session(session_data, "test_integration_123")
 
-            # Should succeed with real credentials
+            # Should succeed with real credentials and valid spreadsheet ID
+            # If it fails, check the error wasn't shown (should be mocked)
+            if not result:
+                # Check if error was permission/not found (mocked, so we won't know exact error)
+                # Just verify no blocking dialog appeared
+                pass
+
             self.assertTrue(
                 result, "Upload failed - check credentials and spreadsheet ID"
             )
@@ -1252,6 +2375,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @unittest.skipUnless(
         os.path.exists(
             os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
@@ -1259,7 +2383,7 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         or os.path.exists(os.path.join(os.path.dirname(__file__), "credentials.json")),
         "Requires Google API credentials (credentials.json)",
     )
-    def test_real_authentication(self):
+    def test_real_authentication(self, mock_error):
         """Integration test: Test real authentication flow"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -1290,6 +2414,9 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
             self.assertTrue(result, "Authentication failed with real credentials")
             self.assertIsNotNone(uploader.service)
             self.assertIsNotNone(uploader.credentials)
+
+            # Should not show error dialogs on success
+            mock_error.assert_not_called()
 
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
@@ -1363,9 +2490,12 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.build")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_upload_detailed_format_with_active_periods(self, mock_exists, mock_build):
+    def test_upload_detailed_format_with_active_periods(
+        self, mock_exists, mock_build, mock_error
+    ):
         """Test that upload creates separate rows for each active period"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -1396,7 +2526,33 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
 
             # Mock the header check
             mock_service.spreadsheets().values().get().execute.return_value = {
-                "values": [["Headers"]]
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
             }
 
             # Mock the append response
@@ -1472,22 +2628,22 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
             self.assertEqual(row1[2], "Work")  # sphere
             self.assertEqual(row1[8], "active")  # type
             self.assertEqual(row1[9], "Project A")  # project
-            self.assertEqual(row1[13], "10:00:00")  # activity_start
-            self.assertEqual(row1[14], "10:25:00")  # activity_end
-            self.assertEqual(row1[15], 25.0)  # activity_duration in minutes
-            self.assertEqual(row1[16], "Working on feature X")  # activity_comment
+            self.assertEqual(row1[10], "Working on feature X")  # project_comment
+            self.assertEqual(row1[14], "10:00:00")  # activity_start
+            self.assertEqual(row1[15], "10:25:00")  # activity_end
+            self.assertEqual(row1[16], 25.0)  # activity_duration in minutes
 
             # Verify second active row
             row2 = rows[1]
             self.assertEqual(row2[8], "active")  # type
             self.assertEqual(row2[9], "Project B")  # project
-            self.assertEqual(row2[16], "Code review")  # activity_comment
+            self.assertEqual(row2[10], "Code review")  # project_comment
 
             # Verify break row
             row3 = rows[2]
             self.assertEqual(row3[8], "break")  # type
+            self.assertEqual(row3[10], "Quick coffee break")  # primary action comment
             self.assertEqual(row3[17], "Coffee")  # break_action
-            self.assertEqual(row3[16], "Quick coffee break")  # activity_comment
 
             # Verify session comments are in all rows
             for row in rows:
@@ -1499,9 +2655,10 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    @patch("src.google_sheets_integration.messagebox.showerror")
     @patch("src.google_sheets_integration.build")
     @patch("src.google_sheets_integration.os.path.exists")
-    def test_upload_with_secondary_projects(self, mock_exists, mock_build):
+    def test_upload_with_secondary_projects(self, mock_exists, mock_build, mock_error):
         """Test that upload handles secondary projects correctly"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -1530,7 +2687,33 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
 
             # Mock responses
             mock_service.spreadsheets().values().get().execute.return_value = {
-                "values": [["Headers"]]
+                "values": [
+                    [
+                        "Session ID",
+                        "Date",
+                        "Sphere",
+                        "Session Start Time",
+                        "Session End Time",
+                        "Session Total Duration (min)",
+                        "Session Active Duration (min)",
+                        "Session Break Duration (min)",
+                        "Type",
+                        "Project",
+                        "Project Comment",
+                        "Secondary Project",
+                        "Secondary Comment",
+                        "Secondary Percentage",
+                        "Activity Start",
+                        "Activity End",
+                        "Activity Duration (min)",
+                        "Break Action",
+                        "Secondary Action",
+                        "Active Notes",
+                        "Break Notes",
+                        "Idle Notes",
+                        "Session Notes",
+                    ]
+                ]
             }
             mock_service.spreadsheets().values().append().execute.return_value = {
                 "updates": {"updatedCells": 23}
@@ -1583,9 +2766,10 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
 
             row = rows[0]
             self.assertEqual(row[9], "Primary Project")  # project
-            self.assertEqual(row[10], "Secondary Project")  # secondary_project
-            self.assertEqual(row[11], "Supporting work")  # secondary_comment
-            self.assertEqual(row[12], "30")  # secondary_percentage
+            self.assertEqual(row[10], "Multi-project work")  # project_comment
+            self.assertEqual(row[11], "Secondary Project")  # secondary_project
+            self.assertEqual(row[12], "Supporting work")  # secondary_comment
+            self.assertEqual(row[13], "30")  # secondary_percentage
 
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
