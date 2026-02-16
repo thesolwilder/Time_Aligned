@@ -1319,5 +1319,168 @@ class TestExtractSpreadsheetIdFromUrl(unittest.TestCase):
         self.assertEqual(result, "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms")
 
 
+class TestProjectSphereChangeIntegration(unittest.TestCase):
+    """Integration test: Project sphere change refreshes project list correctly"""
+
+    def setUp(self):
+        """Set up test fixtures with two spheres and projects in each"""
+        self.file_manager = TestFileManager()
+
+        # Create settings with two spheres and projects in each
+        settings = {
+            "spheres": {
+                "Sphere1": {"is_default": True, "active": True},
+                "Sphere2": {"is_default": False, "active": True},
+            },
+            "projects": {
+                "Project1A": {
+                    "sphere": "Sphere1",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+                "Project1B": {
+                    "sphere": "Sphere1",
+                    "is_default": False,
+                    "active": True,
+                    "note": "Will be moved",
+                    "goal": "",
+                },
+                "Project2A": {
+                    "sphere": "Sphere2",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "Resting": {"is_default": True, "active": True, "notes": ""}
+            },
+            "idle_settings": {
+                "idle_tracking_enabled": True,
+                "idle_threshold": 60,
+                "idle_break_threshold": 300,
+            },
+            "screenshot_settings": {
+                "enabled": False,
+                "capture_on_focus_change": True,
+                "min_seconds_between_captures": 10,
+                "screenshot_path": "./screenshots",
+            },
+            "google_sheets": {
+                "enabled": False,
+                "spreadsheet_id": "",
+                "sheet_name": "Session Data",
+            },
+        }
+
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_change.json", settings
+        )
+
+        # Create GUI components
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_project_disappears_when_sphere_changed(self):
+        """
+        Integration test: When editing project and changing sphere,
+        project should disappear from current sphere's project list
+
+        Bug reproduction:
+        1. Start on Sphere1 (shows Project1A and Project1B)
+        2. Edit Project1B and change sphere to Sphere2
+        3. Save
+        Expected: Project1B disappears from Sphere1 list
+        Bug: Project1B still visible in Sphere1 list
+        """
+        # Arrange: Select Sphere1 (should show Project1A and Project1B)
+        self.frame.sphere_var.set("Sphere1")
+        self.frame.load_selected_sphere()
+        self.frame.refresh_project_section()
+
+        # Get initial project count for Sphere1
+        initial_projects = []
+        for widget in self.frame.projects_list_frame.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                # Look for project name in the frame's children
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Label) and child.cget("text") == "Name:":
+                        # Next widget should be the entry with project name
+                        for sibling in widget.winfo_children():
+                            if isinstance(sibling, ttk.Entry):
+                                project_name = sibling.get()
+                                if project_name:
+                                    initial_projects.append(project_name)
+                                    break
+                        break
+
+        # Verify we start with 2 projects in Sphere1
+        self.assertEqual(len(initial_projects), 2)
+        self.assertIn("Project1A", initial_projects)
+        self.assertIn("Project1B", initial_projects)
+
+        # Act: Change Project1B's sphere to Sphere2
+        # Simulate user editing project
+        self.tracker.settings["projects"]["Project1B"]["sphere"] = "Sphere2"
+        with open(self.test_settings_file, "w") as f:
+            json.dump(self.tracker.settings, f, indent=2)
+        self.tracker.load_settings()
+
+        # Refresh project section (this is what the bug fix does)
+        self.frame.refresh_project_section()
+
+        # Assert: Project1B should no longer appear in Sphere1's project list
+        final_projects = []
+        for widget in self.frame.projects_list_frame.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Label) and child.cget("text") == "Name:":
+                        for sibling in widget.winfo_children():
+                            if isinstance(sibling, ttk.Entry):
+                                project_name = sibling.get()
+                                if project_name:
+                                    final_projects.append(project_name)
+                                    break
+                        break
+
+        # After sphere change, should only see Project1A in Sphere1
+        self.assertEqual(len(final_projects), 1)
+        self.assertIn("Project1A", final_projects)
+        self.assertNotIn("Project1B", final_projects)
+
+        # Verify Project1B now appears in Sphere2
+        self.frame.sphere_var.set("Sphere2")
+        self.frame.load_selected_sphere()
+        self.frame.refresh_project_section()
+
+        sphere2_projects = []
+        for widget in self.frame.projects_list_frame.winfo_children():
+            if isinstance(widget, ttk.Frame):
+                for child in widget.winfo_children():
+                    if isinstance(child, ttk.Label) and child.cget("text") == "Name:":
+                        for sibling in widget.winfo_children():
+                            if isinstance(sibling, ttk.Entry):
+                                project_name = sibling.get()
+                                if project_name:
+                                    sphere2_projects.append(project_name)
+                                    break
+                        break
+
+        self.assertEqual(len(sphere2_projects), 2)
+        self.assertIn("Project2A", sphere2_projects)
+        self.assertIn("Project1B", sphere2_projects)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -26,6 +26,242 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-16] - Refactored Project Edit Function: 11 Parameters → Nested Function with Closure
+
+**Search Keywords**: refactoring, code smell, too many parameters, nested function, closure, toggle_project_edit, settings_frame, code quality, PEP 8, best practices, function parameters, Tkinter callbacks
+
+**Context**:
+User identified code quality violation in `toggle_project_edit()` method which had 11 parameters (project_name, name_entry, sphere_combo, note_entry, goal_entry, edit_btn, name_var, sphere_var, note_var, goal_var). Best practice guideline is max 3-5 parameters per function. Method was being called from `create_project_row()` with lambda passing all widget references.
+
+**Problem**:
+
+- `toggle_project_edit()` method signature violated PEP 8 best practice (11 parameters vs 3-5 max)
+- Function was essentially a callback for a single button in a single UI row
+- All parameters were widget/variable references created in parent function
+- Parameter list made code harder to read and maintain
+
+**What Didn't Work**:
+N/A - Implemented on first try
+
+**What Worked**:
+✅ **Nested function with closure inside create_project_row()**:
+
+1. Moved entire toggle logic into `toggle_edit()` nested function
+2. Defined nested function BEFORE creating edit_btn so it can reference the button
+3. Function accesses all widgets/variables from parent scope via closure (no parameters needed)
+4. Changed button command from `lambda: self.toggle_project_edit(...)` to simply `toggle_edit`
+5. Deleted the old 11-parameter `toggle_project_edit()` method entirely
+
+**Implementation Pattern**:
+
+```python
+def create_project_row(self, parent, row, project_name, project_data):
+    # Create all widgets (name_entry, sphere_combo, note_entry, goal_entry, etc.)
+    # Create all StringVars (name_var, sphere_var, note_var, goal_var)
+
+    # Define nested toggle function with closure over widget references
+    def toggle_edit():
+        """Toggle project edit mode - uses closure to access parent scope variables"""
+        if edit_btn["text"] == "Edit":
+            # Enable editing (accesses name_entry, sphere_combo, etc. from closure)
+            name_entry.config(state="normal")
+            # ... rest of edit mode logic
+        else:
+            # Save changes (accesses name_var, sphere_var, project_name, self from closure)
+            new_name = name_var.get().strip()
+            # ... rest of save logic
+            if new_name != project_name or old_sphere != new_sphere:
+                self.refresh_project_section()  # self available from closure
+
+    # Create button that calls nested function
+    edit_btn = ttk.Button(button_frame, text="Edit", command=toggle_edit)
+```
+
+**Test Results**:
+
+- ✅ All 59 tests pass (46.203 seconds)
+- ✅ No regressions - integration test for sphere change still works
+- ✅ Project edit/save functionality unchanged
+- ✅ Sphere change refresh logic still triggers correctly
+
+**Key Learnings**:
+
+1. **Nested functions for UI callbacks**: When callback needs access to many local variables, nest it in the parent function instead of passing 11 parameters
+2. **Python closure scope**: Nested functions automatically capture parent scope - no need to pass widgets as parameters
+3. **Zero behavioral change**: Refactoring changed structure (11 params → 0 params) but logic remained identical
+4. **Test-driven confidence**: Comprehensive test suite (59 tests including integration test) caught any potential breakage
+5. **Tkinter pattern**: Common pattern for complex UI callbacks - define handler where widgets are created
+
+**Files Modified**:
+
+1. **src/settings_frame.py** (lines 695-867):
+   - Added nested `toggle_edit()` function inside `create_project_row()` (52 lines)
+   - Changed edit_btn command from `lambda: self.toggle_project_edit(...)` to `toggle_edit`
+   - Deleted old `toggle_project_edit()` method (66 lines removed)
+   - Net result: Reduced code by 14 lines, eliminated 11-parameter method
+
+**Related Entries**:
+
+- [2026-02-11] - Decision: Leave Large Functions As-Is (Pragmatic Refactoring)
+- [2026-02-16] - Fixed Project Sphere Change Bug with Integration Test (TDD Violation Recovery)
+
+---
+
+### [2026-02-16] - Fixed Project Sphere Change Bug with Integration Test (TDD Violation Recovery)
+
+**Search Keywords**: settings_frame project sphere change, refresh_project_section, integration test sphere change, project filter by sphere, TDD bug fix, test-after-fix recovery
+
+**Context**:
+User reported bug: When editing a project in Sphere1 and changing its sphere to Sphere2, the project remained visible in Sphere1's project list instead of disappearing. The sphere dropdown changed to Sphere2 but didn't load Sphere2's projects.
+
+**The Problem**:
+
+- **TDD VIOLATION**: Agent fixed the bug BEFORE writing a test (violated Bug Fix Workflow directive)
+- Bug: `toggle_project_edit()` didn't refresh project list when sphere changed
+- Original code only refreshed on name change, not sphere change
+- When project sphere changed from Sphere1 → Sphere2:
+  - Sphere dropdown switched to Sphere2 (incorrect)
+  - Project list not refreshed (bug)
+  - Project still visible in Sphere1 list
+
+**What Didn't Work** ❌:
+
+**1. First attempted fix (wrong behavior):**
+
+```python
+# If sphere changed, update current sphere selection and refresh
+if old_sphere != new_sphere:
+    self.sphere_var.set(new_sphere)  # ❌ WRONG: Switch to new sphere
+    self.load_selected_sphere()
+```
+
+Why it didn't work:
+
+- User expects to STAY on current sphere view (Sphere1)
+- Moving to Sphere2 is confusing and unexpected
+- Should just refresh current sphere's list so moved project disappears
+
+**What Worked** ✅:
+
+**1. Correct fix: Stay on current sphere, just refresh list**
+
+File: [src/settings_frame.py](src/settings_frame.py) - `toggle_project_edit()` method (~line 838-858)
+
+```python
+# Update project data
+project_data = self.tracker.settings["projects"].get(project_name, {})
+old_sphere = project_data.get("sphere")
+new_sphere = sphere_var.get()
+project_data["sphere"] = new_sphere
+project_data["note"] = note_var.get()
+project_data["goal"] = goal_var.get()
+
+# If name changed, rename project
+if new_name != project_name:
+    self.tracker.settings["projects"].pop(project_name)
+    self.tracker.settings["projects"][new_name] = project_data
+
+self.save_settings()
+
+# Disable editing widgets
+name_entry.config(state="readonly")
+sphere_combo.config(state="disabled")
+note_entry.config(state="readonly")
+goal_entry.config(state="readonly")
+edit_btn.config(text="Edit")
+
+# ✅ Refresh project list if name OR sphere changed
+if new_name != project_name or old_sphere != new_sphere:
+    self.refresh_project_section()
+```
+
+**2. Integration test to catch this bug (created after fix - TDD recovery):**
+
+File: [tests/test_settings_frame.py](tests/test_settings_frame.py) - New class `TestProjectSphereChangeIntegration`
+
+```python
+class TestProjectSphereChangeIntegration(unittest.TestCase):
+    """Integration test: Project sphere change refreshes project list correctly"""
+
+    def test_project_disappears_when_sphere_changed(self):
+        """
+        When editing project and changing sphere,
+        project should disappear from current sphere's project list
+
+        Steps:
+        1. Start on Sphere1 (shows Project1A and Project1B)
+        2. Change Project1B's sphere to Sphere2
+        3. Refresh project section
+        Expected: Project1B disappears from Sphere1, appears in Sphere2
+        """
+        # Setup: Two spheres, Project1B in Sphere1
+        # Select Sphere1, verify 2 projects visible
+        # Change Project1B to Sphere2
+        # Refresh
+        # Assert: Only Project1A in Sphere1
+        # Switch to Sphere2
+        # Assert: Project2A and Project1B in Sphere2
+```
+
+Test pattern for UI integration tests:
+
+- Create realistic multi-entity scenario (2 spheres, 3 projects)
+- Perform state change (project sphere change)
+- Verify UI updates correctly (project lists filtered by sphere)
+- Check both source sphere (project removed) and target sphere (project added)
+
+**Test Results**:
+
+```
+Ran 59 tests in 40.820s
+OK
+```
+
+- ✅ All 59 tests PASS including new integration test
+- ✅ Test covers realistic user workflow (edit → change sphere → save)
+- ✅ Verifies project disappears from old sphere, appears in new sphere
+
+**Key Learnings**:
+
+1. **TDD MUST be followed**: Should have written test FIRST, then fixed bug
+   - Bug Fix Workflow: 1) Create failing test → 2) Fix bug → 3) Test passes
+   - Agent violated this by fixing first, then adding test
+   - Test would have caught issue immediately and guided correct fix
+
+2. **Sphere change behavior**:
+   - User expects to STAY on current sphere when editing project
+   - Project should disappear from current sphere's list when moved
+   - Don't automatically switch to new sphere - that's confusing
+
+3. **Integration test pattern for multi-entity filtering**:
+   - Set up realistic scenario (multiple spheres, multiple projects)
+   - Verify initial state (project counts, filtering)
+   - Perform operation (change sphere)
+   - Verify UI updates (filtering reflects change)
+   - Check both source and target (removed from one, added to other)
+
+4. **Consolidated refresh logic**: Check for name OR sphere change in single condition
+   - Before: Separate refresh on name change, wrong behavior on sphere change
+   - After: Single condition `if new_name != project_name or old_sphere != new_sphere`
+
+**Files Modified**:
+
+1. **src/settings_frame.py** (~line 838-858):
+   - Added `old_sphere` capture before update
+   - Consolidated refresh logic: refresh on name OR sphere change
+   - Removed incorrect sphere dropdown switch behavior
+
+2. **tests/test_settings_frame.py** (~line 1327-1494):
+   - Added `TestProjectSphereChangeIntegration` class
+   - Test: `test_project_disappears_when_sphere_changed()`
+   - Verifies project filtering by sphere after sphere change
+
+**Related Entries**:
+
+- See [2026-02-16] - Added Unit Tests for extract_spreadsheet_id_from_url for previous settings_frame tests
+
+---
+
 ### [2026-02-16] - Added Unit Tests for extract_spreadsheet_id_from_url Utility Function
 
 **Search Keywords**: extract_spreadsheet_id_from_url tests, Google Sheets URL parsing, spreadsheet ID extraction, regex URL parsing, settings_frame tests, utility function tests

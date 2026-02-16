@@ -57,6 +57,8 @@ class TimeTracker:
         style = ttk.Style()
         style.theme_use("clam")
 
+      
+
         # Session state variables
         self.session_name = None
         self.session_active = False

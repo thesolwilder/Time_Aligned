@@ -21,6 +21,10 @@ from src.constants import (
     COLOR_GRAY_TEXT,
     DEFAULT_SCREENSHOT_FOLDER,
     FONT_LINK,
+    FONT_TITLE,
+    FONT_TIMER_SMALL,
+    FONT_NORMAL_BOLD,
+    FONT_TIMER_MEDIUM,
 )
 
 
@@ -239,7 +243,7 @@ class SettingsFrame(ttk.Frame):
         header_frame = ttk.Frame(parent)
         header_frame.grid(row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W)
 
-        ttk.Label(header_frame, text="Spheres", font=("Arial", 16, "bold")).pack(
+        ttk.Label(header_frame, text="Spheres", font=FONT_TITLE).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
@@ -265,7 +269,7 @@ class SettingsFrame(ttk.Frame):
 
         ttk.Radiobutton(
             filter_frame,
-            text="Inactive",
+            text="Archived",
             variable=self.sphere_filter,
             value="inactive",
             command=self.refresh_sphere_dropdown,
@@ -279,7 +283,7 @@ class SettingsFrame(ttk.Frame):
             parent,
             textvariable=self.sphere_var,
             width=15,
-            font=("Arial", 20),
+            font=FONT_TITLE,
             state="readonly",
             exportselection=False,
         )
@@ -370,7 +374,7 @@ class SettingsFrame(ttk.Frame):
 
     def create_new_sphere(self):
         """Create a new sphere"""
-        name = simpledialog.askstring("New Sphere", "Enter sphere name:")
+        name = simpledialog.askstring("New Sphere", "Enter New Sphere Name:")
         if name and name.strip():
             name = sanitize_name(name.strip())
             if not name:
@@ -485,9 +489,7 @@ class SettingsFrame(ttk.Frame):
             self.tracker.settings["spheres"][new_name] = sphere_data
 
             # Update projects that reference this sphere
-            for project_name, project_data in self.tracker.settings.get(
-                "projects", {}
-            ).items():
+            for _, project_data in self.tracker.settings.get("projects", {}).items():
                 if project_data.get("sphere") == old_name:
                     project_data["sphere"] = new_name
 
@@ -588,7 +590,7 @@ class SettingsFrame(ttk.Frame):
         header_frame = ttk.Frame(projects_frame)
         header_frame.grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
 
-        ttk.Label(header_frame, text="Projects", font=("Arial", 14, "bold")).pack(
+        ttk.Label(header_frame, text="Projects", font=FONT_TIMER_SMALL).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
@@ -694,7 +696,7 @@ class SettingsFrame(ttk.Frame):
         frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
 
         # Project name
-        ttk.Label(frame, text="Name:", font=("Arial", 10, "bold")).grid(
+        ttk.Label(frame, text="Name:", font=FONT_NORMAL_BOLD).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
         name_var = tk.StringVar(master=self.root, value=project_name)
@@ -737,6 +739,59 @@ class SettingsFrame(ttk.Frame):
             row=2, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=2
         )
 
+        # Define nested toggle function with closure over widget references
+        def toggle_edit():
+            """Toggle project edit mode - uses closure to access parent scope variables"""
+            if edit_btn["text"] == "Edit":
+                # Enable editing
+                name_entry.config(state="normal")
+                sphere_combo.config(state="readonly")
+                note_entry.config(state="normal")
+                goal_entry.config(state="normal")
+                edit_btn.config(text="Save")
+            else:
+                # Save changes
+                new_name = name_var.get().strip()
+
+                if not new_name:
+                    messagebox.showerror("Error", "Project name cannot be empty")
+                    return
+
+                # Check if name changed and new name already exists
+                if new_name != project_name and new_name in self.tracker.settings.get(
+                    "projects", {}
+                ):
+                    messagebox.showerror(
+                        "Error", "A project with this name already exists"
+                    )
+                    return
+
+                # Update project data
+                project_data = self.tracker.settings["projects"].get(project_name, {})
+                old_sphere = project_data.get("sphere")
+                new_sphere = sphere_var.get()
+                project_data["sphere"] = new_sphere
+                project_data["note"] = note_var.get()
+                project_data["goal"] = goal_var.get()
+
+                # If name changed, rename project
+                if new_name != project_name:
+                    self.tracker.settings["projects"].pop(project_name)
+                    self.tracker.settings["projects"][new_name] = project_data
+
+                self.save_settings()
+
+                # Disable editing
+                name_entry.config(state="readonly")
+                sphere_combo.config(state="disabled")
+                note_entry.config(state="readonly")
+                goal_entry.config(state="readonly")
+                edit_btn.config(text="Edit")
+
+                # Refresh project list if name or sphere changed
+                if new_name != project_name or old_sphere != new_sphere:
+                    self.refresh_project_section()
+
         # Buttons
         button_frame = ttk.Frame(frame)
         button_frame.grid(row=3, column=0, columnspan=4, pady=5)
@@ -745,18 +800,7 @@ class SettingsFrame(ttk.Frame):
         edit_btn = ttk.Button(
             button_frame,
             text="Edit",
-            command=lambda: self.toggle_project_edit(
-                project_name,
-                name_entry,
-                sphere_combo,
-                note_entry,
-                goal_entry,
-                edit_btn,
-                name_var,
-                sphere_var,
-                note_var,
-                goal_var,
-            ),
+            command=toggle_edit,
         )
         edit_btn.pack(side=tk.LEFT, padx=5)
 
@@ -794,66 +838,6 @@ class SettingsFrame(ttk.Frame):
             text="Delete",
             command=lambda: self.delete_project(project_name),
         ).pack(side=tk.LEFT, padx=5)
-
-    def toggle_project_edit(
-        self,
-        project_name,
-        name_entry,
-        sphere_combo,
-        note_entry,
-        goal_entry,
-        edit_btn,
-        name_var,
-        sphere_var,
-        note_var,
-        goal_var,
-    ):
-        """Toggle project edit mode"""
-        if edit_btn["text"] == "Edit":
-            # Enable editing
-            name_entry.config(state="normal")
-            sphere_combo.config(state="readonly")
-            note_entry.config(state="normal")
-            goal_entry.config(state="normal")
-            edit_btn.config(text="Save")
-        else:
-            # Save changes
-            new_name = name_var.get().strip()
-
-            if not new_name:
-                messagebox.showerror("Error", "Project name cannot be empty")
-                return
-
-            # Check if name changed and new name already exists
-            if new_name != project_name and new_name in self.tracker.settings.get(
-                "projects", {}
-            ):
-                messagebox.showerror("Error", "A project with this name already exists")
-                return
-
-            # Update project data
-            project_data = self.tracker.settings["projects"].get(project_name, {})
-            project_data["sphere"] = sphere_var.get()
-            project_data["note"] = note_var.get()
-            project_data["goal"] = goal_var.get()
-
-            # If name changed, rename project
-            if new_name != project_name:
-                self.tracker.settings["projects"].pop(project_name)
-                self.tracker.settings["projects"][new_name] = project_data
-
-            self.save_settings()
-
-            # Disable editing
-            name_entry.config(state="readonly")
-            sphere_combo.config(state="disabled")
-            note_entry.config(state="readonly")
-            goal_entry.config(state="readonly")
-            edit_btn.config(text="Edit")
-
-            # Refresh if name changed
-            if new_name != project_name:
-                self.refresh_project_section()
 
     def create_new_project(self):
         """Create a new project"""

@@ -135,8 +135,11 @@ class ScrollableFrame(ttk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent)
 
+        # Get frame background color to match theme
+        frame_bg = get_frame_background()
+
         # Create canvas and scrollbar
-        self.canvas = tk.Canvas(self)
+        self.canvas = tk.Canvas(self, bg=frame_bg, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(
             self, orient="vertical", command=self.canvas.yview
         )
