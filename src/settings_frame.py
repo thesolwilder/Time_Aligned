@@ -7,7 +7,7 @@ backup configuration, screenshot capture, and idle tracking.
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
 import os
 import csv
@@ -24,7 +24,8 @@ from src.constants import (
     FONT_TITLE,
     FONT_TIMER_SMALL,
     FONT_NORMAL_BOLD,
-    FONT_TIMER_MEDIUM,
+    FONT_BODY,
+    FONT_SMALL_ITALIC,
 )
 
 
@@ -189,7 +190,6 @@ class SettingsFrame(ttk.Frame):
         # CSV Export section
         self.create_csv_export_section(content_frame)
 
-        
         self.row += 1
         self._add_settings_separator(content_frame)
 
@@ -1069,7 +1069,7 @@ class SettingsFrame(ttk.Frame):
 
         # Header inside the frame
         header_row = 0
-        ttk.Label(idle_frame, text="Idle Settings", font=("Arial", 14, "bold")).grid(
+        ttk.Label(idle_frame, text="Idle Settings", font=FONT_TIMER_SMALL).grid(
             row=header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
         )
         header_row += 1
@@ -1083,23 +1083,16 @@ class SettingsFrame(ttk.Frame):
         idle_enabled_var = tk.BooleanVar(
             master=self.root, value=idle_settings.get("idle_tracking_enabled", True)
         )
-        ttk.Checkbutton(
-            idle_frame,
-            text="Enable Idle Tracking",
-            variable=idle_enabled_var,
-        ).grid(row=idle_row, column=0, columnspan=2, sticky=tk.W, pady=5)
-        idle_row += 1
 
         # Idle threshold
+        idle_row += 1
         ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
-        # Get value from settings, textvariable= doesn't work well with validation, 
+        # Get value from settings, textvariable= doesn't work well with validation,
         # so we'll set value manually after creating the Spinbox
         idle_threshold_value = idle_settings.get("idle_threshold", 60)
-        idle_threshold_spin = ttk.Spinbox(
-            idle_frame, from_=1, to=600, width=10
-        )
+        idle_threshold_spin = ttk.Spinbox(idle_frame, from_=1, to=600, width=10)
         idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
 
         # Set value after grid using insert
@@ -1134,6 +1127,27 @@ class SettingsFrame(ttk.Frame):
         idle_break_combo.pack()
         idle_row += 1
 
+        # Define nested toggle function to enable/disable idle threshold controls
+        def toggle_idle_controls():
+            """Enable or disable idle threshold controls based on checkbox state."""
+            if idle_enabled_var.get():
+                idle_threshold_spin.config(state="normal")
+                idle_break_combo.config(state="readonly")
+            else:
+                idle_threshold_spin.config(state="disabled")
+                idle_break_combo.config(state="disabled")
+
+        # Add checkbox after controls are created so toggle function has access to widgets
+        ttk.Checkbutton(
+            idle_frame,
+            text="Enable Idle Tracking",
+            variable=idle_enabled_var,
+            command=toggle_idle_controls,
+        ).grid(row=header_row, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        # Initialize control states based on current setting
+        toggle_idle_controls()
+
         # Define nested save function with closure over widget variables
         def save_idle_settings():
             """Save idle settings - uses closure to access parent scope variables."""
@@ -1147,6 +1161,10 @@ class SettingsFrame(ttk.Frame):
                     "Invalid Idle Threshold",
                     f"Idle Threshold must be a numeric value between 1 and 600 seconds.\n\nYou entered: '{threshold_str}'",
                 )
+                # reset to previous valid value from settings file
+                idle_threshold_spin.delete(0, "end")
+                idle_threshold_spin.insert(0, str(idle_threshold_value))
+
                 return
 
             # All validation passed - save settings
@@ -1198,7 +1216,7 @@ class SettingsFrame(ttk.Frame):
         # Header inside the frame
         screenshot_header_row = 0
         ttk.Label(
-            screenshot_frame, text="Screenshot Settings", font=("Arial", 14, "bold")
+            screenshot_frame, text="Screenshot Settings", font=FONT_TIMER_SMALL
         ).grid(
             row=screenshot_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
         )
@@ -1209,43 +1227,122 @@ class SettingsFrame(ttk.Frame):
 
         screenshot_row = screenshot_header_row
 
+        # Hint label explaining the purpose
+        hint_label = ttk.Label(
+            screenshot_frame,
+            text="💡 Capture screenshots to help you remember what was accomplished during active periods",
+            font=FONT_SMALL_ITALIC,
+            foreground=COLOR_GRAY_TEXT,
+            wraplength=600,
+            justify=tk.LEFT,
+        )
+        hint_label.grid(
+            row=screenshot_row, column=0, columnspan=3, sticky=tk.W, pady=(0, 10)
+        )
+        screenshot_row += 1
+
         # Screenshot capture enabled toggle
         screenshot_enabled_var = tk.BooleanVar(
             master=self.root, value=screenshot_settings.get("enabled", False)
         )
 
-        # Warning label (initially hidden)
-        warning_label = ttk.Label(
-            screenshot_frame,
-            text="⚠️ Warning: Screenshots may capture sensitive information (passwords, private messages, etc.).\nSoftware creator is not liable for any data captured. Use at your own risk.",
-            foreground="red",
-            wraplength=500,
-            justify=tk.LEFT,
-        )
-
-        # Define nested toggle function with closure over warning_label
-        def toggle_warning():
-            """Toggle warning visibility - uses closure to access warning_label."""
+        # Define nested toggle function to show confirmation dialog
+        def toggle_screenshot_with_confirmation():
+            """Show confirmation dialog when enabling screenshots."""
             if screenshot_enabled_var.get():
-                warning_label.grid(
-                    row=screenshot_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
+                # User is trying to enable - create custom dialog with larger font
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Screenshot Capture - Terms of Use")
+                dialog.transient(self.root)
+                dialog.grab_set()
+
+                # Center the dialog
+                dialog.geometry("650x450")
+                dialog.update_idletasks()
+                x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+                y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+                dialog.geometry(f"+{x}+{y}")
+
+                # Warning icon and title
+                title_frame = ttk.Frame(dialog)
+                title_frame.pack(pady=20)
+                ttk.Label(
+                    title_frame,
+                    text="⚠️ WARNING: Screenshot Capture Disclaimer",
+                    font=FONT_TITLE,
+                    foreground="red",
+                ).pack()
+
+                # Message content
+                message_frame = ttk.Frame(dialog)
+                message_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+
+                message_text = (
+                    "By enabling this feature, you acknowledge and agree that:\n\n"
+                    "• Screenshots may capture sensitive information including passwords, "
+                    "private messages, financial data, and other confidential content\n\n"
+                    "• You are solely responsible for any data captured by this feature\n\n"
+                    "• The software creator is NOT LIABLE for any data captured, "
+                    "exposed, or misused through this feature\n\n"
+                    "• You use this feature entirely at your own risk\n\n"
+                    "Do you agree to these terms and wish to enable screenshot capture?"
                 )
-            else:
-                warning_label.grid_remove()
+
+                message_label = ttk.Label(
+                    message_frame,
+                    text=message_text,
+                    font=FONT_BODY,
+                    wraplength=600,
+                    justify=tk.LEFT,
+                )
+                message_label.pack()
+
+                # Result variable
+                result = {"confirmed": False}
+
+                def on_agree():
+                    result["confirmed"] = True
+                    dialog.destroy()
+
+                def on_decline():
+                    result["confirmed"] = False
+                    dialog.destroy()
+
+                # Buttons
+                button_frame = ttk.Frame(dialog)
+                button_frame.pack(pady=20)
+
+                ttk.Button(
+                    button_frame, text="I Agree", command=on_agree, width=15
+                ).pack(side=tk.LEFT, padx=10)
+
+                ttk.Button(
+                    button_frame, text="Decline", command=on_decline, width=15
+                ).pack(side=tk.LEFT, padx=10)
+
+                # Bind keys
+                dialog.bind("<Return>", lambda e: on_agree())
+                dialog.bind("<Escape>", lambda e: on_decline())
+
+                # Wait for dialog
+                dialog.wait_window()
+
+                if not result["confirmed"]:
+                    # User declined - revert checkbox
+                    screenshot_enabled_var.set(False)
 
         ttk.Checkbutton(
             screenshot_frame,
             text="Enable Screenshot Capture",
             variable=screenshot_enabled_var,
-            command=toggle_warning,
+            command=toggle_screenshot_with_confirmation,
+            style="Large.TCheckbutton",
         ).grid(row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5)
-        screenshot_row += 1
 
-        # Show warning if already enabled
-        if screenshot_enabled_var.get():
-            warning_label.grid(
-                row=screenshot_row, column=0, columnspan=3, sticky=tk.W, pady=5
-            )
+        # Configure larger font for this checkbutton
+        style = ttk.Style()
+        style.configure("Large.TCheckbutton", font=FONT_BODY)
+
         screenshot_row += 1
 
         # Capture on focus change
@@ -1339,8 +1436,6 @@ class SettingsFrame(ttk.Frame):
             Spreadsheet ID stored in settings.json. For production, use
             environment variable GOOGLE_SHEETS_SPREADSHEET_ID instead.
         """
-        from tkinter import filedialog
-
         google_frame = ttk.LabelFrame(parent, padding=10)
         google_frame.grid(
             row=self.row,
@@ -1355,7 +1450,7 @@ class SettingsFrame(ttk.Frame):
         # Header
         google_header_row = 0
         ttk.Label(
-            google_frame, text="Google Sheets Integration", font=("Arial", 14, "bold")
+            google_frame, text="Google Sheets Integration", font=FONT_TIMER_SMALL
         ).grid(row=google_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
         google_header_row += 1
 
@@ -1918,7 +2013,7 @@ class SettingsFrame(ttk.Frame):
         header_frame = ttk.Frame(parent)
         header_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
 
-        ttk.Label(header_frame, text="Break Actions", font=("Arial", 14, "bold")).pack(
+        ttk.Label(header_frame, text="Break Actions", font=FONT_TIMER_SMALL).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
