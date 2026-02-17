@@ -3,7 +3,6 @@
 import tkinter as tk
 from tkinter import ttk
 import re
-import traceback
 
 
 def get_frame_background():
@@ -239,12 +238,11 @@ class ScrollableFrame(ttk.Frame):
         self._disable_combobox_scrolling()
 
     def _disable_combobox_scrolling(self):
-        """Find and disable mousewheel on all comboboxes in the content frame"""
+        """Find and disable mousewheel on all comboboxes and spinboxes in the content frame"""
 
         def disable_recursive(widget):
             try:
-                if isinstance(widget, ttk.Combobox):
-                    # Bind to prevent scrolling, returning "break" stops event propagation
+                if isinstance(widget, (ttk.Combobox, ttk.Spinbox)):
                     widget.bind("<MouseWheel>", lambda e: "break")
 
                 for child in widget.winfo_children():
@@ -259,7 +257,6 @@ class ScrollableFrame(ttk.Frame):
 
     def rebind_mousewheel(self):
         """Rebind mousewheel to all widgets (call after adding new widgets)"""
-        # Re-disable combobox scrolling for any newly added comboboxes
         self._disable_combobox_scrolling()
 
     def get_content_frame(self):

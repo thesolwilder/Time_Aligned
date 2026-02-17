@@ -2048,7 +2048,60 @@ class CompletionFrame(ttk.Frame):
             pass
 
     def skip_and_close(self):
-        """Return to main frame without saving"""
+        """Return to main frame, applying defaults to any incomplete data
+
+        Applies default sphere/project/action to periods that lack assignments.
+        This handles edge cases like old data created before end_session() fix,
+        or data loaded from external sources.
+
+        Note: Normally defaults are set in end_session(), but this provides
+        a fallback for any incomplete data that reaches the completion frame.
+        """
+        all_data = self.tracker.load_data()
+
+        if self.session_name not in all_data:
+            self.tracker.show_main_frame()
+            return
+
+        session = all_data[self.session_name]
+
+        # Get defaults using tracker's helper methods that parse JSON structure correctly
+        default_sphere = self.tracker._get_default_sphere()
+        default_project = self.tracker.get_default_project(default_sphere)
+        _, default_break_action = self.tracker.get_active_break_actions()
+
+        # Fallback if helpers return None
+        if not default_sphere:
+            default_sphere = "General"
+        if not default_project:
+            default_project = "General"
+        if not default_break_action:
+            default_break_action = "Break"
+        if not session.get("sphere"):
+            session["sphere"] = default_sphere
+
+        # Apply default project to active periods without project
+        for active_period in session.get("active", []):
+            has_project = active_period.get("project") or active_period.get("projects")
+            if not has_project:
+                active_period["project"] = default_project
+
+        # Apply default action to break periods without action
+        for break_period in session.get("breaks", []):
+            has_action = break_period.get("action") or break_period.get("actions")
+            if not has_action:
+                break_period["action"] = default_break_action
+
+        # Apply default action to idle periods without action
+        for idle_period in session.get("idle_periods", []):
+            has_action = idle_period.get("action") or idle_period.get("actions")
+            if not has_action:
+                idle_period["action"] = default_break_action
+
+        # Save if any defaults were applied
+        self.tracker.save_data(all_data)
+
+        # Navigate to main frame
         self.tracker.show_main_frame()
 
     def _delete_session(self):

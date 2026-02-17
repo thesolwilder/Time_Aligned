@@ -57,8 +57,6 @@ class TimeTracker:
         style = ttk.Style()
         style.theme_use("clam")
 
-      
-
         # Session state variables
         self.session_name = None
         self.session_active = False
@@ -777,6 +775,47 @@ class TimeTracker:
             all_data[self.session_name]["total_duration"] = total_elapsed
             all_data[self.session_name]["active_duration"] = active_time
             all_data[self.session_name]["break_duration"] = break_time
+
+            # Apply defaults to any unassigned periods so data is complete for analysis
+            session = all_data[self.session_name]
+            
+            # Get defaults using helper methods that parse JSON structure correctly
+            default_sphere = self._get_default_sphere()
+            default_project = self.get_default_project(default_sphere)
+            _, default_break_action = self.get_active_break_actions()
+            
+            # Fallback if helpers return None
+            if not default_sphere:
+                default_sphere = "General"
+            if not default_project:
+                default_project = "General"
+            if not default_break_action:
+                default_break_action = "Break"
+
+            # Apply default sphere if not set
+            if not session.get("sphere"):
+                session["sphere"] = default_sphere
+
+            # Apply default project to active periods without project
+            for active_period in session.get("active", []):
+                has_project = active_period.get("project") or active_period.get(
+                    "projects"
+                )
+                if not has_project:
+                    active_period["project"] = default_project
+
+            # Apply default action to break periods without action
+            for break_period in session.get("breaks", []):
+                has_action = break_period.get("action") or break_period.get("actions")
+                if not has_action:
+                    break_period["action"] = default_break_action
+
+            # Apply default action to idle periods without action
+            for idle_period in session.get("idle_periods", []):
+                has_action = idle_period.get("action") or idle_period.get("actions")
+                if not has_action:
+                    idle_period["action"] = default_break_action
+
             self.save_data(all_data)
 
         # Reset state (but keep session_name for completion frame)
