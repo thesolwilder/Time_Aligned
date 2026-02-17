@@ -187,43 +187,28 @@ class ScrollableFrame(ttk.Frame):
         """Setup mousewheel scrolling"""
 
         def on_mousewheel(event):
-            # Check if mouse is over this scrollable frame
             try:
-                # CRITICAL: Check if this specific ScrollableFrame instance is still alive
-                # Don't use winfo_exists() as it may throw errors on destroyed widgets
-                if not self._is_alive:
-                    return  # This instance is destroyed, silently ignore
-
-                # Validate canvas before scrolling
-                if not hasattr(self, "canvas"):
+                if not self._is_alive or not hasattr(self, "canvas"):
                     return
 
-                # Check canvas exists (this can fail if destroyed)
                 try:
-                    canvas_exists = self.canvas.winfo_exists()
-                    if not canvas_exists:
+                    if not self.canvas.winfo_exists():
                         return
                 except (tk.TclError, AttributeError):
                     return
 
-                # Get widget under mouse
                 x, y = self.winfo_pointerxy()
                 widget = self.winfo_containing(x, y)
 
-                # Check if it's a combobox
                 if widget and isinstance(widget, ttk.Combobox):
                     return
 
-                # Check if the widget is a descendant of this ScrollableFrame
                 if widget:
                     parent = widget
-                    found_self = False
                     depth = 0
                     max_depth = 20
                     while parent and depth < max_depth:
                         if parent == self:
-                            found_self = True
-                            # Mouse is over this frame, scroll it
                             self.canvas.yview_scroll(
                                 int(-1 * (event.delta / 120)), "units"
                             )
@@ -235,28 +220,17 @@ class ScrollableFrame(ttk.Frame):
                         except (AttributeError, tk.TclError):
                             break
 
-            except (tk.TclError, AttributeError, RuntimeError):
-                # Widget destroyed or other errors, silently ignore
-                return
-            except Exception:
-                # Any other error, silently ignore
+            except (tk.TclError, AttributeError, RuntimeError, Exception):
                 return
 
-        # Bind to the root window to capture all mousewheel events
-        def setup_root_binding():
+        def setup_root_binding(event=None):
             try:
                 root = self.winfo_toplevel()
-                # Use bind_all to ensure we capture events everywhere
-                # Note: Multiple ScrollableFrames will share this binding
-                # Each handler checks if its instance is alive before acting
                 root.bind_all("<MouseWheel>", on_mousewheel, add="+")
             except Exception:
                 pass
 
-        # Delay binding until widget is visible
-        self.after(100, setup_root_binding)
-
-        # Also bind directly to our widgets as backup
+        self.bind("<Map>", setup_root_binding, add="+")
         self.bind("<MouseWheel>", on_mousewheel, add="+")
         self.canvas.bind("<MouseWheel>", on_mousewheel, add="+")
         self.content_frame.bind("<MouseWheel>", on_mousewheel, add="+")

@@ -26,6 +26,69 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-17] - Replaced Arbitrary Delay with <Map> Event for ScrollableFrame Binding
+
+**Search Keywords**: mousewheel, ScrollableFrame, bind_all, <Map> event, after delay, arbitrary timing, event binding, widget visible
+
+**Context**:
+ScrollableFrame used `self.after(100, setup_root_binding)` with arbitrary 100ms delay before setting up mousewheel binding. This was timing-based and non-deterministic - no guarantee widget would be ready in exactly 100ms.
+
+**Problem**:
+
+- Arbitrary timing is unreliable
+- Widget might not be visible yet (if slow system)
+- Widget might be visible earlier (wasted delay)
+- No deterministic way to know when binding should occur
+
+**What Worked** ✅:
+
+**Used `<Map>` event instead of arbitrary delay**:
+
+```python
+def setup_root_binding(event=None):
+    try:
+        root = self.winfo_toplevel()
+        root.bind_all("<MouseWheel>", on_mousewheel, add="+")
+    except Exception:
+        pass
+
+self.bind("<Map>", setup_root_binding, add="+")
+```
+
+**Why This Fixed It**:
+
+1. **`<Map>` event fires when widget is actually mapped** (visible on screen)
+2. **Deterministic** - no guessing about timing
+3. **event parameter required** - tkinter passes event object to handler
+4. **Eliminated arbitrary 100ms delay** - binding happens at exact right moment
+
+**What Didn't Work**:
+
+- ❌ `self.after(100, setup_root_binding)` - arbitrary, non-deterministic
+
+**Files Changed**:
+
+- `src/ui_helpers.py` (line ~237): Replaced `.after(100)` with `<Map>` event binding
+
+**Key Learnings**:
+
+1. **Prefer event-based triggers over arbitrary delays** - more reliable and deterministic
+2. **`<Map>` event = widget is visible** - perfect for post-visibility setup
+3. **Event handlers must accept event parameter** even if unused
+4. **Common tkinter events**:
+   - `<Map>` - widget becomes visible
+   - `<Unmap>` - widget becomes invisible
+   - `<Configure>` - widget size/position changes
+   - `<Destroy>` - widget destroyed
+
+**Production Code Cleanup**:
+
+- Removed verbose comments explaining error handling
+- Silent error handling is correct for mousewheel events (no user-facing errors needed)
+- Consolidated exception handling for cleaner code
+
+---
+
 ### [2026-02-16] - ACTUAL FIX: ttk.Spinbox with from\_/to CANNOT use textvariable!
 
 **Search Keywords**: spinbox blank, ttk.Spinbox display issue, textvariable with from\_/to, spinbox not showing value, idle threshold blank, spinbox from to range, delete insert spinbox
