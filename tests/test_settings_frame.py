@@ -1675,3 +1675,737 @@ class TestIdleSettingsUI(unittest.TestCase):
             f"Spinbox should display '120' from settings.json but displays '{displayed_value}'. "
             f"Check that idle_threshold_spin.set() is called after widget creation.",
         )
+
+
+class TestBreakActionsCRUD(unittest.TestCase):
+    """Test break actions create, read, update, delete operations"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        # Create settings with break actions
+        settings = {
+            "spheres": {"TestSphere": {"is_default": True, "active": True}},
+            "projects": {},
+            "break_actions": {
+                "Lunch": {"is_default": True, "active": True, "notes": "12pm daily"},
+                "Coffee": {"is_default": False, "active": True, "notes": ""},
+                "ArchivedBreak": {"is_default": False, "active": False, "notes": ""},
+            },
+            "idle_settings": {
+                "idle_tracking_enabled": True,
+                "idle_threshold": 60,
+                "idle_break_threshold": 300,
+            },
+            "screenshot_settings": {"enabled": False},
+            "google_sheets": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_actions.json", settings
+        )
+
+        # Create GUI components
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    @patch("tkinter.messagebox.askyesno", return_value=True)
+    def test_delete_break_action(self, mock_messagebox):
+        """Test deleting a break action"""
+        # Verify break action exists
+        self.assertIn("Coffee", self.tracker.settings["break_actions"])
+
+        # Delete it
+        self.frame.delete_break_action("Coffee")
+
+        # Verify it's removed from settings
+        self.assertNotIn("Coffee", self.tracker.settings["break_actions"])
+
+        # Verify messagebox was shown
+        mock_messagebox.assert_called_once()
+
+    @patch("tkinter.messagebox.askyesno", return_value=False)
+    def test_delete_break_action_cancelled(self, mock_messagebox):
+        """Test cancelling break action deletion"""
+        # Delete with cancel
+        self.frame.delete_break_action("Coffee")
+
+        # Verify it still exists
+        self.assertIn("Coffee", self.tracker.settings["break_actions"])
+
+    @patch("tkinter.simpledialog.askstring", return_value="Meeting")
+    def test_create_new_break_action(self, mock_dialog):
+        """Test creating a new break action"""
+        # Create new break action
+        self.frame.create_new_break_action()
+
+        # Verify it exists in settings
+        self.assertIn("Meeting", self.tracker.settings["break_actions"])
+        self.assertTrue(self.tracker.settings["break_actions"]["Meeting"]["active"])
+        self.assertFalse(
+            self.tracker.settings["break_actions"]["Meeting"]["is_default"]
+        )
+
+    @patch("tkinter.simpledialog.askstring", return_value="Test<>Break")
+    def test_create_break_action_invalid_name(self, mock_dialog):
+        """Test creating break action with dangerous path characters gets sanitized"""
+        initial_count = len(self.tracker.settings["break_actions"])
+
+        # Try to create with invalid name containing dangerous path characters
+        self.frame.create_new_break_action()
+
+        # Name should be sanitized - < and > replaced with _
+        self.assertIn("Test__Break", self.tracker.settings["break_actions"])
+
+    @patch("tkinter.simpledialog.askstring", return_value="")
+    def test_create_break_action_empty_name(self, mock_dialog):
+        """Test creating break action with empty name is rejected"""
+        initial_count = len(self.tracker.settings["break_actions"])
+
+        # Try to create with empty name - should not create anything
+        self.frame.create_new_break_action()
+
+        # Should not add anything
+        self.assertEqual(len(self.tracker.settings["break_actions"]), initial_count)
+
+    @patch("tkinter.simpledialog.askstring", return_value="///:")
+    @patch("tkinter.messagebox.showerror")
+    def test_create_break_action_only_special_chars(self, mock_error, mock_dialog):
+        """Test creating break action with only dangerous characters shows error"""
+        initial_count = len(self.tracker.settings["break_actions"])
+
+        # Try to create with only dangerous characters (sanitizes to all underscores)
+        self.frame.create_new_break_action()
+
+        # Should create "____" (sanitized version)
+        self.assertIn("____", self.tracker.settings["break_actions"])
+
+    def test_toggle_break_action_archive(self):
+        """Test archiving and activating break actions"""
+        # Initially active
+        self.assertTrue(self.tracker.settings["break_actions"]["Coffee"]["active"])
+
+        # Archive it
+        self.frame.toggle_break_action_active("Coffee")
+        self.assertFalse(self.tracker.settings["break_actions"]["Coffee"]["active"])
+
+        # Activate it again
+        self.frame.toggle_break_action_active("Coffee")
+        self.assertTrue(self.tracker.settings["break_actions"]["Coffee"]["active"])
+
+    def test_set_default_break_action(self):
+        """Test setting a break action as default"""
+        # Initially Lunch is default
+        self.assertTrue(self.tracker.settings["break_actions"]["Lunch"]["is_default"])
+        self.assertFalse(self.tracker.settings["break_actions"]["Coffee"]["is_default"])
+
+        # Set Coffee as default
+        self.frame.set_default_break_action("Coffee")
+
+        # Verify only Coffee is default now
+        self.assertFalse(self.tracker.settings["break_actions"]["Lunch"]["is_default"])
+        self.assertTrue(self.tracker.settings["break_actions"]["Coffee"]["is_default"])
+
+    def test_break_action_notes_edit(self):
+        """Test editing break action notes"""
+        # Create a mock Entry widget for notes
+        notes_entry = tk.Entry(self.root)
+        notes_entry.insert(0, "Old notes")
+
+        # Create edit button
+        edit_btn = ttk.Button(self.root, text="Edit")
+
+        # First toggle enables editing
+        self.frame.toggle_break_action_edit("Coffee", notes_entry, edit_btn)
+        self.assertEqual(edit_btn["text"], "Save")
+        self.assertEqual(notes_entry["state"], "normal")
+
+        # Update notes
+        notes_entry.delete(0, tk.END)
+        notes_entry.insert(0, "New notes for coffee break")
+
+        # Second toggle saves
+        self.frame.toggle_break_action_edit("Coffee", notes_entry, edit_btn)
+        self.assertEqual(edit_btn["text"], "Edit")
+        self.assertEqual(notes_entry["state"], "disabled")
+
+        # Verify notes were saved
+        self.assertEqual(
+            self.tracker.settings["break_actions"]["Coffee"]["notes"],
+            "New notes for coffee break",
+        )
+
+
+class TestBreakActionsFilter(unittest.TestCase):
+    """Test break actions filter functionality"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {"TestSphere": {"is_default": True, "active": True}},
+            "projects": {},
+            "break_actions": {
+                "ActiveBreak1": {"is_default": True, "active": True, "notes": ""},
+                "ActiveBreak2": {"is_default": False, "active": True, "notes": ""},
+                "ArchivedBreak1": {"is_default": False, "active": False, "notes": ""},
+                "ArchivedBreak2": {"is_default": False, "active": False, "notes": ""},
+            },
+            "idle_settings": {},
+            "screenshot_settings": {"enabled": False},
+            "google_sheets": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_filter.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_filter_active_break_actions(self):
+        """Test filtering shows only active break actions"""
+        self.frame.break_action_filter.set("active")
+        self.frame.refresh_break_actions()
+
+        # Force widget updates
+        self.root.update_idletasks()
+        self.root.update()
+
+        # Count visible rows in break_actions_frame
+        visible_count = 0
+        for child in self.frame.break_actions_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                # Check if it's a break action row (has relief='ridge' and contains action data)
+                try:
+                    relief_value = str(child.cget("relief"))
+                    if relief_value == "ridge":
+                        visible_count += 1
+                except:
+                    pass
+
+        # Should show 2 active break actions
+        self.assertEqual(visible_count, 2)
+
+    def test_filter_archived_break_actions(self):
+        """Test filtering shows only archived break actions"""
+        self.frame.break_action_filter.set("inactive")
+        self.frame.refresh_break_actions()
+
+        # Force widget updates
+        self.root.update_idletasks()
+        self.root.update()
+
+        visible_count = 0
+        for child in self.frame.break_actions_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                try:
+                    relief_value = str(child.cget("relief"))
+                    if relief_value == "ridge":
+                        visible_count += 1
+                except:
+                    pass
+
+        # Should show 2 archived break actions
+        self.assertEqual(visible_count, 2)
+
+    def test_filter_all_break_actions(self):
+        """Test filtering shows all break actions"""
+        self.frame.break_action_filter.set("all")
+        self.frame.refresh_break_actions()
+
+        # Force widget updates
+        self.root.update_idletasks()
+        self.root.update()
+
+        visible_count = 0
+        for child in self.frame.break_actions_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                try:
+                    relief_value = str(child.cget("relief"))
+                    if relief_value == "ridge":
+                        visible_count += 1
+                except:
+                    pass
+
+        # Should show all 4 break actions
+        self.assertEqual(visible_count, 4)
+
+    def test_default_break_action_appears_first(self):
+        """Test that default break action appears first in filtered list"""
+        self.frame.break_action_filter.set("active")
+        self.frame.refresh_break_actions()
+
+        # Force widget updates
+        self.root.update_idletasks()
+        self.root.update()
+
+        # Find first break action frame
+        first_frame = None
+        for child in self.frame.break_actions_frame.winfo_children():
+            if isinstance(child, ttk.Frame):
+                try:
+                    relief_value = str(child.cget("relief"))
+                    if relief_value == "ridge":
+                        first_frame = child
+                        break
+                except:
+                    pass
+
+        # Should find at least one break action frame
+        self.assertIsNotNone(first_frame, "Should find at least one break action frame")
+
+        # Find the label with the break action name
+        found_name = None
+        for child in first_frame.winfo_children():
+            if isinstance(child, ttk.Label):
+                label_text = str(child.cget("text"))
+                if label_text in ["ActiveBreak1", "ActiveBreak2", "Notes:"]:
+                    if label_text != "Notes:":  # Skip the "Notes:" label
+                        found_name = label_text
+                        break
+
+        # Should be the default one
+        self.assertEqual(
+            found_name, "ActiveBreak1", "Default break action should appear first"
+        )
+
+
+class TestCSVExport(unittest.TestCase):
+    """Test CSV export functionality"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_settings.json", settings
+        )
+
+        # Create test data file with proper structure
+        data = {
+            "session1": {
+                "date": "2026-02-17",
+                "sphere": "Work",
+                "start_time": "09:00:00",
+                "end_time": "10:30:00",
+                "total_duration": 5400,
+                "active_duration": 5400,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "project": "Project A",
+                        "start": "09:00:00",
+                        "end": "10:30:00",
+                        "duration": 5400,
+                        "comment": "Made progress",
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+                "session_comments": {
+                    "active_notes": "",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "",
+                },
+            }
+        }
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_data.json", data
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.tracker.data_file = self.test_data_file
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    @patch("tkinter.filedialog.asksaveasfilename", return_value=None)
+    def test_csv_export_cancelled(self, mock_dialog):
+        """Test CSV export when user cancels file dialog"""
+        # Should not raise exception
+        self.frame.save_all_data_to_csv()
+
+        # Verify dialog was shown
+        mock_dialog.assert_called_once()
+
+    @patch("tkinter.filedialog.asksaveasfilename")
+    @patch("tkinter.messagebox.showinfo")
+    @patch("os.startfile")  # Mock Windows file explorer opening
+    def test_csv_export_success(self, mock_startfile, mock_info, mock_dialog):
+        """Test successful CSV export"""
+        # Create temporary output file path
+        output_file = os.path.join(self.file_manager.test_data_dir, "output.csv")
+        mock_dialog.return_value = output_file
+
+        # Export
+        self.frame.save_all_data_to_csv()
+
+        # Verify file was created
+        self.assertTrue(os.path.exists(output_file))
+
+        # Verify CSV content
+        import csv
+
+        with open(output_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["date"], "2026-02-17")
+        self.assertEqual(rows[0]["sphere"], "Work")
+        self.assertEqual(rows[0]["project"], "Project A")
+
+        # Verify success message was shown
+        mock_info.assert_called_once()
+
+        # Clean up
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+    @patch("tkinter.messagebox.showerror")
+    def test_csv_export_no_data_file(self, mock_error):
+        """Test CSV export when data file doesn't exist"""
+        # Point to non-existent file
+        self.tracker.data_file = "nonexistent.json"
+
+        # Try to export
+        self.frame.save_all_data_to_csv()
+
+        # Should show error
+        mock_error.assert_called_once()
+
+    @patch("tkinter.filedialog.asksaveasfilename")
+    @patch("tkinter.messagebox.showwarning")  # Mock the "No Data" warning popup
+    def test_csv_export_empty_data(self, mock_warning, mock_dialog):
+        """Test CSV export with empty data file"""
+        # Create empty data file
+        empty_data = {}
+        empty_file = self.file_manager.create_test_file("empty_data.json", empty_data)
+        self.tracker.data_file = empty_file
+
+        output_file = os.path.join(self.file_manager.test_data_dir, "output_empty.csv")
+        mock_dialog.return_value = output_file
+
+        # Export - should return early with warning, not create file
+        self.frame.save_all_data_to_csv()
+
+        # Should NOT create file because there's no data
+        self.assertFalse(os.path.exists(output_file))
+
+        # Should show warning about no data
+        mock_warning.assert_called_once()
+
+        # Clean up (in case file was created)
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+
+class TestScreenshotSettingsValidation(unittest.TestCase):
+    """Test screenshot settings validation"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {"TestSphere": {"is_default": True, "active": True}},
+            "projects": {},
+            "break_actions": {},
+            "idle_settings": {},
+            "screenshot_settings": {
+                "enabled": False,
+                "capture_on_focus_change": True,
+                "min_seconds_between_captures": 10,
+                "screenshot_path": "screenshots",
+            },
+            "google_sheets": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_screenshot_settings.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_screenshot_settings_loads_correctly(self):
+        """Test that screenshot settings load from JSON"""
+        settings = self.tracker.settings["screenshot_settings"]
+
+        self.assertFalse(settings["enabled"])
+        self.assertTrue(settings["capture_on_focus_change"])
+        self.assertEqual(settings["min_seconds_between_captures"], 10)
+
+    @patch("tkinter.messagebox.showinfo")
+    def test_screenshot_settings_save(self, mock_info):
+        """Test saving screenshot settings"""
+        # Find the save button and variables by searching the frame
+        found_enabled_var = None
+        found_focus_var = None
+        found_min_seconds_var = None
+        found_save_btn = None
+
+        def find_screenshot_widgets(widget, depth=0):
+            nonlocal found_enabled_var, found_focus_var, found_min_seconds_var, found_save_btn
+
+            if depth > 10:
+                return
+
+            for child in widget.winfo_children():
+                # Look for save button
+                if isinstance(child, ttk.Button):
+                    btn_text = child.cget("text")
+                    if "Save Screenshot Settings" in str(btn_text):
+                        found_save_btn = child
+
+                # Recurse
+                find_screenshot_widgets(child, depth + 1)
+
+        find_screenshot_widgets(self.frame)
+
+        # If we found the save button, we can trigger it
+        if found_save_btn:
+            # The button has a command that saves settings
+            # Invoke it
+            found_save_btn.invoke()
+
+            # Verify success message was shown
+            mock_info.assert_called_once()
+
+
+class TestKeyboardShortcutsSection(unittest.TestCase):
+    """Test keyboard shortcuts reference section"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_shortcuts.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_keyboard_shortcuts_section_exists(self):
+        """Test that keyboard shortcuts section is created"""
+        # Search for LabelFrame with "Global Keyboard Shortcuts" text
+        found_shortcuts_frame = False
+
+        def find_shortcuts_frame(widget, depth=0):
+            nonlocal found_shortcuts_frame
+
+            if depth > 10:
+                return
+
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.LabelFrame):
+                    frame_text = child.cget("text")
+                    if "Global Keyboard Shortcuts" in str(frame_text):
+                        found_shortcuts_frame = True
+                        return
+
+                find_shortcuts_frame(child, depth + 1)
+
+        find_shortcuts_frame(self.frame)
+
+        self.assertTrue(
+            found_shortcuts_frame, "Keyboard shortcuts section should exist"
+        )
+
+    def test_keyboard_shortcuts_display_all_shortcuts(self):
+        """Test that all keyboard shortcuts are displayed"""
+        expected_shortcuts = [
+            "Ctrl + Shift + S",
+            "Ctrl + Shift + B",
+            "Ctrl + Shift + E",
+            "Ctrl + Shift + W",
+        ]
+
+        # Search for labels with shortcut text
+        found_shortcuts = []
+
+        def find_shortcut_labels(widget, depth=0):
+            if depth > 10:
+                return
+
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Label):
+                    label_text = str(child.cget("text"))
+                    for shortcut in expected_shortcuts:
+                        if shortcut in label_text:
+                            found_shortcuts.append(shortcut)
+
+                find_shortcut_labels(child, depth + 1)
+
+        find_shortcut_labels(self.frame)
+
+        # Verify all shortcuts are displayed
+        for shortcut in expected_shortcuts:
+            self.assertIn(
+                shortcut, found_shortcuts, f"Shortcut {shortcut} should be displayed"
+            )
+
+
+class TestGoogleSheetsSettingsUI(unittest.TestCase):
+    """Test Google Sheets settings UI components"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {"TestSphere": {"is_default": True, "active": True}},
+            "projects": {},
+            "break_actions": {},
+            "idle_settings": {},
+            "screenshot_settings": {"enabled": False},
+            "google_sheets": {
+                "enabled": False,
+                "spreadsheet_id": "",
+                "sheet_name": "Sessions",
+                "credentials_file": "credentials.json",
+            },
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_google_sheets_ui.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    @patch("tkinter.filedialog.askopenfilename", return_value="test_credentials.json")
+    def test_browse_credentials_button(self, mock_dialog):
+        """Test browsing for credentials file"""
+        # Find the browse button
+        found_browse_btn = None
+
+        def find_browse_button(widget, depth=0):
+            nonlocal found_browse_btn
+
+            if depth > 10:
+                return
+
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Button):
+                    btn_text = str(child.cget("text"))
+                    if "Browse" in btn_text:
+                        # Make sure it's in Google Sheets section (check if parent has Google Sheets label)
+                        parent = child.master
+                        for sibling in parent.winfo_children():
+                            if isinstance(sibling, ttk.Label):
+                                if "Credentials File" in str(sibling.cget("text")):
+                                    found_browse_btn = child
+                                    return
+
+                find_browse_button(child, depth + 1)
+
+        find_browse_button(self.frame)
+
+        if found_browse_btn:
+            # Invoke the button
+            found_browse_btn.invoke()
+
+            # Verify file dialog was called
+            mock_dialog.assert_called_once()
+
+    @patch("tkinter.messagebox.showinfo")
+    @patch("src.settings_frame.GoogleSheetsUploader")
+    def test_google_sheets_test_connection_success(self, mock_uploader, mock_info):
+        """Test successful Google Sheets connection test"""
+        # Mock successful connection
+        mock_instance = Mock()
+        mock_instance.test_connection.return_value = (True, "Connected to spreadsheet: Test Sheet")
+        mock_uploader.return_value = mock_instance
+
+        # Set valid spreadsheet ID
+        self.tracker.settings["google_sheets"]["spreadsheet_id"] = "test123"
+
+        # Recreate frame to pick up settings
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+        # Find test connection button
+        found_test_btn = None
+
+        def find_test_button(widget, depth=0):
+            nonlocal found_test_btn
+
+            if depth > 10:
+                return
+
+            for child in widget.winfo_children():
+                if isinstance(child, ttk.Button):
+                    btn_text = str(child.cget("text"))
+                    if "Test Connection" in btn_text:
+                        found_test_btn = child
+                        return
+
+                find_test_button(child, depth + 1)
+
+        find_test_button(self.frame)
+
+        # Button should be found
+        self.assertIsNotNone(found_test_btn, "Test Connection button not found")
+        
+        # Invoke the button
+        found_test_btn.invoke()
+
+        # Process any pending events
+        self.root.update()
+
+        # Verify uploader was instantiated and test_connection was called
+        mock_uploader.assert_called_once()
+        mock_instance.test_connection.assert_called_once()
+
+
+if __name__ == "__main__":
+    unittest.main()

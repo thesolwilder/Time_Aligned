@@ -2082,6 +2082,8 @@ class SettingsFrame(ttk.Frame):
         filtered_actions = []
         default_action = None
 
+        # Filter break actions based on active/inactive/all filter selection
+        # Separate default action to display it first in the list
         for name, data in break_actions.items():
             include = False
             if filter_val == "active" and data.get("active", True):
@@ -2099,6 +2101,7 @@ class SettingsFrame(ttk.Frame):
 
         filtered_actions.sort(key=lambda x: x[0])
 
+        #default action at the top
         if default_action:
             filtered_actions.insert(0, default_action)
 
