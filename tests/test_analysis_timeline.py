@@ -4362,5 +4362,219 @@ class TestAnalysisFrameRadioButtonTimelineFiltering(unittest.TestCase):
         self.assertIn("InactiveProjectInInactiveSphere", projects)
 
 
+class TestProjectFilterBreakIdleLeakBug(unittest.TestCase):
+    """
+    Integration tests capturing bug: break/idle periods leak through project filter.
+
+    Bug description:
+        When filtering by Sphere A + Project B (active radio), break and idle
+        periods from sessions that only contain Project A active periods are
+        incorrectly shown in the timeline.
+
+        Reproduction steps:
+        1. Create a session with sphere=Sphere A, active periods with project=Action A,
+           plus break and idle periods (active/break/active/idle/active/idle/active).
+        2. In analysis frame: select Sphere A, Project B, active radio filter.
+        3. Bug: 3 periods (Break, Idle, Idle) still appear with Action A.
+        4. Expected: 0 periods — no session has Project B, so nothing should show.
+
+    These tests FAIL on the buggy code and pass after the fix.
+    """
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+
+        settings = {
+            "idle_settings": {"idle_tracking_enabled": False},
+            "spheres": {"Sphere A": {"is_default": True, "active": True}},
+            "projects": {
+                "Action A": {
+                    "sphere": "Sphere A",
+                    "is_default": True,
+                    "active": True,
+                },
+                "Project B": {
+                    "sphere": "Sphere A",
+                    "is_default": False,
+                    "active": True,
+                },
+            },
+            "break_actions": {"Break Action": {"is_default": True, "active": True}},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_break_idle_leak_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_break_idle_leak_data.json"
+        )
+
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def _build_session_data(self, date):
+        """
+        Build session data matching the bug reproduction steps:
+        periods = active, break, active, idle, active, idle, active
+        All active periods belong to Action A; session sphere is Sphere A.
+        """
+        return {
+            f"{date}_session1": {
+                "sphere": "Sphere A",
+                "date": date,
+                "total_duration": 7000,
+                "active_duration": 4000,
+                "break_duration": 3000,
+                "active": [
+                    {"start": "09:00:00", "duration": 1000, "project": "Action A"},
+                    {"start": "09:20:00", "duration": 1000, "project": "Action A"},
+                    {"start": "09:40:00", "duration": 1000, "project": "Action A"},
+                    {"start": "10:00:00", "duration": 1000, "project": "Action A"},
+                ],
+                "breaks": [
+                    {
+                        "start": "09:10:00",
+                        "duration": 600,
+                        "action": "Break Action",
+                    }
+                ],
+                "idle_periods": [
+                    {
+                        "start": "09:30:00",
+                        "duration": 600,
+                        "end_timestamp": 1234567890,
+                        "action": "Action A",
+                    },
+                    {
+                        "start": "09:50:00",
+                        "duration": 600,
+                        "end_timestamp": 1234568490,
+                        "action": "Action A",
+                    },
+                ],
+            }
+        }
+
+    def test_project_filter_hides_breaks_when_project_not_in_session(self):
+        """
+        FAILING TEST — captures the break/idle leak bug.
+
+        When filtering by Project B (which has zero periods in this session),
+        the timeline must return 0 periods.  The buggy code returns 3
+        (1 Break + 2 Idle) because it never applies the project filter to
+        break/idle periods.
+        """
+        date = "2026-02-17"
+        test_data = self._build_session_data(date)
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Apply the filter combination that triggers the bug
+        frame.sphere_var.set("Sphere A")
+        frame.project_var.set("Project B")
+        frame.status_filter.set("active")
+
+        timeline_data = frame.get_timeline_data("All Time")
+
+        # No periods should appear — the session has no Project B active periods.
+        self.assertEqual(
+            len(timeline_data),
+            0,
+            f"Expected 0 periods when filtering by Project B (not present in session), "
+            f"but got {len(timeline_data)}: "
+            f"{[p['type'] for p in timeline_data]}",
+        )
+
+    def test_project_filter_shows_all_period_types_when_project_present(self):
+        """
+        Sanity-check test: when filtering by Action A (which IS in the session),
+        all 4 active periods AND the 1 break AND 2 idle periods must appear.
+
+        This verifies that the fix does not over-filter legitimate periods.
+        """
+        date = "2026-02-17"
+        test_data = self._build_session_data(date)
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        # Filter by Action A — the project that IS in the session
+        frame.sphere_var.set("Sphere A")
+        frame.project_var.set("Action A")
+        frame.status_filter.set("active")
+
+        timeline_data = frame.get_timeline_data("All Time")
+
+        period_types = [p["type"] for p in timeline_data]
+        active_count = period_types.count("Active")
+        break_count = period_types.count("Break")
+        idle_count = period_types.count("Idle")
+
+        self.assertEqual(
+            active_count,
+            4,
+            f"Expected 4 Active periods for Action A, got {active_count}",
+        )
+        self.assertEqual(
+            break_count,
+            1,
+            f"Expected 1 Break period for session with Action A, got {break_count}",
+        )
+        self.assertEqual(
+            idle_count,
+            2,
+            f"Expected 2 Idle periods for session with Action A, got {idle_count}",
+        )
+
+    def test_all_projects_filter_shows_all_period_types(self):
+        """
+        Sanity-check: 'All Projects' filter must still show all 7 periods
+        (4 active + 1 break + 2 idle).
+        """
+        date = "2026-02-17"
+        test_data = self._build_session_data(date)
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        frame.sphere_var.set("Sphere A")
+        frame.project_var.set("All Projects")
+        frame.status_filter.set("active")
+
+        timeline_data = frame.get_timeline_data("All Time")
+
+        self.assertEqual(
+            len(timeline_data),
+            7,
+            f"Expected 7 periods with All Projects filter, got {len(timeline_data)}",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -36,7 +36,7 @@ class TestCompletionFrameSkipBug(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        self.addCleanup(self.root.destroy)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
 
         # Create test settings with default sphere and project
         test_settings = TestDataGenerator.create_settings_data()
@@ -90,6 +90,13 @@ class TestCompletionFrameSkipBug(unittest.TestCase):
         )
         self.session_name = session_name
 
+    def tearDown(self):
+        """Clean up after tests"""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
     def test_skip_records_default_sphere_and_project(self):
         """
         When user clicks skip, session should get default sphere and all periods
@@ -105,6 +112,9 @@ class TestCompletionFrameSkipBug(unittest.TestCase):
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
+        tracker.settings = (
+            tracker.get_settings()
+        )  # reload from test file, not production
         tracker.session_name = self.session_name
 
         # Get default sphere and project from settings using correct helper methods
@@ -162,6 +172,9 @@ class TestCompletionFrameSkipBug(unittest.TestCase):
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
+        tracker.settings = (
+            tracker.get_settings()
+        )  # reload from test file, not production
 
         # Manually assign specific sphere/project/action (simulates user editing before skip)
         data = tracker.load_data()

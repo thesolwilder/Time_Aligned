@@ -311,7 +311,8 @@ class CompletionFrame(ttk.Frame):
             default_container, values=break_actions, state="readonly", width=20
         )
         self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
-        self.default_action_menu.set(default_break_action)
+        if default_break_action and default_break_action in break_actions:
+            self.default_action_menu.set(default_break_action)
         disable_combobox_scroll(self.default_action_menu)
 
         self.default_project_menu.bind(

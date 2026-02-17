@@ -651,6 +651,23 @@ class AnalysisFrame(ttk.Frame):
             if sphere_filter != "All Spheres" and session_sphere != sphere_filter:
                 continue
 
+            # Determine whether any active period in this session matches the project filter.
+            # Break/idle totals are session-contextual: only counted when the session has at
+            # least one active period matching the current project filter.
+            # If the session has NO active periods, break/idle are counted regardless.
+            active_periods = session_data.get("active", [])
+            if project_filter == "All Projects" or not active_periods:
+                session_has_matching_project = True
+            else:
+                session_has_matching_project = any(
+                    period.get("project") == project_filter
+                    or any(
+                        p.get("name") == project_filter
+                        for p in period.get("projects", [])
+                    )
+                    for period in active_periods
+                )
+
             # Calculate active time
             for period in session_data.get("active", []):
                 # Check project filter
@@ -668,14 +685,15 @@ class AnalysisFrame(ttk.Frame):
 
                 total_active += period.get("duration", 0)
 
-            # Calculate break time
-            for period in session_data.get("breaks", []):
-                total_break += period.get("duration", 0)
-
-            # Calculate idle time
-            for period in session_data.get("idle_periods", []):
-                if period.get("end_timestamp"):
+            # Calculate break time (only for sessions with at least one matching active period)
+            if session_has_matching_project:
+                for period in session_data.get("breaks", []):
                     total_break += period.get("duration", 0)
+
+                # Calculate idle time (only for sessions with at least one matching active period)
+                for period in session_data.get("idle_periods", []):
+                    if period.get("end_timestamp"):
+                        total_break += period.get("duration", 0)
 
         return total_active, total_break
 
@@ -810,6 +828,24 @@ class AnalysisFrame(ttk.Frame):
             idle_notes = session_comments_dict.get("idle_notes", "")
             session_notes = session_comments_dict.get("session_notes", "")
 
+            # Determine whether any active period in this session matches the project filter.
+            # Break/idle periods are session-contextual: they are only shown when the session
+            # contains at least one active period that matches the current project filter.
+            # If the session has NO active periods, break/idle are shown regardless (no project
+            # to filter by — e.g. a session that consists only of breaks or idle time).
+            active_periods = session_data.get("active", [])
+            if project_filter == "All Projects" or not active_periods:
+                session_has_matching_project = True
+            else:
+                session_has_matching_project = any(
+                    period.get("project") == project_filter
+                    or any(
+                        p.get("name") == project_filter
+                        for p in period.get("projects", [])
+                    )
+                    for period in active_periods
+                )
+
             # Add active periods
             for period in session_data.get("active", []):
                 # Determine primary and secondary projects
@@ -881,6 +917,10 @@ class AnalysisFrame(ttk.Frame):
 
             # Add break periods
             for period in session_data.get("breaks", []):
+                # Skip break periods if no active period in this session matches the project filter
+                if not session_has_matching_project:
+                    continue
+
                 # Determine primary and secondary actions
                 primary_action = ""
                 primary_comment = ""
@@ -933,6 +973,10 @@ class AnalysisFrame(ttk.Frame):
 
             # Add idle periods
             for period in session_data.get("idle_periods", []):
+                # Skip idle periods if no active period in this session matches the project filter
+                if not session_has_matching_project:
+                    continue
+
                 if period.get("end_timestamp"):
                     # Determine primary and secondary actions
                     primary_action = ""

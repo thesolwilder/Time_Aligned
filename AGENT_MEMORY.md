@@ -26,9 +26,178 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
-### [2026-02-17] - Fixed Completion Frame Skip Bug: Dual-Location Default Assignment
+### [2026-02-17] - Integration Test for Completion Frame Rename Bug (Test Only - No Fix Yet)
 
-**Search Keywords**: completion_frame skip bug, end_session defaults, skip_and_close fallback, default sphere, default project, missing data in analysis, integration test, TDD bug fix, session data incomplete, defense in depth
+**Search Keywords**: completion_frame rename bug, TclError combobox set None, default_action_menu, default_break_action stale, renamed settings crash, get_active_break_actions None, test_completion_frame_rename_bug
+
+**Context**:
+User reported catastrophic crash when opening completion frame after renaming actions in settings. The bug:
+
+1. Create session with multiple period types (active, break, idle)
+2. Save in completion frame with Sphere=General, Project=Work, Action=Resting
+3. In settings: rename "Resting" to "Action A" **but do NOT set it as default**
+4. Open completion frame → TclError crash
+
+**Error**:
+
+```
+_tkinter.TclError: wrong # args: should be ".!completionframe.!frame4.!combobox2 set value"
+```
+
+In `completion_frame.py` line 314, `change_defaults_for_session()`:
+
+```python
+self.default_action_menu.set(default_break_action)  # default_break_action is None!
+```
+
+**Root Cause Analysis**:
+
+- `get_active_break_actions()` in `time_tracker.py` uses `data.get("is_default", True)` to find default action
+- When user renames "Resting" to "Action A" without setting default, `is_default=False` on "Action A"
+- No action has `is_default=True` → `default_action` returns `None`
+- `self.default_action_menu.set(None)` causes TclError in Python 3.13
+  - `None` passed to `self.tk.call(self._w, "set", None)` drops the value arg in Tcl
+  - Tcl receives `combobox set` (get operation) instead of `combobox set value` (set operation)
+  - Error: "wrong # args" because Tcl expected a value but got none
+
+**Contrast with default_project_menu** (no bug there):
+
+```python
+if initial_project:  # <- Guard exists!
+    self.default_project_menu.set(initial_project)
+# But for actions: NO guard - just calls .set(default_break_action) directly
+```
+
+**What Worked** ✅ - Writing the integration test:
+
+File: [tests/test_completion_frame_rename_bug.py](tests/test_completion_frame_rename_bug.py)
+
+**Test setup pattern** - Settings use dict format `{"ActionName": {"is_default": True, "active": True}}`:
+
+```python
+settings = {
+    "spheres": {"General": {"is_default": True, "active": True}},
+    "projects": {"Work": {"sphere": "General", "is_default": True, "active": True}},
+    "break_actions": {"Resting": {"is_default": True, "active": True}},
+}
+```
+
+**Simulating rename** - pop old key, insert new key with dict:
+
+```python
+action_data = settings["break_actions"].pop("Resting")
+action_data["is_default"] = False  # NOT default
+settings["break_actions"]["Action A"] = action_data
+settings["default_break_action"] = "Resting"  # Stale reference (the bug!)
+with open(self.test_settings_file, "w") as f:
+    json.dump(settings, f, indent=2)
+tracker.settings = tracker.get_settings()  # Reload cached settings!
+```
+
+**Critical**: Must call `tracker.settings = tracker.get_settings()` after writing settings file - tracker caches settings at init and `get_active_break_actions()` reads from `self.settings` cache, not from file.
+
+**Test results** (before fix):
+
+```
+test_completion_frame_opens_after_renaming_non_default_action ... FAIL (captures bug)
+test_completion_frame_preserves_existing_assignments_after_rename ... ok (correct behavior)
+```
+
+**What Didn't Work** ❌:
+
+- ❌ **Using list format for settings**: Settings use dict format `{"Name": {...}}` NOT list format `[{"name": "...", ...}]`
+- ❌ **TimeTracker(settings_file, data_file, root=root)**: TimeTracker only takes `root` parameter
+  - Correct pattern: `tracker = TimeTracker(self.root); tracker.data_file = ...; tracker.settings_file = ...`
+- ❌ **tracker.save_settings(settings)**: TimeTracker has no `save_settings()` method
+  - Correct: write directly to file with `json.dump` then reload with `tracker.settings = tracker.get_settings()`
+- ❌ **Not reloading tracker.settings after file write**: `get_active_break_actions()` uses cached `self.settings`, so must reload
+
+**Fix Location** (NOT yet implemented - test phase only):
+
+- File: [src/completion_frame.py](src/completion_frame.py#L314)
+- Add guard like the project menu: `if default_break_action and default_break_action in break_actions: self.default_action_menu.set(default_break_action)`
+- Or use first available action as fallback when default is None/stale
+
+### [2026-02-17] - FIXED Completion Frame Rename Bug: Guard on default_action_menu.set()
+
+**Search Keywords**: completion_frame rename bug fixed, TclError combobox set None, default_action_menu guard, default_break_action stale fix
+
+**Fix Applied**:
+File: [src/completion_frame.py](src/completion_frame.py#L314)
+
+**Before** (crashed):
+
+```python
+self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
+self.default_action_menu.set(default_break_action)  # None or stale → TclError
+disable_combobox_scroll(self.default_action_menu)
+```
+
+**After** (fixed):
+
+```python
+self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
+if default_break_action and default_break_action in break_actions:
+    self.default_action_menu.set(default_break_action)
+disable_combobox_scroll(self.default_action_menu)
+```
+
+**Why This Is The Right Fix**:
+
+- Mirrors the identical guard already used on `default_project_menu`: `if initial_project: self.default_project_menu.set(initial_project)`
+- Handles **two failure cases** with one check:
+  1. `default_break_action is None` (no action has `is_default=True`) — `None and ...` short-circuits
+  2. Stale reference (e.g., "Resting" renamed away) — `in break_actions` check catches this
+- When guard fails, combobox stays blank (user picks manually) — safe and honest UX
+- Minimal 2-line change, no behaviour change for the happy path
+
+**Test Results After Fix**:
+
+```
+test_completion_frame_opens_after_renaming_non_default_action ... ok
+test_completion_frame_preserves_existing_assignments_after_rename ... ok
+Ran 2 tests in 2.982s
+OK
+```
+
+### [2026-02-17] - Fixed Fragile Test: test_skip_records_default_sphere_and_project
+
+**Search Keywords**: test_completion_skip_bug fragile production settings, tracker.settings reload test isolation, get_active_break_actions None production settings, test isolation settings reload
+
+**Failure Message**: `AssertionError: 'Break' != None : Skip should set default break action for break periods`
+
+**Root Cause (Test Bug, Not Regression)**:
+
+The test was calling `tracker.get_active_break_actions()` against `tracker.settings` which is loaded from the **production `settings.json`** at `TimeTracker(self.root)` init. The user had recently renamed their break action "Resting" → "Action A" without setting a default, leaving production `settings.json` with no action where `is_default=True`.
+
+- `tracker.settings` = production settings (from `settings.json`) → `get_active_break_actions()` returns `None`
+- `skip_and_close()` uses same cached `tracker.settings` → ALSO gets `None` → falls back to `"Break"`
+- `assertEqual('Break', None)` → FAIL
+
+**What Worked** ✅:
+
+Add `tracker.settings = tracker.get_settings()` immediately after setting `tracker.settings_file` in each test method. This reloads settings from the **test settings file**, not production, making both the test expectation and `skip_and_close()` use the same deterministic source.
+
+```python
+tracker = TimeTracker(self.root)
+tracker.data_file = self.test_data_file
+tracker.settings_file = self.test_settings_file
+tracker.settings = tracker.get_settings()  # ← reload from test file, not production
+```
+
+**Why This Was Fragile**:
+
+`TimeTracker.__init__` loads `self.settings = self.get_settings()` from `DEFAULT_SETTINGS_FILE`. Setting `tracker.settings_file = ...` changes WHERE the next `get_settings()` reads from, but does NOT reload `self.settings`. Any method using `self.settings` (like `get_active_break_actions()`) will still use production data until explicitly reloaded.
+
+**Rule**: After `tracker.settings_file = test_file`, ALWAYS add `tracker.settings = tracker.get_settings()` to reload the cache.
+
+**Test Results After Fix**:
+
+````
+test_skip_does_not_overwrite_existing_assignments ... ok
+test_skip_records_default_sphere_and_project ... ok
+Ran 2 tests in 4.621s
+OK, default sphere, default project, missing data in analysis, integration test, TDD bug fix, session data incomplete, defense in depth
 
 **Context**:
 User reported bug: Create session with 5sec active + 5sec break, end session, click skip. Navigate to analysis frame - **only break period shows up, active period missing from timeline and cards**.
@@ -118,7 +287,7 @@ if self.session_name in all_data:
             idle_period["action"] = default_break_action
 
     self.save_data(all_data)
-```
+````
 
 **3. Fallback: Defaults in skip_and_close()**
 
@@ -12635,5 +12804,71 @@ def update_timeline_virtual(self):
 - Simple implementation: ~100 lines of new code vs ~500 lines of virtual scrolling complexity
 
 **Status**: ✅ COMPLETED - All tests passing, ready for manual verification with real data (682 periods)
+
+---
+
+### [2026-02-17] - Discovered Break/Idle Period Project-Filter Leak Bug (Test Written, Fix Pending)
+
+**Search Keywords**: analysis frame filter bug, break idle period leak, project filter, get_timeline_data, break periods not filtered, idle periods not filtered, sphere project filter, period type filter, active filter radio
+
+**Context**:
+User reported: filtering by Sphere A + Project B (active radio) incorrectly showed 3 periods (Break, Idle, Idle) that belonged to a session whose only active periods used Project A — not Project B. Expected result: zero periods.
+
+**Root Cause Identified** (fix not yet applied):
+
+In `get_timeline_data()` ([src/analysis_frame.py](src/analysis_frame.py#L891)):
+
+- **Active periods** correctly check `project_filter` before adding to timeline.
+- **Break periods** (lines ~891-930) **NEVER check `project_filter`** — only sphere and status_filter.
+- **Idle periods** (lines ~930-985) **NEVER check `project_filter`** — only sphere and status_filter.
+
+So when a user picks Sphere A + Project B, a session's active periods are filtered out (none match Project B) but its break/idle periods still pass through because no project check exists for them.
+
+**Failing Test Written** ✅:
+
+File: [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) — class `TestProjectFilterBreakIdleLeakBug`
+
+```
+FAILED test_project_filter_hides_breaks_when_project_not_in_session
+AssertionError: 3 != 0 : Expected 0 periods when filtering by Project B
+(not present in session), but got 3: ['Break', 'Idle', 'Idle']
+```
+
+Three tests in the class:
+
+| Test                                                              | Status    | Purpose                                                   |
+| ----------------------------------------------------------------- | --------- | --------------------------------------------------------- |
+| `test_project_filter_hides_breaks_when_project_not_in_session`    | ❌ FAILS  | Captures the bug — 3 leak through, should be 0            |
+| `test_project_filter_shows_all_period_types_when_project_present` | ✅ PASSES | Sanity: Action A filter shows 4 active + 1 break + 2 idle |
+| `test_all_projects_filter_shows_all_period_types`                 | ✅ PASSES | Sanity: All Projects shows all 7 periods                  |
+
+**Bug Reproduction Data Structure**:
+
+- Session: sphere=Sphere A, 4 active periods (project=Action A), 1 break, 2 idle
+- Filter: sphere=Sphere A, project=Project B, status=active
+- Expected: `[]` — Actual (bug): `[Break, Idle, Idle]`
+
+**Planned Fix** (to be applied next):
+
+In `get_timeline_data()`, before appending break/idle periods:
+
+- Check if `project_filter == "All Projects"` → include (no filter applied)
+- Otherwise → check whether the _session_ has at least one active period whose `primary_project` matches `project_filter`; if not, skip all break/idle periods for that session
+
+This preserves the UX intent: break/idle periods belong contextually to the session; if the session has no matching project activity, those periods should be hidden.
+
+**What Worked** ✅:
+
+1. Read COPILOT_INSTRUCTIONS.md (shortcut 'b' = Bug Fix Workflow)
+2. Read DEVELOPMENT.md directives (both)
+3. Identified exact line range of bug in `get_timeline_data()`
+4. Wrote test with proper FAILURE (AssertionError) not error
+5. Three-test approach: 1 failure (bug) + 2 sanity-checks (no over-filtering)
+
+**Key Learnings**:
+
+- Break/idle periods share the session's sphere but NOT the session's project — they have "actions" not "projects"
+- The project filter should be applied at the **session level** for break/idle: if no matching active period in session → skip all breaks/idles for that session
+- When a test intermittently shows `TclError` in output it can be misleading; always grep for `AssertionError` to confirm it's a real FAILURE not an ERROR
 
 ---
