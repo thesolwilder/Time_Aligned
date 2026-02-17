@@ -1099,7 +1099,7 @@ class SettingsFrame(ttk.Frame):
         # Get value from settings, textvariable= doesn't work well with validation,
         # so we'll set value manually after creating the Spinbox
         idle_threshold_value = idle_settings.get("idle_threshold", 60)
-        idle_threshold_spin = ttk.Spinbox(idle_frame, from_=1, to=600, width=10)
+        idle_threshold_spin = ttk.Spinbox(idle_frame, from_=1, to=600, width=3)
         idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
 
         # Set value after grid using insert
@@ -1129,7 +1129,7 @@ class SettingsFrame(ttk.Frame):
             idle_break_frame,
             textvariable=idle_break_var,
             values=idle_break_options,
-            width=10,
+            width=4,
         )
         idle_break_combo.pack()
         idle_row += 1
@@ -1380,16 +1380,16 @@ class SettingsFrame(ttk.Frame):
 
         # Min seconds between captures
         ttk.Label(screenshot_frame, text="Min seconds between captures:").grid(
-            row=screenshot_row, column=0, sticky=tk.W, pady=5
+            row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5
         )
         min_seconds_var = tk.IntVar(
             master=self.root,
             value=screenshot_settings.get("min_seconds_between_captures", 10),
         )
         min_seconds_spin = ttk.Spinbox(
-            screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=10
+            screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=3
         )
-        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, padx=5)
+        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W)
         screenshot_row += 1
 
         # Define nested save function with closure over widget variables
