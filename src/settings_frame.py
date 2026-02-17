@@ -16,16 +16,23 @@ import platform
 import re
 
 from src.ui_helpers import ScrollableFrame, sanitize_name, get_frame_background
+from src.google_sheets_integration import GoogleSheetsUploader
 from src.constants import (
     COLOR_LINK_BLUE,
     COLOR_GRAY_TEXT,
+    COLOR_ERROR_RED,
+    COLOR_SUCCESS_GREEN,
+    COLOR_INFO_BLUE,
     DEFAULT_SCREENSHOT_FOLDER,
     FONT_LINK,
     FONT_TITLE,
     FONT_TIMER_SMALL,
     FONT_NORMAL_BOLD,
+    FONT_NORMAL,
     FONT_BODY,
     FONT_SMALL_ITALIC,
+    FONT_EXTRA_SMALL,
+    FONT_MONOSPACE,
 )
 
 
@@ -1256,6 +1263,10 @@ class SettingsFrame(ttk.Frame):
                 dialog.transient(self.root)
                 dialog.grab_set()
 
+                # Get and apply background color
+                bg_color = get_frame_background()
+                dialog.configure(bg=bg_color)
+
                 # Center the dialog
                 dialog.geometry("650x450")
                 dialog.update_idletasks()
@@ -1264,17 +1275,18 @@ class SettingsFrame(ttk.Frame):
                 dialog.geometry(f"+{x}+{y}")
 
                 # Warning icon and title
-                title_frame = ttk.Frame(dialog)
+                title_frame = tk.Frame(dialog, bg=bg_color)
                 title_frame.pack(pady=20)
-                ttk.Label(
+                tk.Label(
                     title_frame,
                     text="⚠️ WARNING: Screenshot Capture Disclaimer",
                     font=FONT_TITLE,
-                    foreground="red",
+                    foreground=COLOR_ERROR_RED,
+                    bg=bg_color,
                 ).pack()
 
                 # Message content
-                message_frame = ttk.Frame(dialog)
+                message_frame = tk.Frame(dialog, bg=bg_color)
                 message_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
 
                 message_text = (
@@ -1288,12 +1300,13 @@ class SettingsFrame(ttk.Frame):
                     "Do you agree to these terms and wish to enable screenshot capture?"
                 )
 
-                message_label = ttk.Label(
+                message_label = tk.Label(
                     message_frame,
                     text=message_text,
                     font=FONT_BODY,
                     wraplength=600,
                     justify=tk.LEFT,
+                    bg=bg_color,
                 )
                 message_label.pack()
 
@@ -1309,15 +1322,23 @@ class SettingsFrame(ttk.Frame):
                     dialog.destroy()
 
                 # Buttons
-                button_frame = ttk.Frame(dialog)
+                button_frame = tk.Frame(dialog, bg=bg_color)
                 button_frame.pack(pady=20)
 
-                ttk.Button(
-                    button_frame, text="I Agree", command=on_agree, width=15
+                tk.Button(
+                    button_frame,
+                    text="I Agree",
+                    command=on_agree,
+                    width=15,
+                    font=FONT_BODY,
                 ).pack(side=tk.LEFT, padx=10)
 
-                ttk.Button(
-                    button_frame, text="Decline", command=on_decline, width=15
+                tk.Button(
+                    button_frame,
+                    text="Decline",
+                    command=on_decline,
+                    width=15,
+                    font=FONT_BODY,
                 ).pack(side=tk.LEFT, padx=10)
 
                 # Bind keys
@@ -1432,9 +1453,7 @@ class SettingsFrame(ttk.Frame):
             - Creates "Test Connection" button (validates credentials)
             - Increments row counter multiple times
 
-        Security note:
-            Spreadsheet ID stored in settings.json. For production, use
-            environment variable GOOGLE_SHEETS_SPREADSHEET_ID instead.
+
         """
         google_frame = ttk.LabelFrame(parent, padding=10)
         google_frame.grid(
@@ -1501,8 +1520,8 @@ class SettingsFrame(ttk.Frame):
         help_text = ttk.Label(
             google_frame,
             text="Get ID from URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit",
-            font=("Arial", 8),
-            foreground="gray",
+            font=FONT_EXTRA_SMALL,
+            foreground=COLOR_GRAY_TEXT,
         )
         help_text.grid(row=google_row, column=1, columnspan=2, sticky=tk.W, padx=5)
         google_row += 1
@@ -1555,8 +1574,8 @@ class SettingsFrame(ttk.Frame):
             "3. Enable Google Sheets API\n"
             "4. Create OAuth 2.0 credentials (Desktop app)\n"
             "5. Download as credentials.json",
-            font=("Arial", 8),
-            foreground="blue",
+            font=FONT_EXTRA_SMALL,
+            foreground=COLOR_INFO_BLUE,
             justify=tk.LEFT,
         )
         instructions_label.grid(
@@ -1564,15 +1583,17 @@ class SettingsFrame(ttk.Frame):
         )
         google_row += 1
 
-        # Test connection button
-        status_label = ttk.Label(google_frame, text="", foreground="blue")
+        # Test connection results label (updated by test_connection function)
+        status_label = ttk.Label(google_frame, text="", foreground=COLOR_INFO_BLUE)
         status_label.grid(
             row=google_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
         )
 
         def test_connection():
             """Test the Google Sheets connection"""
-            status_label.config(text="Testing connection...", foreground="blue")
+            status_label.config(
+                text="Testing connection...", foreground=COLOR_INFO_BLUE
+            )
             google_frame.update()
 
             # Save current settings temporarily
@@ -1588,17 +1609,19 @@ class SettingsFrame(ttk.Frame):
 
             # Test connection
             try:
-                from src.google_sheets_integration import GoogleSheetsUploader
-
                 uploader = GoogleSheetsUploader(self.tracker.settings_file)
                 success, message = uploader.test_connection()
 
                 if success:
-                    status_label.config(text=f"✓ {message}", foreground="green")
+                    status_label.config(
+                        text=f"✓ {message}", foreground=COLOR_SUCCESS_GREEN
+                    )
                 else:
-                    status_label.config(text=f"✗ {message}", foreground="red")
+                    status_label.config(text=f"✗ {message}", foreground=COLOR_ERROR_RED)
             except Exception as error:
-                status_label.config(text=f"✗ Error: {str(error)}", foreground="red")
+                status_label.config(
+                    text=f"✗ Error: {str(error)}", foreground=COLOR_ERROR_RED
+                )
 
             # Restore original settings
             self.tracker.settings["google_sheets"] = old_settings
@@ -1650,7 +1673,7 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(
             shortcuts_frame,
             text="Use these shortcuts anywhere to control Time Aligned:",
-            font=("Arial", 10),
+            font=FONT_NORMAL,
         ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
 
         # Shortcuts list
@@ -1673,9 +1696,7 @@ class SettingsFrame(ttk.Frame):
             hotkey_label.grid(row=row, column=0, sticky=tk.W, padx=(10, 20), pady=5)
 
             # Description
-            desc_label = ttk.Label(
-                shortcuts_frame, text=description, font=("Arial", 10)
-            )
+            desc_label = ttk.Label(shortcuts_frame, text=description, font=FONT_NORMAL)
             desc_label.grid(row=row, column=1, sticky=tk.W, pady=5)
 
             row += 1
@@ -1684,7 +1705,7 @@ class SettingsFrame(ttk.Frame):
         note_label = ttk.Label(
             shortcuts_frame,
             text="💡 Tip: These shortcuts work system-wide, even when the window is hidden!",
-            font=("Arial", 9, "italic"),
+            font=FONT_SMALL_ITALIC,
             foreground=COLOR_GRAY_TEXT,
         )
         note_label.grid(row=row, column=0, columnspan=2, pady=(10, 0), sticky=tk.W)
@@ -1714,7 +1735,7 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(
             export_frame,
             text="Export all tracking data to CSV format for analysis in spreadsheet applications.",
-            font=("Arial", 10),
+            font=FONT_NORMAL,
             wraplength=500,
         ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
 
@@ -1733,8 +1754,6 @@ class SettingsFrame(ttk.Frame):
 
     def save_all_data_to_csv(self):
         """Export all tracking data to CSV file"""
-        from tkinter import filedialog
-
         try:
             # Load data from data.json
             data_file = self.tracker.data_file
@@ -2126,7 +2145,7 @@ class SettingsFrame(ttk.Frame):
         frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
 
         # Action name
-        ttk.Label(frame, text=action_name, font=("Arial", 10, "bold")).grid(
+        ttk.Label(frame, text=action_name, font=FONT_NORMAL_BOLD).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
 

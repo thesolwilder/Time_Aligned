@@ -47,6 +47,9 @@ COLOR_GRAY_TEXT = "#666666"  # Secondary text gray
 COLOR_GRAY_BACKGROUND = "#d0d0d0"  # Background gray for containers
 COLOR_ACTIVE_GREEN = "#2E7D32"  # Active time display
 COLOR_BREAK_ORANGE = "#F57C00"  # Break time display
+COLOR_ERROR_RED = "red"  # Error messages
+COLOR_SUCCESS_GREEN = "green"  # Success messages
+COLOR_INFO_BLUE = "blue"  # Info messages
 
 # System tray icon colors
 COLOR_TRAY_IDLE = "#607D8B"  # Blue-gray for idle state
@@ -60,11 +63,13 @@ COLOR_TRAY_SESSION_IDLE = "#FFEB3B"  # Yellow for idle during session
 
 FONT_FAMILY = "Arial"
 FONT_LINK = (FONT_FAMILY, 10, "underline")
+FONT_EXTRA_SMALL = (FONT_FAMILY, 8)  # Very small text (help text, footnotes)
 FONT_SMALL = (FONT_FAMILY, 9)
 FONT_SMALL_ITALIC = (FONT_FAMILY, 9, "italic")
 FONT_NORMAL = (FONT_FAMILY, 10)
 FONT_NORMAL_BOLD = (FONT_FAMILY, 10, "bold")
 FONT_NORMAL_ITALIC = (FONT_FAMILY, 10, "italic")
+FONT_MONOSPACE = ("Consolas", 10, "bold")  # Monospace font for shortcuts/code
 FONT_HEADING = (FONT_FAMILY, 12, "bold")
 FONT_BODY = (FONT_FAMILY, 12)
 FONT_TITLE = (FONT_FAMILY, 16, "bold")
