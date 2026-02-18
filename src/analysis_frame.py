@@ -10,7 +10,10 @@ from src.constants import (
     COLOR_BREAK_LIGHT_ORANGE,
     COLOR_GRAY_BACKGROUND,
     COLOR_LINK_BLUE,
+    FONT_BODY,
+    FONT_HEADING,
     FONT_LINK,
+    FONT_TIMER_SMALL,
 )
 
 
@@ -141,8 +144,15 @@ class AnalysisFrame(ttk.Frame):
             row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10, padx=10
         )
 
+        # Apply header font style to filter comboboxes
+        filter_combo_style = ttk.Style()
+        filter_combo_style.configure("Filter.TCombobox", font=FONT_HEADING, padding=[4, 4])
+        filter_combo_style.configure("Filter.TRadiobutton", font=FONT_BODY)
+
         # Sphere label and dropdown
-        ttk.Label(filter_frame, text="Sphere:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(filter_frame, text="Sphere:", font=FONT_BODY).pack(
+            side=tk.LEFT, padx=5
+        )
 
         # Get default sphere using tracker's method
         default_sphere = self.tracker._get_default_sphere()
@@ -156,21 +166,30 @@ class AnalysisFrame(ttk.Frame):
             textvariable=self.sphere_var,
             values=spheres,
             state="readonly",
-            width=15,
+            style="Filter.TCombobox",
+            width=12,
         )
         self.sphere_filter.pack(side=tk.LEFT, padx=5)
+        self.sphere_filter.configure(font=FONT_HEADING)
         self.sphere_filter.bind("<<ComboboxSelected>>", self.on_filter_changed)
 
         # Project label and dropdown
-        ttk.Label(filter_frame, text="Project:").pack(side=tk.LEFT, padx=5)
+        ttk.Label(filter_frame, text="Project:", font=FONT_BODY).pack(
+            side=tk.LEFT, padx=5
+        )
 
         # Get default project for the default sphere
         self.default_project = self.get_default_project(default_sphere)
         self.project_var = tk.StringVar(master=self.root, value="All Projects")
         self.project_filter = ttk.Combobox(
-            filter_frame, textvariable=self.project_var, state="readonly", width=15
+            filter_frame,
+            textvariable=self.project_var,
+            state="readonly",
+            style="Filter.TCombobox",
+            width=12,
         )
         self.project_filter.pack(side=tk.LEFT, padx=5)
+        self.project_filter.configure(font=FONT_HEADING)
         self.project_filter.bind("<<ComboboxSelected>>", self.on_filter_changed)
         self.update_project_filter(set_default=True)
 
@@ -184,6 +203,7 @@ class AnalysisFrame(ttk.Frame):
             variable=self.status_filter,
             value="active",
             command=self.refresh_dropdowns,
+            style="Filter.TRadiobutton",
         ).pack(side=tk.LEFT, padx=2)
 
         ttk.Radiobutton(
@@ -192,6 +212,7 @@ class AnalysisFrame(ttk.Frame):
             variable=self.status_filter,
             value="all",
             command=self.refresh_dropdowns,
+            style="Filter.TRadiobutton",
         ).pack(side=tk.LEFT, padx=2)
 
         ttk.Radiobutton(
@@ -200,6 +221,7 @@ class AnalysisFrame(ttk.Frame):
             variable=self.status_filter,
             value="archived",
             command=self.refresh_dropdowns,
+            style="Filter.TRadiobutton",
         ).pack(side=tk.LEFT, padx=2)
 
         # Three cards

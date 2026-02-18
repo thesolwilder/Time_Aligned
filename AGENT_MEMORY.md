@@ -12872,3 +12872,27 @@ This preserves the UX intent: break/idle periods belong contextually to the sess
 - When a test intermittently shows `TclError` in output it can be misleading; always grep for `AssertionError` to confirm it's a real FAILURE not an ERROR
 
 ---
+
+### [2026-02-17] - KNOWN ISSUE (ACCEPTED): Timeline Row Height Expands Too Large in Non-Maximized Window
+
+**Search Keywords**: timeline row height, expand, non-maximized window, Text widget height, displaylines, wraplength, row too tall, window size, update_idletasks
+
+**Context**:
+When the user reloads the timeline in a non-maximized window, timeline row heights expand excessively large. This is a visual layout issue affecting rows that use `tk.Text` widgets for comment columns.
+
+**Root Cause**:
+The dynamic height calculation in `_render_timeline_period()` ([src/analysis_frame.py](src/analysis_frame.py)) calls `txt.count("1.0", "end", "displaylines")` after `update_idletasks()`. In a non-maximized window, the canvas/frame is narrower, so text wraps to more lines, causing `displaylines` to report a larger value → row height is set too tall. When the window is maximized, the wider layout means fewer wrapped lines and correct row height.
+
+**Decision: DO NOT FIX — ACCEPTED AS-IS** ✅
+
+User accepted this behavior with the reasoning:
+
+- The timeline loads large amounts of data and the dynamic height (`update_idletasks` + `displaylines`) approach is already known to be expensive (see [2026-02-09] performance entry)
+- Workaround is simple: if the user loads the timeline in a small window and rows look too tall, they can maximize the window and click "Show Timeline" again
+- Fixing would require either: (a) deferring height calculation until window resize events, (b) using a fixed height, or (c) a full virtual-scroll rewrite — all have significant complexity or trade-offs
+
+**DO NOT attempt to fix this** unless the user explicitly requests it again.
+
+**Files affected**: [src/analysis_frame.py](src/analysis_frame.py) — `_render_timeline_period()` method, `add_column()` inner function with `use_text_widget=True`
+
+---
