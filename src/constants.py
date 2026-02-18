@@ -64,6 +64,7 @@ COLOR_TRAY_SESSION_IDLE = "#FFEB3B"  # Yellow for idle during session
 FONT_FAMILY = "Arial"
 FONT_LINK = (FONT_FAMILY, 10, "underline")
 FONT_EXTRA_SMALL = (FONT_FAMILY, 8)  # Very small text (help text, footnotes)
+FONT_MICRO = (FONT_FAMILY, 7)  # Tiny text (sub-labels, stacked headers)
 FONT_SMALL = (FONT_FAMILY, 9)
 FONT_SMALL_ITALIC = (FONT_FAMILY, 9, "italic")
 FONT_NORMAL = (FONT_FAMILY, 10)
@@ -93,9 +94,10 @@ TRAY_ICON_MARGIN = 8  # Margin around circle
 TRAY_ICON_OUTLINE_WIDTH = 2  # Circle outline thickness
 
 # Pie chart dimensions (analysis frame cards)
-PIE_CHART_SIZE = 120  # Canvas width and height in pixels
+PIE_CHART_SIZE = 160  # Canvas width and height in pixels
 PIE_CHART_MARGIN = 6  # Gap between canvas edge and arc bounding box
 PIE_TEXT_MIN_PERCENT = 10  # Minimum slice size (%) to render percentage text inside
+PIE_CHART_FONT = ("Arial", 11, "bold")  # Percentage label font inside pie slices
 
 # =============================================================================
 # Default File Paths

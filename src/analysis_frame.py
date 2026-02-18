@@ -14,9 +14,13 @@ from src.constants import (
     COLOR_TRAY_ACTIVE,
     COLOR_TRAY_BREAK,
     FONT_BODY,
+    FONT_EXTRA_SMALL,
     FONT_HEADING,
     FONT_LINK,
+    FONT_MICRO,
+    FONT_NORMAL_ITALIC,
     FONT_TIMER_SMALL,
+    PIE_CHART_FONT,
     PIE_CHART_MARGIN,
     PIE_CHART_SIZE,
     PIE_TEXT_MIN_PERCENT,
@@ -68,7 +72,7 @@ def draw_pie_chart(canvas, active_secs, break_secs):
             cy,
             text="No data",
             fill="#FFFFFF",
-            font=("Arial", 9, "bold"),
+            font=PIE_CHART_FONT,
         )
         return
 
@@ -95,7 +99,7 @@ def draw_pie_chart(canvas, active_secs, break_secs):
             cy,
             text="100%",
             fill="#FFFFFF",
-            font=("Arial", 9, "bold"),
+            font=PIE_CHART_FONT,
         )
         return
 
@@ -116,7 +120,7 @@ def draw_pie_chart(canvas, active_secs, break_secs):
             cy,
             text="100%",
             fill="#FFFFFF",
-            font=("Arial", 9, "bold"),
+            font=PIE_CHART_FONT,
         )
         return
 
@@ -163,7 +167,7 @@ def draw_pie_chart(canvas, active_secs, break_secs):
             ay,
             text=f"{active_pct}%",
             fill="#FFFFFF",
-            font=("Arial", 9, "bold"),
+            font=PIE_CHART_FONT,
         )
 
     if break_pct >= PIE_TEXT_MIN_PERCENT:
@@ -174,7 +178,7 @@ def draw_pie_chart(canvas, active_secs, break_secs):
             by,
             text=f"{break_pct}%",
             fill="#FFFFFF",
-            font=("Arial", 9, "bold"),
+            font=PIE_CHART_FONT,
         )
 
 
@@ -412,7 +416,7 @@ class AnalysisFrame(ttk.Frame):
         self.timeline_title = ttk.Label(
             timeline_label_frame,
             text=f"Timeline: {self.card_ranges[0]}",
-            font=("Arial", 12, "bold"),
+            font=FONT_HEADING,
         )
         self.timeline_title.pack(side=tk.LEFT)
 
@@ -474,7 +478,7 @@ class AnalysisFrame(ttk.Frame):
             state="readonly",
             width=15,
         )
-        range_dropdown.grid(row=0, column=0, pady=5, sticky="W")
+        range_dropdown.grid(row=0, column=0, pady=5, padx=(8, 0), sticky="W")
         range_dropdown.bind(
             "<<ComboboxSelected>>",
             lambda e, card_index=index: self.on_range_changed(
@@ -495,7 +499,7 @@ class AnalysisFrame(ttk.Frame):
             pady=4,
             anchor="center",
         )
-        active_label.grid(row=1, column=0, pady=(5, 2), sticky="W")
+        active_label.grid(row=1, column=0, pady=(5, 2), padx=(8, 0), sticky="W")
 
         # Row 2, col 0: break/idle time — amber box, auto-width, black text
         break_label = tk.Label(
@@ -510,7 +514,7 @@ class AnalysisFrame(ttk.Frame):
             pady=4,
             anchor="center",
         )
-        break_label.grid(row=2, column=0, pady=(2, 5), sticky="W")
+        break_label.grid(row=2, column=0, pady=(2, 5), padx=(8, 0), sticky="W")
 
         # Row 3, col 0: Show Timeline button
         select_btn = ttk.Button(
@@ -518,7 +522,7 @@ class AnalysisFrame(ttk.Frame):
             text="Show Timeline",
             command=lambda card_index=index: self.select_card(card_index),
         )
-        select_btn.grid(row=3, column=0, pady=10, sticky="W")
+        select_btn.grid(row=3, column=0, pady=10, padx=(8, 0), sticky="W")
 
         # Col 1, rows 0-3: pie chart — active (green) vs break/idle (amber)
         pie_canvas = tk.Canvas(
@@ -1332,7 +1336,7 @@ class AnalysisFrame(ttk.Frame):
                 ttk.Label(
                     label_frame,
                     text=f"All {len(self.timeline_data_all)} periods loaded",
-                    font=("Arial", 10, "italic"),
+                    font=FONT_NORMAL_ITALIC,
                 ).pack()
 
     def _render_timeline_period(self, period, row_index):
@@ -1386,7 +1390,7 @@ class AnalysisFrame(ttk.Frame):
                     height=1,  # Temporary height - will be updated after measuring wrapped content
                     wrap=tk.WORD,
                     bg=bg_color,
-                    font=("Arial", 8),
+                    font=FONT_EXTRA_SMALL,
                     relief=tk.FLAT,
                     state=tk.NORMAL,
                     cursor="arrow",  # Use arrow cursor instead of text cursor for read-only widget
@@ -1422,7 +1426,7 @@ class AnalysisFrame(ttk.Frame):
                     anchor="w",
                     padx=3,
                     bg=bg_color,
-                    font=("Arial", 8),
+                    font=FONT_EXTRA_SMALL,
                     wraplength=wraplength,
                     justify="left",
                 )
@@ -1580,7 +1584,7 @@ class AnalysisFrame(ttk.Frame):
                         text + " ▲" if self.timeline_sort_column == column_key else text
                     )
                 ),
-                font=("Arial", 8),
+                font=FONT_EXTRA_SMALL,
                 width=width,
                 anchor="w",
                 padx=3,
@@ -1605,7 +1609,7 @@ class AnalysisFrame(ttk.Frame):
             tk.Label(
                 container,
                 text=top_text,
-                font=("Arial", 8),
+                font=FONT_EXTRA_SMALL,
                 width=width,
                 anchor="w",
                 padx=3,
@@ -1616,7 +1620,7 @@ class AnalysisFrame(ttk.Frame):
             tk.Label(
                 container,
                 text=bottom_text,
-                font=("Arial", 7),
+                font=FONT_MICRO,
                 width=width,
                 anchor="w",
                 padx=3,
@@ -1645,7 +1649,7 @@ class AnalysisFrame(ttk.Frame):
                     height=1,
                     wrap=tk.NONE,
                     bg=COLOR_GRAY_BACKGROUND,
-                    font=("Arial", 8),
+                    font=FONT_EXTRA_SMALL,
                     relief=tk.FLAT,
                     state=tk.NORMAL,
                 )
@@ -1661,7 +1665,7 @@ class AnalysisFrame(ttk.Frame):
                 label = tk.Label(
                     self.timeline_header_frame,
                     text=text,
-                    font=("Arial", 8),
+                    font=FONT_EXTRA_SMALL,
                     width=width,
                     anchor="w",
                     padx=3,
