@@ -5,6 +5,20 @@ from tkinter import ttk
 import re
 
 
+def get_frame_background():
+    """
+    Get the background color for ttk frames based on current theme.
+
+    Returns:
+        str: Hex color code for frame background (e.g., "#d9d9d9")
+
+    Note:
+        Must be called after tkinter root window is initialized.
+    """
+    style = ttk.Style()
+    return style.lookup("TFrame", "background")
+
+
 def sanitize_name(name, max_length=50):
     """
     Sanitize user input for names (spheres, projects, break actions).
@@ -120,8 +134,11 @@ class ScrollableFrame(ttk.Frame):
     def __init__(self, parent, **kwargs):
         super().__init__(parent)
 
+        # Get frame background color to match theme
+        frame_bg = get_frame_background()
+
         # Create canvas and scrollbar
-        self.canvas = tk.Canvas(self)
+        self.canvas = tk.Canvas(self, bg=frame_bg, highlightthickness=0)
         self.scrollbar = ttk.Scrollbar(
             self, orient="vertical", command=self.canvas.yview
         )
@@ -149,50 +166,70 @@ class ScrollableFrame(ttk.Frame):
         self.canvas.pack(side="left", fill="both", expand=True)
         self.scrollbar.pack(side="right", fill="y")
 
+        # Flag to track if this instance is destroyed
+        self._is_alive = True
+
+        # Counter to avoid noisy scroll logging
+        self._mousewheel_event_count = 0
+
         # Setup mousewheel scrolling
         self._setup_mousewheel()
+
+    def destroy(self):
+        """Clean up frame lifecycle by marking dead and calling parent destroy."""
+        # Mark as no longer alive so handlers can ignore it
+        self._is_alive = False
+        # Call parent destroy
+        super().destroy()
 
     def _setup_mousewheel(self):
         """Setup mousewheel scrolling"""
 
         def on_mousewheel(event):
-            # Check if mouse is over this scrollable frame
             try:
-                # Get widget under mouse
+                if not self._is_alive or not hasattr(self, "canvas"):
+                    return
+
+                try:
+                    if not self.canvas.winfo_exists():
+                        return
+                except (tk.TclError, AttributeError):
+                    return
+
                 x, y = self.winfo_pointerxy()
                 widget = self.winfo_containing(x, y)
 
-                # Check if it's a combobox
                 if widget and isinstance(widget, ttk.Combobox):
                     return
 
-                # Check if the widget is a descendant of this ScrollableFrame
                 if widget:
                     parent = widget
-                    while parent:
+                    depth = 0
+                    max_depth = 20
+                    while parent and depth < max_depth:
                         if parent == self:
-                            # Mouse is over this frame, scroll it
                             self.canvas.yview_scroll(
                                 int(-1 * (event.delta / 120)), "units"
                             )
+                            self._mousewheel_event_count += 1
                             return
-                        parent = parent.master
-            except:
-                pass
+                        try:
+                            parent = parent.master
+                            depth += 1
+                        except (AttributeError, tk.TclError):
+                            break
 
-        # Bind to the root window to capture all mousewheel events
-        def setup_root_binding():
+            except (tk.TclError, AttributeError, RuntimeError, Exception):
+                return
+
+        def setup_root_binding(event=None):
             try:
                 root = self.winfo_toplevel()
-                # Use bind_all to ensure we capture events everywhere
                 root.bind_all("<MouseWheel>", on_mousewheel, add="+")
-            except:
+            except Exception:
                 pass
 
-        # Delay binding until widget is visible
-        self.after(100, setup_root_binding)
-
-        # Also bind directly to our widgets as backup
+        self.bind("<Map>", setup_root_binding, add="+")
         self.bind("<MouseWheel>", on_mousewheel, add="+")
         self.canvas.bind("<MouseWheel>", on_mousewheel, add="+")
         self.content_frame.bind("<MouseWheel>", on_mousewheel, add="+")
@@ -201,12 +238,11 @@ class ScrollableFrame(ttk.Frame):
         self._disable_combobox_scrolling()
 
     def _disable_combobox_scrolling(self):
-        """Find and disable mousewheel on all comboboxes in the content frame"""
+        """Find and disable mousewheel on all comboboxes and spinboxes in the content frame"""
 
         def disable_recursive(widget):
             try:
-                if isinstance(widget, ttk.Combobox):
-                    # Bind to prevent scrolling, returning "break" stops event propagation
+                if isinstance(widget, (ttk.Combobox, ttk.Spinbox)):
                     widget.bind("<MouseWheel>", lambda e: "break")
 
                 for child in widget.winfo_children():
@@ -221,9 +257,8 @@ class ScrollableFrame(ttk.Frame):
 
     def rebind_mousewheel(self):
         """Rebind mousewheel to all widgets (call after adding new widgets)"""
-        # Re-disable combobox scrolling for any newly added comboboxes
         self._disable_combobox_scrolling()
 
     def get_content_frame(self):
-        """Get the content frame to add widgets to"""
+        """Get the scrollable content frame for adding child widgets."""
         return self.content_frame

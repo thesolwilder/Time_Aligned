@@ -10,11 +10,14 @@ import json
 import pickle
 import re
 from datetime import datetime
+from tkinter import messagebox
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+from src.constants import DEFAULT_SETTINGS_FILE
 
 # Scopes for Google Sheets API
 # Use read-only scope for viewing, full scope for editing
@@ -51,7 +54,7 @@ def escape_for_sheets(text):
 class GoogleSheetsUploader:
     """Handles uploading session data to Google Sheets"""
 
-    def __init__(self, settings_file="settings.json", read_only=False):
+    def __init__(self, settings_file=DEFAULT_SETTINGS_FILE, read_only=False):
         """
         Initialize the Google Sheets uploader
 
@@ -67,20 +70,85 @@ class GoogleSheetsUploader:
         self.scopes = SCOPES_READONLY if read_only else SCOPES_FULL
 
     def _load_settings(self):
-        """Load settings from file"""
+        """Load settings from file with proper error handling.
+
+        Returns:
+            dict: Settings dictionary, or empty dict if file doesn't exist or is invalid
+        """
         try:
-            with open(self.settings_file, "r") as f:
+            with open(self.settings_file, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except Exception as e:
-            print(f"Error loading settings: {e}")
+        except FileNotFoundError:
+            # Settings file missing is acceptable - use defaults
+            return {}
+        except json.JSONDecodeError as error:
+            messagebox.showerror(
+                "Settings Error",
+                f"Invalid JSON in settings file:\n{self.settings_file}\n\n{str(error)}",
+            )
+            return {}
+        except PermissionError:
+            messagebox.showerror(
+                "Settings Error",
+                f"Permission denied reading settings file:\n{self.settings_file}",
+            )
+            return {}
+        except Exception as error:
+            messagebox.showerror(
+                "Settings Error",
+                f"Unexpected error loading settings:\n{type(error).__name__}: {str(error)}",
+            )
             return {}
 
     def is_enabled(self):
-        """Check if Google Sheets upload is enabled"""
+        """Check if Google Sheets upload is enabled in settings.
+
+        Guard method called before any Google Sheets API operations to check
+        if user has enabled the integration.
+
+        Called from 6+ locations:
+        - upload_session() - Guard before upload attempt
+        - Session completion checks
+        - UI elements (enable/disable upload buttons)
+        - Test setup verification
+
+        Returns:
+            Boolean - True if enabled in settings, False otherwise
+
+        Note:
+            Returns False if google_sheets section missing from settings.
+            Does NOT check if credentials are valid, only if feature enabled.
+        """
         return self.settings.get("google_sheets", {}).get("enabled", False)
 
     def get_spreadsheet_id(self):
-        """Get the configured spreadsheet ID from settings or environment variable"""
+        """Get Google Sheets spreadsheet ID with security validation.
+
+        Retrieves spreadsheet ID from environment variable (preferred for security)
+        or settings file (fallback). Validates format to prevent injection attacks.
+
+        Called from 12+ locations:
+        - All Google Sheets API operations
+        - Upload session validation
+        - Settings verification
+        - Test setup
+
+        Lookup priority:
+        1. Environment variable: GOOGLE_SHEETS_SPREADSHEET_ID (most secure)
+        2. Settings file: settings["google_sheets"]["spreadsheet_id"]
+
+        Security:
+        - Validates ID format via _is_valid_spreadsheet_id()
+        - Rejects IDs with dangerous characters (prevents injection)
+        - Google Sheets IDs are 44-char alphanumeric with hyphens/underscores
+
+        Returns:
+            String spreadsheet ID if valid, empty string if missing/invalid
+
+        Note:
+            Environment variable preferred to avoid storing sensitive IDs in settings.json.
+            Empty string return signals caller to skip Google Sheets operations.
+        """
         # Try environment variable first (more secure)
         spreadsheet_id = os.environ.get("GOOGLE_SHEETS_SPREADSHEET_ID", "")
 
@@ -92,7 +160,6 @@ class GoogleSheetsUploader:
 
         # Validate spreadsheet ID format (should be alphanumeric, hyphens, underscores)
         if spreadsheet_id and not self._is_valid_spreadsheet_id(spreadsheet_id):
-            print(f"Warning: Invalid spreadsheet ID format: {spreadsheet_id}")
             return ""
 
         return spreadsheet_id
@@ -106,14 +173,35 @@ class GoogleSheetsUploader:
         return bool(re.match(r"^[a-zA-Z0-9_-]+$", spreadsheet_id))
 
     def get_sheet_name(self):
-        """Get the configured sheet name (tab name within spreadsheet)"""
+        """Get Google Sheets sheet/tab name with security validation.
+
+        Retrieves the sheet name (tab name within the spreadsheet) from settings.
+        Validates to prevent injection attacks and applies length limits.
+
+        Called from 6+ locations:
+        - upload_session() - Sheet name for append operation
+        - Google Sheets API calls
+        - Settings verification
+
+        Security:
+        - Validates via _is_valid_sheet_name()
+        - Rejects sheet names >100 characters
+        - Rejects dangerous characters that could enable injection
+        - Falls back to "Sessions" default if validation fails
+
+        Returns:
+            String sheet name (defaults to "Sessions" if missing/invalid)
+
+        Note:
+            Always returns a valid sheet name - never returns empty string.
+            Validation prevents malicious sheet names from reaching Google API.
+        """
         sheet_name = self.settings.get("google_sheets", {}).get(
             "sheet_name", "Sessions"
         )
 
         # Validate sheet name to prevent injection attacks
         if not self._is_valid_sheet_name(sheet_name):
-            print(f"Warning: Invalid sheet name format: {sheet_name}. Using default.")
             return "Sessions"
 
         return sheet_name
@@ -151,7 +239,6 @@ class GoogleSheetsUploader:
 
         # Validate credentials file path to prevent path traversal
         if credentials_file and not self._is_safe_file_path(credentials_file):
-            print(f"Warning: Unsafe credentials file path: {credentials_file}")
             return False
 
         # Check if we have valid credentials
@@ -159,8 +246,18 @@ class GoogleSheetsUploader:
             try:
                 with open(token_file, "rb") as token:
                     creds = pickle.load(token)
-            except Exception as e:
-                print(f"Error loading token file: {e}")
+            except PermissionError:
+                messagebox.showwarning(
+                    "Google Sheets Authentication",
+                    f"Permission denied reading authentication token:\n{token_file}\n\n"
+                    "You may need to check file permissions or run as administrator.",
+                )
+                creds = None
+            except (pickle.UnpicklingError, EOFError, ValueError):
+                # Corrupted/invalid token file - will re-authenticate automatically
+                creds = None
+            except Exception:
+                # Unexpected error - will attempt re-authentication
                 creds = None
 
         # If credentials are invalid or don't exist, get new ones
@@ -168,13 +265,17 @@ class GoogleSheetsUploader:
             if creds and creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
-                except Exception as e:
-                    print(f"Error refreshing credentials: {e}")
+                except Exception as error:
                     creds = None
 
             if not creds:
                 if not os.path.exists(credentials_file):
-                    print(f"Credentials file not found: {credentials_file}")
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Credentials file not found:\n{credentials_file}\n\n"
+                        "Download credentials.json from Google Cloud Console:\n"
+                        "https://console.cloud.google.com/apis/credentials",
+                    )
                     return False
 
                 try:
@@ -183,16 +284,32 @@ class GoogleSheetsUploader:
                         credentials_file, self.scopes
                     )
                     creds = flow.run_local_server(port=0)
-                except Exception as e:
-                    print(f"Error during OAuth flow: {e}")
+                except ValueError as error:
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Invalid credentials file format:\n{credentials_file}\n\n"
+                        f"Error: {str(error)}\n\n"
+                        "Re-download credentials.json from Google Cloud Console.",
+                    )
+                    return False
+                except Exception as error:
+                    messagebox.showerror(
+                        "Google Sheets Authentication",
+                        f"Authentication failed: {str(error)}\n\n"
+                        "Possible fixes:\n"
+                        "• Check your internet connection\n"
+                        "• Complete the browser authentication flow\n"
+                        "• Verify credentials.json is valid\n"
+                        "• Try again",
+                    )
                     return False
 
             # Save the credentials for the next run
             try:
                 with open(token_file, "wb") as token:
                     pickle.dump(creds, token)
-            except Exception as e:
-                print(f"Error saving credentials: {e}")
+            except Exception as error:
+                pass
 
         self.credentials = creds
 
@@ -200,8 +317,12 @@ class GoogleSheetsUploader:
         try:
             self.service = build("sheets", "v4", credentials=self.credentials)
             return True
-        except Exception as e:
-            print(f"Error building Google Sheets service: {e}")
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Connection",
+                f"Failed to connect to Google Sheets API: {str(error)}\n\n"
+                "Check your internet connection and try again.",
+            )
             return False
 
     def _is_safe_file_path(self, file_path):
@@ -228,9 +349,37 @@ class GoogleSheetsUploader:
         """
         Ensure the spreadsheet has proper headers
         Creates headers if sheet is empty
+        Validates headers if they exist
         """
         if not self.service:
             return False
+
+        # Define expected headers
+        expected_headers = [
+            "Session ID",
+            "Date",
+            "Sphere",
+            "Session Start Time",
+            "Session End Time",
+            "Session Total Duration (min)",
+            "Session Active Duration (min)",
+            "Session Break Duration (min)",
+            "Type",
+            "Project",
+            "Project Comment",
+            "Secondary Project",
+            "Secondary Comment",
+            "Secondary Percentage",
+            "Activity Start",
+            "Activity End",
+            "Activity Duration (min)",
+            "Break Action",
+            "Secondary Action",
+            "Active Notes",
+            "Break Notes",
+            "Idle Notes",
+            "Session Notes",
+        ]
 
         try:
             spreadsheet_id = self.get_spreadsheet_id()
@@ -249,22 +398,7 @@ class GoogleSheetsUploader:
 
             # If no headers exist, add them
             if not values:
-                headers = [
-                    "Session ID",
-                    "Date",
-                    "Start Time",
-                    "End Time",
-                    "Sphere",
-                    "Project",
-                    "Total Duration (min)",
-                    "Active Duration (min)",
-                    "Break Duration (min)",
-                    "Total Actions",
-                    "Break Actions",
-                    "Notes",
-                ]
-
-                body = {"values": [headers]}
+                body = {"values": [expected_headers]}
 
                 self.service.spreadsheets().values().update(
                     spreadsheetId=spreadsheet_id,
@@ -275,6 +409,23 @@ class GoogleSheetsUploader:
 
                 return True
 
+            # Validate existing headers match expected order
+            current_headers = values[0]
+            if current_headers != expected_headers:
+                # Format the complete expected header list for display
+                expected_list = "\n".join(
+                    [f"{i+1}. {header}" for i, header in enumerate(expected_headers)]
+                )
+
+                messagebox.showerror(
+                    "Google Sheets Column Order Error",
+                    f"Column order has been changed in Google Sheets.\n\n"
+                    f"Correct column order (1-23):\n{expected_list}\n\n"
+                    f"Please restore the original column order or delete the sheet\n"
+                    f"to let the app recreate it with correct columns.",
+                )
+                return False
+
             return True
 
         except HttpError as error:
@@ -283,12 +434,34 @@ class GoogleSheetsUploader:
                 try:
                     self._create_sheet()
                     return self._ensure_sheet_headers()
-                except:
-                    pass
-            print(f"Error ensuring headers: {error}")
+                except HttpError as create_error:
+                    if create_error.resp.status == 403:
+                        messagebox.showerror(
+                            "Google Sheets Permission Error",
+                            f"Permission denied creating sheet '{self.get_sheet_name()}'.\n\n"
+                            "Make sure you have edit access to the spreadsheet.\n"
+                            "Share the spreadsheet with your Google account with Editor permissions.",
+                        )
+                    return False
+                except Exception:
+                    # Unexpected error during sheet creation
+                    return False
+            elif error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Permission Error",
+                    f"Permission denied accessing spreadsheet.\n\n"
+                    "Make sure you have access to the spreadsheet.\n"
+                    "Check the spreadsheet ID in settings.",
+                )
+            elif error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Error",
+                    f"Spreadsheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    "Check the spreadsheet ID in settings.",
+                )
             return False
-        except Exception as e:
-            print(f"Error ensuring headers: {e}")
+        except Exception as error:
             return False
 
     def _create_sheet(self):
@@ -310,13 +483,21 @@ class GoogleSheetsUploader:
 
             return True
 
-        except Exception as e:
-            print(f"Error creating sheet: {e}")
+        except HttpError as error:
+            # Re-raise HttpError so caller can provide specific error message
+            raise
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Error",
+                f"Failed to create sheet '{sheet_name}'.\n\n"
+                f"Error: {str(error)}\n\n"
+                "Check your spreadsheet configuration and try again.",
+            )
             return False
 
     def upload_session(self, session_data, session_id):
         """
-        Upload a session to Google Sheets
+        Upload a session to Google Sheets with detailed format matching CSV export
 
         Args:
             session_data: Dictionary containing session data
@@ -329,7 +510,6 @@ class GoogleSheetsUploader:
             return False
 
         if not self.get_spreadsheet_id():
-            print("No spreadsheet ID configured")
             return False
 
         # Authenticate if needed
@@ -342,80 +522,307 @@ class GoogleSheetsUploader:
             return False
 
         try:
-            # Extract data from session
+            # Extract session-level data
             date = session_data.get("date", "")
+            sphere = session_data.get("sphere", "")
             start_time = session_data.get("start_time", "")
             end_time = session_data.get("end_time", "")
-            sphere = session_data.get("sphere", "")
-            project = session_data.get("project", "")
 
             # Convert durations from seconds to minutes
-            total_duration = session_data.get("total_duration", 0) / 60
-            active_duration = session_data.get("active_duration", 0) / 60
-            break_duration = session_data.get("break_duration", 0) / 60
+            total_duration = round(session_data.get("total_duration", 0) / 60, 2)
+            active_duration = round(session_data.get("active_duration", 0) / 60, 2)
+            break_duration = round(session_data.get("break_duration", 0) / 60, 2)
 
-            # Count actions
-            total_actions = len(session_data.get("actions", []))
-            break_actions_list = session_data.get("break_actions", [])
-            break_actions = sum(len(ba.get("actions", [])) for ba in break_actions_list)
+            # Get session comments
+            session_comments = session_data.get("session_comments", {})
+            active_notes = escape_for_sheets(session_comments.get("active_notes", ""))
+            break_notes = escape_for_sheets(session_comments.get("break_notes", ""))
+            idle_notes = escape_for_sheets(session_comments.get("idle_notes", ""))
+            session_notes = escape_for_sheets(session_comments.get("session_notes", ""))
 
-            # Get notes and escape for safe upload (prevent formula injection)
-            notes = escape_for_sheets(session_data.get("notes", ""))
+            # Process active periods, breaks, and idle periods
+            active_periods = session_data.get("active", [])
+            breaks = session_data.get("breaks", [])
+            idle_periods = session_data.get("idle_periods", [])
 
-            # Prepare row data - escape text fields for safety
-            row = [
-                session_id,
-                date,
-                start_time,
-                end_time,
-                escape_for_sheets(sphere),
-                escape_for_sheets(project),
-                round(total_duration, 2),
-                round(active_duration, 2),
-                round(break_duration, 2),
-                total_actions,
-                break_actions,
-                notes,
-            ]
+            # Prepare all rows to upload
+            rows = []
 
-            # Append to sheet
-            spreadsheet_id = self.get_spreadsheet_id()
-            sheet_name = self.get_sheet_name()
-            range_name = f"{sheet_name}!A:L"
+            # Process active periods
+            if active_periods:
+                for active in active_periods:
+                    # Extract primary and secondary project information
+                    primary_project = ""
+                    secondary_project = ""
+                    secondary_comment = ""
+                    secondary_percentage = ""
 
-            body = {"values": [row]}
+                    if active.get("project"):
+                        # Single project case
+                        primary_project = escape_for_sheets(active.get("project", ""))
+                    else:
+                        # Multiple projects case
+                        for project_item in active.get("projects", []):
+                            if project_item.get("project_primary", True):
+                                primary_project = escape_for_sheets(
+                                    project_item.get("name", "")
+                                )
+                            else:
+                                secondary_project = escape_for_sheets(
+                                    project_item.get("name", "")
+                                )
+                                secondary_comment = escape_for_sheets(
+                                    project_item.get("comment", "")
+                                )
+                                secondary_percentage = project_item.get(
+                                    "percentage", ""
+                                )
 
-            result = (
-                self.service.spreadsheets()
-                .values()
-                .append(
+                    row = [
+                        session_id,
+                        date,
+                        sphere,
+                        start_time,
+                        end_time,
+                        total_duration,
+                        active_duration,
+                        break_duration,
+                        "active",
+                        primary_project,
+                        escape_for_sheets(
+                            active.get("comment", "")
+                        ),  # primary project comment
+                        secondary_project,
+                        secondary_comment,
+                        secondary_percentage,
+                        active.get("start", ""),
+                        active.get("end", ""),
+                        round(active.get("duration", 0) / 60, 2),
+                        "",  # break_action
+                        "",  # secondary_action
+                        active_notes,
+                        break_notes,
+                        idle_notes,
+                        session_notes,
+                    ]
+                    rows.append(row)
+
+            # Process breaks
+            if breaks:
+                for brk in breaks:
+                    # Extract primary and secondary action information
+                    primary_action = ""
+                    secondary_action = ""
+                    secondary_comment = ""
+                    secondary_percentage = ""
+
+                    if brk.get("action"):
+                        # Single action case
+                        primary_action = escape_for_sheets(brk.get("action", ""))
+                    else:
+                        # Multiple actions case
+                        for action_item in brk.get("actions", []):
+                            if action_item.get("action_primary", True):
+                                primary_action = escape_for_sheets(
+                                    action_item.get("name", "")
+                                )
+                            else:
+                                secondary_action = escape_for_sheets(
+                                    action_item.get("name", "")
+                                )
+                                secondary_comment = escape_for_sheets(
+                                    action_item.get("comment", "")
+                                )
+                                secondary_percentage = action_item.get("percentage", "")
+
+                    row = [
+                        session_id,
+                        date,
+                        sphere,
+                        start_time,
+                        end_time,
+                        total_duration,
+                        active_duration,
+                        break_duration,
+                        "break",
+                        "",  # project
+                        escape_for_sheets(
+                            brk.get("comment", "")
+                        ),  # primary action comment
+                        "",  # secondary_project
+                        secondary_comment,
+                        secondary_percentage,
+                        brk.get("start", ""),
+                        "",  # activity_end
+                        round(brk.get("duration", 0) / 60, 2),
+                        primary_action,
+                        secondary_action,
+                        active_notes,
+                        break_notes,
+                        idle_notes,
+                        session_notes,
+                    ]
+                    rows.append(row)
+
+            # Process idle periods
+            if idle_periods:
+                for idle in idle_periods:
+                    row = [
+                        session_id,
+                        date,
+                        sphere,
+                        start_time,
+                        end_time,
+                        total_duration,
+                        active_duration,
+                        break_duration,
+                        "idle",
+                        "",  # project
+                        "",  # project_comment
+                        "",  # secondary_project
+                        "",  # secondary_comment
+                        "",  # secondary_percentage
+                        idle.get("start", ""),
+                        idle.get("end", ""),
+                        round(idle.get("duration", 0) / 60, 2),
+                        "",  # break_action
+                        "",  # secondary_action
+                        active_notes,
+                        break_notes,
+                        idle_notes,
+                        session_notes,
+                    ]
+                    rows.append(row)
+
+            # If no active periods, breaks, or idle, create summary row
+            if not active_periods and not breaks and not idle_periods:
+                row = [
+                    session_id,
+                    date,
+                    sphere,
+                    start_time,
+                    end_time,
+                    total_duration,
+                    active_duration,
+                    break_duration,
+                    "session_summary",
+                    "",  # project
+                    "",  # project_comment
+                    "",  # secondary_project
+                    "",  # secondary_comment
+                    "",  # secondary_percentage
+                    "",  # activity_start
+                    "",  # activity_end
+                    0,  # activity_duration
+                    "",  # break_action
+                    "",  # secondary_action
+                    active_notes,
+                    break_notes,
+                    idle_notes,
+                    session_notes,
+                ]
+                rows.append(row)
+
+            # Append all rows to sheet
+            if rows:
+                spreadsheet_id = self.get_spreadsheet_id()
+                sheet_name = self.get_sheet_name()
+                range_name = f"{sheet_name}!A:W"
+
+                body = {"values": rows}
+
+                self.service.spreadsheets().values().append(
                     spreadsheetId=spreadsheet_id,
                     range=range_name,
                     valueInputOption="USER_ENTERED",
                     insertDataOption="INSERT_ROWS",
                     body=body,
-                )
-                .execute()
-            )
+                ).execute()
 
-            print(
-                f"Session uploaded to Google Sheets: {result.get('updates', {}).get('updatedCells', 0)} cells updated"
-            )
-            return True
+                return True
+            else:
+                return False
 
         except HttpError as error:
-            print(f"HTTP Error uploading to Google Sheets: {error}")
+            if error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Permission denied uploading to spreadsheet.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Share the spreadsheet with your Google account\n"
+                    f"• Make sure you have 'Editor' access (not just Viewer)\n"
+                    f"• Check that the spreadsheet hasn't been made read-only",
+                )
+            elif error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Spreadsheet or sheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Check that the sheet '{self.get_sheet_name()}' exists\n"
+                    f"• Make sure the spreadsheet hasn't been deleted",
+                )
+            elif error.resp.status == 400:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Invalid data format or request.\n\n"
+                    f"Sheet Name: {self.get_sheet_name()}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check that the sheet structure hasn't changed\n"
+                    f"• Verify column headers are correct\n"
+                    f"• Try using 'Create Sheet' to reset the sheet",
+                )
+            else:
+                messagebox.showerror(
+                    "Google Sheets Upload Error",
+                    f"Failed to upload session data.\n\n"
+                    f"HTTP Status: {error.resp.status}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check your internet connection\n"
+                    f"• Verify spreadsheet settings\n"
+                    f"• Try again in a few moments",
+                )
             return False
-        except Exception as e:
-            print(f"Error uploading to Google Sheets: {e}")
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Upload Error",
+                f"Unexpected error uploading session.\n\n"
+                f"Error: {str(error)}\n\n"
+                f"Possible fixes:\n"
+                f"• Check your internet connection\n"
+                f"• Verify your Google Sheets settings\n"
+                f"• Try re-authenticating with Google\n"
+                f"• Check that the session data is valid",
+            )
             return False
 
     def test_connection(self):
         """
         Test the connection to Google Sheets
 
+        Attempts to authenticate and read spreadsheet properties to verify
+        connectivity and access permissions.
+
+        Called from: Settings frame "Test Connection" button
+        
+        User Feedback:
+            - Error dialogs (messagebox.showerror) displayed in Settings frame for:
+              • 404 Not Found: Spreadsheet ID doesn't exist or was deleted
+              • 403 Permission Denied: User lacks access to spreadsheet
+              • Other HTTP errors: Network issues or API problems
+              • Unexpected exceptions: General failures (ValueError, etc.)
+            - Success/failure also shown in status label below the button
+
         Returns:
             tuple: (success: bool, message: str)
+                - (True, "Connected to spreadsheet: {title}") on success
+                - (False, error_description) on failure
         """
         if not self.get_spreadsheet_id():
             return (False, "No spreadsheet ID configured")
@@ -435,7 +842,47 @@ class GoogleSheetsUploader:
 
         except HttpError as error:
             if error.resp.status == 404:
+                messagebox.showerror(
+                    "Google Sheets Connection Error",
+                    f"Spreadsheet not found.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Check that the spreadsheet still exists\n"
+                    f"• Make sure the spreadsheet hasn't been deleted",
+                )
                 return (False, "Spreadsheet not found. Check the spreadsheet ID.")
-            return (False, f"HTTP Error: {error}")
-        except Exception as e:
-            return (False, f"Error: {str(e)}")
+            elif error.resp.status == 403:
+                messagebox.showerror(
+                    "Google Sheets Permission Error",
+                    f"Permission denied accessing spreadsheet.\n\n"
+                    f"Spreadsheet ID: {self.get_spreadsheet_id()}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Share the spreadsheet with your Google account\n"
+                    f"• Make sure you have at least 'Viewer' access\n"
+                    f"• Check that the spreadsheet ID is correct",
+                )
+                return (False, "Permission denied. Check spreadsheet access.")
+            else:
+                messagebox.showerror(
+                    "Google Sheets Connection Error",
+                    f"Failed to connect to Google Sheets.\n\n"
+                    f"HTTP Status: {error.resp.status}\n"
+                    f"Error: {str(error)}\n\n"
+                    f"Possible fixes:\n"
+                    f"• Check your internet connection\n"
+                    f"• Verify the spreadsheet ID in Settings\n"
+                    f"• Try again in a few moments",
+                )
+                return (False, f"HTTP Error {error.resp.status}: {error}")
+        except Exception as error:
+            messagebox.showerror(
+                "Google Sheets Connection Error",
+                f"Unexpected error testing connection.\n\n"
+                f"Error: {str(error)}\n\n"
+                f"Possible fixes:\n"
+                f"• Check your internet connection\n"
+                f"• Verify your Google Sheets settings\n"
+                f"• Try re-authenticating with Google",
+            )
+            return (False, f"Error: {str(error)}")

@@ -99,6 +99,244 @@ class TestCompletionFrameAfterSession(unittest.TestCase):
         # Default sphere should be "Work"
         self.assertEqual(frame.sphere_menu.get(), "Work")
 
+    def test_session_sphere_loads_correctly_not_default(self):
+        """Test that session sphere loads from data.json, not default sphere from settings
+
+        Bug: When navigating back to a completed session, the sphere dropdown
+        showed the default sphere instead of the session's actual sphere.
+        """
+        session_name = "2026-02-02_1770065818"
+
+        # Add Cleaning sphere to settings (not default)
+        self.settings["spheres"]["Cleaning"] = {"is_default": False, "active": True}
+        self.settings["projects"]["Kitchen"] = {
+            "sphere": "Cleaning",
+            "is_default": True,
+            "active": True,
+        }
+        self.file_manager.create_test_file(self.test_settings_file, self.settings)
+
+        # Session saved with Cleaning sphere (NOT the default "Work" sphere)
+        test_data = {
+            session_name: {
+                "sphere": "Cleaning",
+                "date": "2026-02-02",
+                "start_time": "15:56:58",
+                "start_timestamp": 1770065818.1684487,
+                "breaks": [],
+                "idle_periods": [],
+                "active": [
+                    {
+                        "start": "15:56:58",
+                        "start_timestamp": 1770065818.1684487,
+                        "end": "15:57:01",
+                        "end_timestamp": 1770065821.713549,
+                        "duration": 3.545100212097168,
+                        "project": "Kitchen",
+                        "comment": "kitchen cleaning",
+                    }
+                ],
+                "end_time": "15:57:01",
+                "end_timestamp": 1770065821.7393985,
+                "total_duration": 3.5709497928619385,
+                "active_duration": 3.5709497928619385,
+                "break_duration": 0,
+                "session_comments": {
+                    "active_notes": "sink",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "much needed",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        # Load the session frame (simulating navigation back to this session)
+        frame = CompletionFrame(self.root, tracker, session_name)
+
+        # BUG: Frame should show "Cleaning" but shows "Work" (default sphere)
+        # After fix: Should show the session's actual sphere "Cleaning"
+        self.assertEqual(
+            frame.sphere_menu.get(),
+            "Cleaning",
+            "Session sphere should load from data.json, not default sphere from settings",
+        )
+        self.assertEqual(frame.selected_sphere, "Cleaning")
+
+    def test_session_dropdown_navigation_updates_sphere(self):
+        """Test that navigating to different sessions via dropdown updates sphere correctly
+
+        Bug: When changing session via session dropdown, sphere doesn't update to the
+        new session's actual sphere - it keeps showing the previous session's sphere.
+        """
+        # Add Cleaning sphere to settings (not default)
+        self.settings["spheres"]["Cleaning"] = {"is_default": False, "active": True}
+        self.settings["projects"]["Kitchen"] = {
+            "sphere": "Cleaning",
+            "is_default": True,
+            "active": True,
+        }
+        self.file_manager.create_test_file(self.test_settings_file, self.settings)
+
+        # Create two sessions with different spheres on the same date
+        test_data = {
+            "2026-02-02_1770065000": {
+                "sphere": "Work",  # Default sphere
+                "date": "2026-02-02",
+                "start_time": "15:50:00",
+                "start_timestamp": 1770065000.0,
+                "breaks": [],
+                "idle_periods": [],
+                "active": [
+                    {
+                        "start": "15:50:00",
+                        "start_timestamp": 1770065000.0,
+                        "end": "15:50:05",
+                        "end_timestamp": 1770065005.0,
+                        "duration": 5.0,
+                        "project": "Default Project",
+                        "comment": "work stuff",
+                    }
+                ],
+                "end_time": "15:50:05",
+                "end_timestamp": 1770065005.0,
+                "total_duration": 5.0,
+                "active_duration": 5.0,
+                "break_duration": 0,
+                "session_comments": {},
+            },
+            "2026-02-02_1770065818": {
+                "sphere": "Cleaning",  # Non-default sphere
+                "date": "2026-02-02",
+                "start_time": "15:56:58",
+                "start_timestamp": 1770065818.1684487,
+                "breaks": [],
+                "idle_periods": [],
+                "active": [
+                    {
+                        "start": "15:56:58",
+                        "start_timestamp": 1770065818.1684487,
+                        "end": "15:57:01",
+                        "end_timestamp": 1770065821.713549,
+                        "duration": 3.545100212097168,
+                        "project": "Kitchen",
+                        "comment": "kitchen cleaning",
+                    }
+                ],
+                "end_time": "15:57:01",
+                "end_timestamp": 1770065821.7393985,
+                "total_duration": 3.5709497928619385,
+                "active_duration": 3.5709497928619385,
+                "break_duration": 0,
+                "session_comments": {},
+            },
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        # Start with the Cleaning session (second session)
+        frame = CompletionFrame(self.root, tracker, "2026-02-02_1770065818")
+        self.root.update()
+
+        # Verify initial state - should show Cleaning
+        self.assertEqual(frame.sphere_menu.get(), "Cleaning")
+        self.assertEqual(frame.selected_sphere, "Cleaning")
+
+        # Now navigate to the Work session via dropdown
+        # Session dropdown should have both sessions
+        frame.session_selector.set("Session 1")  # First session (Work sphere)
+        frame._on_session_selected(None)
+        self.root.update()
+
+        # BUG: After navigation, sphere should change to "Work" but stays "Cleaning"
+        # After fix: Should show the new session's sphere "Work"
+        self.assertEqual(
+            frame.sphere_menu.get(),
+            "Work",
+            "Session dropdown navigation should update sphere to new session's sphere",
+        )
+        self.assertEqual(frame.selected_sphere, "Work")
+
+    def test_inactive_sphere_displays_in_session_frame(self):
+        """Test that session sphere displays even if sphere is inactive/archived
+
+        Bug: When viewing a session with an inactive sphere, the sphere dropdown
+        shows the default sphere instead of the session's actual inactive sphere.
+        Historical sessions should display correctly even if sphere was archived later.
+        """
+        # Add "reading" sphere as INACTIVE in settings
+        self.settings["spheres"]["reading"] = {"is_default": False, "active": False}
+        self.settings["projects"]["riddle"] = {
+            "sphere": "reading",
+            "is_default": True,
+            "active": True,  # Project can be active even if sphere is inactive
+        }
+        self.file_manager.create_test_file(self.test_settings_file, self.settings)
+
+        # Session was created when "reading" sphere was active
+        session_name = "2026-02-02_1770045638"
+        test_data = {
+            session_name: {
+                "sphere": "reading",  # Inactive sphere
+                "date": "2026-02-02",
+                "start_time": "10:20:38",
+                "start_timestamp": 1770045638.7173276,
+                "breaks": [],
+                "idle_periods": [],
+                "active": [
+                    {
+                        "start": "10:20:38",
+                        "start_timestamp": 1770045638.7173276,
+                        "end": "10:20:45",
+                        "end_timestamp": 1770045645.901812,
+                        "duration": 7.184484481811523,
+                        "project": "riddle",
+                    }
+                ],
+                "end_time": "10:20:45",
+                "end_timestamp": 1770045645.9251695,
+                "total_duration": 7.207841873168945,
+                "active_duration": 7.207841873168945,
+                "break_duration": 0,
+                "session_comments": {
+                    "active_notes": "",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "Inactive Sphere Active Project",
+                },
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        # Load the session frame
+        frame = CompletionFrame(self.root, tracker, session_name)
+        self.root.update()
+
+        # BUG: Frame shows "Work" (default) instead of "reading" (inactive but actual)
+        # After fix: Should show the session's actual sphere "reading" even though inactive
+        self.assertEqual(
+            frame.sphere_menu.get(),
+            "reading",
+            "Session should display its actual sphere even if inactive/archived",
+        )
+        self.assertEqual(frame.selected_sphere, "reading")
+        # Verify "reading" is in the dropdown options
+        self.assertIn("reading", frame.sphere_menu["values"])
+
     def test_default_project_populates(self):
         """Test that default project is populated in default project dropdown"""
         session_name = "2026-01-22_session1"

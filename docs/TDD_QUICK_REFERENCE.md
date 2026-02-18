@@ -223,11 +223,11 @@ def test_data_persists_after_save(self):
 ### Run All Tests
 
 ```bash
-# Using unittest
+# Using unittest (recommended for this project)
 python -m unittest discover tests -v
 
-# Using pytest (if installed)
-pytest tests/ -v
+# Or use the project's test runner
+python tests/run_all_tests.py
 ```
 
 ### Run Specific Test File

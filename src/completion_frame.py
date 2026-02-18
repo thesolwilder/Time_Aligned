@@ -10,6 +10,22 @@ from datetime import datetime
 from tkinter import messagebox
 import os
 import subprocess
+import shutil
+import datetime as dt
+
+from src.ui_helpers import get_frame_background
+
+from src.constants import (
+    DEFAULT_BACKUP_FOLDER,
+    FONT_TITLE,
+    FONT_HEADING,
+    FONT_BODY,
+    FONT_NORMAL,
+    FONT_NORMAL_BOLD,
+    FONT_NORMAL_ITALIC,
+    COLOR_LINK_BLUE,
+    FONT_LINK,
+)
 
 
 def disable_combobox_scroll(combobox):
@@ -49,6 +65,8 @@ class CompletionFrame(ttk.Frame):
             self.session_start_timestamp = loaded_data.get("start_timestamp", 0)
             self.session_end_timestamp = loaded_data.get("end_timestamp", 0)
             self.session_duration = loaded_data.get("total_duration", 0)
+            # Store session sphere from saved data
+            self.session_sphere = loaded_data.get("sphere", None)
 
             # Build session_data dict for compatibility with existing code
             self.session_data = {
@@ -57,17 +75,22 @@ class CompletionFrame(ttk.Frame):
                 "active_time": loaded_data.get("active_duration", 0),
                 "break_time": loaded_data.get("break_duration", 0),
             }
+
+            # Load session comments if they exist
+            self.session_comments = loaded_data.get("session_comments", {})
         else:
             # Fallback for missing session
             self.session_start_timestamp = 0
             self.session_end_timestamp = 0
             self.session_duration = 0
+            self.session_sphere = None
             self.session_data = {
                 "session_name": session_name,
                 "total_elapsed": 0,
                 "active_time": 0,
                 "break_time": 0,
             }
+            self.session_comments = {}
         self.text_boxes = []  # Store references to text boxes for each period
         # Store references to project/break action dropdowns for updating when sphere changes
         self.project_menus = []
@@ -85,15 +108,14 @@ class CompletionFrame(ttk.Frame):
             []
         )  # Store secondary percentage label references
 
-        # Reference to canvas and mousewheel binding function (set by parent)
-        self.canvas = None
-        self.bind_mousewheel_func = None
-
         self.create_widgets()
 
     def create_widgets(self):
         """Create all UI elements for the completion frame"""
         self.current_row = 0
+
+        # Navigation links at top
+        self._create_navigation_links()
 
         # Title and sphere selection
         self._title_and_sphere()
@@ -132,6 +154,41 @@ class CompletionFrame(ttk.Frame):
         )
         self.current_row += 1
 
+    def _create_navigation_links(self):
+        """Create navigation links at top of frame"""
+        nav_frame = ttk.Frame(self)
+        nav_frame.grid(
+            row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=(0, 10)
+        )
+        self.current_row += 1
+
+        # Get background color to match frame
+        frame_bg = get_frame_background()
+
+        # Back to Tracker link
+        back_link = tk.Label(
+            nav_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_link.pack(side=tk.LEFT, padx=(0, 15))
+        back_link.bind("<Button-1>", lambda e: self.tracker.show_main_frame())
+
+        # Analysis link
+        analysis_link = tk.Label(
+            nav_frame,
+            text="Analysis",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        analysis_link.pack(side=tk.LEFT, padx=(0, 15))
+        analysis_link.bind("<Button-1>", lambda e: self.tracker.open_analysis())
+
     # title and sphere selection method
     def _title_and_sphere(self):
         # Create a frame to hold all time labels in a single row
@@ -140,17 +197,22 @@ class CompletionFrame(ttk.Frame):
             row=self.current_row, column=0, columnspan=2, sticky=tk.W, pady=5
         )
         self.current_row += 1
-        active_spheres, default_sphere = self._get_active_spheres()
+        active_spheres, default_sphere = self.tracker.get_active_spheres()
 
-        # Add "Add New Sphere..." option to the list
-        sphere_options = list(active_spheres) + ["Add New Sphere..."]
+        # If session has a sphere (even if inactive), include it in options
+        sphere_options = list(active_spheres)
+        if self.session_sphere and self.session_sphere not in sphere_options:
+            # Add inactive session sphere to options so historical sessions display correctly
+            sphere_options.append(self.session_sphere)
+        sphere_options.append("Add New Sphere...")
 
-        # Set initial value
-        initial_value = (
-            default_sphere
-            if default_sphere in active_spheres
-            else active_spheres[0] if active_spheres else ""
-        )
+        # Set initial value - prioritize session sphere (even if inactive) over default
+        if self.session_sphere:
+            initial_value = self.session_sphere
+        elif default_sphere and default_sphere in active_spheres:
+            initial_value = default_sphere
+        else:
+            initial_value = active_spheres[0] if active_spheres else ""
         self.selected_sphere = initial_value
 
         self.sphere_menu = ttk.Combobox(
@@ -159,7 +221,7 @@ class CompletionFrame(ttk.Frame):
             justify="center",
             state="readonly",
             width=10,
-            font=("Arial", 16, "bold"),
+            font=FONT_TITLE,
         )
         self.sphere_menu.set(initial_value)
         disable_combobox_scroll(self.sphere_menu)
@@ -169,17 +231,42 @@ class CompletionFrame(ttk.Frame):
         self.sphere_menu.bind("<<ComboboxSelected>>", self._on_sphere_selected)
 
         # Title
-        ttk.Label(time_frame, text="Session Complete", font=("Arial", 16, "bold")).grid(
+        ttk.Label(time_frame, text="Session Complete", font=FONT_TITLE).grid(
             row=0, column=1, pady=10, sticky=tk.W, padx=5
         )
 
     def change_defaults_for_session(self):
-        """Change default project and break/idle actions for the session"""
+        """Create default project and break/idle action dropdown selectors.
+
+        Displays two dropdown menus allowing user to set defaults for the session:
+        - Default Project: Used for active periods (pre-filled with first project from session)
+        - Default Break/Idle Action: Used for break/idle periods
+
+        Both dropdowns support inline creation via "Add New..." option that enables
+        editing mode with Enter/FocusOut binding for save/cancel.
+
+        Smart initialization:
+        - Prioritizes first project actually used in session over settings default
+        - Scans session active periods to find first project assignment
+        - Falls back to settings default if no project used yet
+
+        Side effects:
+            - Creates default_container frame at current_row
+            - Creates default_project_menu combobox with inline creation support
+            - Creates default_action_menu combobox with inline creation support
+            - Binds <<ComboboxSelected>> to _on_project_selected and _on_break_action_selected
+            - Disables mousewheel scroll on both dropdowns
+            - Increments current_row for next section
+
+        Note:
+            Inline creation handlers (_save_new_project, _save_new_break_action) update
+            all dependent dropdowns to maintain consistency across UI.
+        """
         active_projects, default_project = self._get_sphere_projects()
         active_projects = active_projects + ["Add New Project..."]
 
         # For non-active periods (break and idle), project dropdown with break actions
-        break_actions, default_break_action = self._get_break_actions()
+        break_actions, default_break_action = self.tracker.get_active_break_actions()
         break_actions = break_actions + ["Add New Break Action..."]
 
         default_container = ttk.Frame(self)
@@ -195,7 +282,27 @@ class CompletionFrame(ttk.Frame):
             default_container, values=active_projects, state="readonly", width=20
         )
         self.default_project_menu.grid(row=0, column=1, sticky=tk.W, padx=5)
-        self.default_project_menu.set(default_project)
+
+        # Determine initial value - prioritize first project used in session over default
+        initial_project = default_project
+        all_data = self.tracker.load_data()
+        if self.session_name in all_data:
+            session = all_data[self.session_name]
+            # Get first project used in this session
+            for period in session.get("active", []):
+                if period.get("project"):
+                    initial_project = period.get("project")
+                    break
+                # Check projects array
+                for project_item in period.get("projects", []):
+                    if project_item.get("project_primary", True):
+                        initial_project = project_item.get("name", "")
+                        break
+                if initial_project != default_project:
+                    break
+
+        if initial_project:
+            self.default_project_menu.set(initial_project)
         disable_combobox_scroll(self.default_project_menu)
         ttk.Label(default_container, text="Default Break/Idle Action:").grid(
             row=0, column=2, sticky=tk.W, padx=5
@@ -204,7 +311,8 @@ class CompletionFrame(ttk.Frame):
             default_container, values=break_actions, state="readonly", width=20
         )
         self.default_action_menu.grid(row=0, column=3, sticky=tk.W, padx=5)
-        self.default_action_menu.set(default_break_action)
+        if default_break_action and default_break_action in break_actions:
+            self.default_action_menu.set(default_break_action)
         disable_combobox_scroll(self.default_action_menu)
 
         self.default_project_menu.bind(
@@ -246,7 +354,9 @@ class CompletionFrame(ttk.Frame):
             # Load all sessions for the selected date
             all_data = self.tracker.load_data()
             self.sessions_for_date = [
-                k for k in all_data.keys() if k.startswith(selected_date + "_")
+                session_name
+                for session_name in all_data.keys()
+                if session_name.startswith(selected_date + "_")
             ]
             # Sort chronologically: Session 1 = oldest, highest number = most recent
             self.sessions_for_date.sort()
@@ -305,6 +415,11 @@ class CompletionFrame(ttk.Frame):
                 self.session_start_timestamp = loaded_data.get("start_timestamp", 0)
                 self.session_end_timestamp = loaded_data.get("end_timestamp", 0)
                 self.session_duration = loaded_data.get("total_duration", 0)
+                # Store session sphere from saved data (CRITICAL for correct sphere display)
+                self.session_sphere = loaded_data.get("sphere", None)
+
+                # Load session comments if they exist (CRITICAL for populating comment fields)
+                self.session_comments = loaded_data.get("session_comments", {})
 
                 # Build session_data dict for compatibility
                 self.session_data = {
@@ -317,17 +432,39 @@ class CompletionFrame(ttk.Frame):
             # Recreate all widgets
             self.create_widgets()
 
-            # Re-apply mousewheel binding to new widgets
-            if self.bind_mousewheel_func:
-                self.bind_mousewheel_func()
-
-            # Update scroll region
-            if self.canvas:
-                self.update_idletasks()
-                self.canvas.configure(scrollregion=self.canvas.bbox("all"))
-
     def _save_new_sphere(self, event):
-        """Save the new sphere to settings"""
+        """Save inline-created sphere to settings and update UI.
+
+        Called when user types new sphere name and presses Enter or loses focus.
+        Creates new sphere in settings.json with default configuration (not default,
+        active=True).
+
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Sphere..." placeholder
+        - Checks for duplicate sphere names
+
+        On success:
+        - Adds sphere to settings["spheres"] with {is_default: False, active: True}
+        - Saves settings.json to disk
+        - Updates sphere_menu dropdown with new option
+        - Sets selected_sphere to new value
+        - Calls _update_project_dropdowns() to refresh project lists for new sphere
+        - Returns combobox to readonly state
+
+        On duplicate or empty:
+        - Calls _cancel_new_sphere() to revert
+
+        Side effects:
+            - Modifies tracker.settings["spheres"] dict
+            - Writes to settings.json file
+            - Unbinds <Return> and <FocusOut> events from sphere_menu
+            - Updates all project dropdowns throughout UI
+
+        Note:
+            New spheres start with no projects. User must create projects separately.
+        """
         new_sphere = self.sphere_menu.get().strip()
 
         if new_sphere and new_sphere != "Add New Sphere...":
@@ -339,11 +476,17 @@ class CompletionFrame(ttk.Frame):
                 self.selected_sphere = new_sphere
 
                 # Save to file
-                with open(self.tracker.settings_file, "w") as f:
-                    json.dump(self.tracker.settings, f, indent=2)
+                try:
+                    with open(self.tracker.settings_file, "w") as f:
+                        json.dump(self.tracker.settings, f, indent=2)
+                except Exception as error:
+                    messagebox.showerror(
+                        "Error", f"Failed to save sphere settings: {error}"
+                    )
+                    return
 
                 # Update sphere combobox
-                active_spheres, _ = self._get_active_spheres()
+                active_spheres, _ = self.tracker.get_active_spheres()
                 sphere_options = list(active_spheres) + ["Add New Sphere..."]
                 self.sphere_menu.config(values=sphere_options, state="readonly")
                 self.sphere_menu.set(new_sphere)
@@ -363,8 +506,25 @@ class CompletionFrame(ttk.Frame):
         self.sphere_menu.unbind("<FocusOut>")
 
     def _cancel_new_sphere(self, event):
-        """Cancel adding new sphere and revert to previous state"""
-        active_spheres, default_sphere = self._get_active_spheres()
+        """Cancel inline sphere creation and restore dropdown to previous state.
+
+        Reverts sphere_menu combobox to readonly state with sensible fallback value.
+        Called when user cancels inline creation (empty input, FocusOut without save).
+
+        Fallback priority:
+        1. Default sphere (if exists and is active)
+        2. First active sphere (if any exist)
+        3. Empty string (if no active spheres)
+
+        Side effects:
+            - Sets sphere_menu to readonly state
+            - Updates sphere_menu value to fallback
+            - Unbinds <Return> and <FocusOut> events
+
+        Note:
+            Does NOT modify settings or create any data. Pure UI reversion.
+        """
+        active_spheres, default_sphere = self.tracker.get_active_spheres()
 
         fallback = (
             default_sphere
@@ -399,7 +559,7 @@ class CompletionFrame(ttk.Frame):
         )
         self.current_row += 1
 
-        col = 0
+        grid_column = 0
         # Create dropdown for selecting date first
         all_data = self.tracker.load_data()
 
@@ -415,23 +575,25 @@ class CompletionFrame(ttk.Frame):
         if self.session_name and "_" in self.session_name:
             current_date = self.session_name.split("_")[0]
 
-        ttk.Label(time_frame, text="Date:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        ttk.Label(time_frame, text="Date:", font=FONT_HEADING).grid(
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
 
         self.date_selector = ttk.Combobox(
             time_frame, values=date_options, state="readonly", width=12
         )
         self.date_selector.set(current_date)
         disable_combobox_scroll(self.date_selector)
-        self.date_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.date_selector.grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 10))
         self.date_selector.bind("<<ComboboxSelected>>", self._on_date_selected)
-        col += 1
+        grid_column += 1
 
         # Create dropdown for selecting session within the date
         self.sessions_for_date = [
-            k for k in all_data.keys() if k.startswith(current_date + "_")
+            session_name
+            for session_name in all_data.keys()
+            if session_name.startswith(current_date + "_")
         ]
 
         # Sort chronologically: Session 1 = oldest, highest number = most recent
@@ -448,44 +610,38 @@ class CompletionFrame(ttk.Frame):
             current_index = self.sessions_for_date.index(self.session_name)
             current_session_readable = "Session " + str(current_index + 1)
 
-        ttk.Label(time_frame, text="Session:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        ttk.Label(time_frame, text="Session:", font=FONT_HEADING).grid(
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
 
         self.session_selector = ttk.Combobox(
             time_frame, values=self.session_name_readable, state="readonly", width=20
         )
         self.session_selector.set(current_session_readable)
         disable_combobox_scroll(self.session_selector)
-        self.session_selector.grid(row=0, column=col, sticky=tk.W, padx=(0, 10))
+        self.session_selector.grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 10))
         self.session_selector.bind("<<ComboboxSelected>>", self._on_session_selected)
-        col += 1
+        grid_column += 1
 
         # Populate start and end time based on selected session
-        ttk.Label(time_frame, text=f"{start_time}", font=("Arial", 12)).grid(
-            row=0, column=col, sticky=tk.W
+        ttk.Label(time_frame, text=f"{start_time}", font=FONT_BODY).grid(
+            row=0, column=grid_column, sticky=tk.W
         )
-        col += 1
+        grid_column += 1
 
         ttk.Label(
             time_frame,
             text=" - ",
-            font=(
-                "Arial",
-                12,
-            ),
-        ).grid(row=0, column=col, sticky=tk.W)
-        col += 1
+            font=FONT_BODY,
+        ).grid(row=0, column=grid_column, sticky=tk.W)
+        grid_column += 1
         ttk.Label(
             time_frame,
             text=f"{end_time}",
-            font=(
-                "Arial",
-                12,
-            ),
-        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 5))
-        col += 1
+            font=FONT_BODY,
+        ).grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 5))
+        grid_column += 1
 
     def _create_duration_display(self):
         """Create the duration display section"""
@@ -501,56 +657,56 @@ class CompletionFrame(ttk.Frame):
         )
         self.current_row += 1
 
-        col = 0
+        grid_column = 0
         # Total time
-        ttk.Label(time_frame, text="Total Time:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        ttk.Label(time_frame, text="Total Time:", font=FONT_HEADING).grid(
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
         ttk.Label(
-            time_frame, text=self.tracker.format_time(total_elapsed), font=("Arial", 12)
-        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
-        col += 1
+            time_frame, text=self.tracker.format_time(total_elapsed), font=FONT_BODY
+        ).grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 20))
+        grid_column += 1
 
         # Active time
         ttk.Label(
             time_frame,
             text=f"Active Time",
-            font=("Arial", 12, "bold"),
-        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 5))
-        col += 1
+            font=FONT_HEADING,
+        ).grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 5))
+        grid_column += 1
 
         # minus idle time italics and smaller font
         ttk.Label(
             time_frame,
             text="(minus Idle Time):",
-            font=("Arial", 10, "italic"),
-        ).grid(row=0, column=col, sticky=tk.W)
+            font=FONT_NORMAL_ITALIC,
+        ).grid(row=0, column=grid_column, sticky=tk.W)
 
-        col += 1
+        grid_column += 1
         ttk.Label(
-            time_frame, text=self.tracker.format_time(active_time), font=("Arial", 12)
-        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
-        col += 1
+            time_frame, text=self.tracker.format_time(active_time), font=FONT_BODY
+        ).grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 20))
+        grid_column += 1
 
         # Break time
-        ttk.Label(time_frame, text="Break Time:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        ttk.Label(time_frame, text="Break Time:", font=FONT_HEADING).grid(
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
         ttk.Label(
-            time_frame, text=self.tracker.format_time(break_time), font=("Arial", 12)
-        ).grid(row=0, column=col, sticky=tk.W, padx=(0, 20))
-        col += 1
+            time_frame, text=self.tracker.format_time(break_time), font=FONT_BODY
+        ).grid(row=0, column=grid_column, sticky=tk.W, padx=(0, 20))
+        grid_column += 1
 
         # Idle time
-        ttk.Label(time_frame, text="Idle Time:", font=("Arial", 12, "bold")).grid(
-            row=0, column=col, sticky=tk.W, padx=(0, 5)
+        ttk.Label(time_frame, text="Idle Time:", font=FONT_HEADING).grid(
+            row=0, column=grid_column, sticky=tk.W, padx=(0, 5)
         )
-        col += 1
+        grid_column += 1
         ttk.Label(
-            time_frame, text=self.tracker.format_time(total_idle), font=("Arial", 12)
-        ).grid(row=0, column=col, sticky=tk.W)
+            time_frame, text=self.tracker.format_time(total_idle), font=FONT_BODY
+        ).grid(row=0, column=grid_column, sticky=tk.W)
 
     def _calculate_total_idle(self):
         """Calculate total idle time from session data"""
@@ -564,19 +720,45 @@ class CompletionFrame(ttk.Frame):
 
         return total_idle
 
-    def _get_active_spheres(self):
-        """Get active spheres and default sphere"""
-        return self.tracker.get_active_spheres()
-
     def _get_sphere_projects(self):
-        """Get active projects and default project for the currently selected sphere"""
+        """Get active projects and default project for the currently selected sphere
+
+        Also includes projects from the current session even if they're now inactive,
+        so historical sessions display correctly.
+        """
         active_projects = self.tracker.get_active_projects(self.selected_sphere)
         default_project = self.tracker.get_default_project(self.selected_sphere)
-        return active_projects, default_project
 
-    def _get_break_actions(self):
-        """Get break actions for the currently selected sphere"""
-        return self.tracker.get_active_break_actions()
+        # Collect all projects used in this session (even if now inactive)
+        all_data = self.tracker.load_data()
+        if self.session_name in all_data:
+            session = all_data[self.session_name]
+            session_projects = set()
+
+            # Collect from active periods
+            for period in session.get("active", []):
+                # Single project case
+                if period.get("project"):
+                    project_name = period.get("project", "")
+                    if project_name:
+                        session_projects.add(project_name)
+                # Multiple projects case
+                for project_item in period.get("projects", []):
+                    project_name = project_item.get("name", "")
+                    if project_name:
+                        session_projects.add(project_name)
+
+            # Add session projects to active_projects if they belong to this sphere and aren't already there
+            for project_name in session_projects:
+                if project_name not in active_projects:
+                    # Check if project belongs to this sphere
+                    project_data = self.tracker.settings.get("projects", {}).get(
+                        project_name, {}
+                    )
+                    if project_data.get("sphere") == self.selected_sphere:
+                        active_projects.append(project_name)
+
+        return active_projects, default_project
 
     def _create_timeline(self):
         """Create chronological timeline of all active/break/idle periods"""
@@ -592,9 +774,9 @@ class CompletionFrame(ttk.Frame):
         self.current_row += 1
 
         # Title
-        ttk.Label(
-            timeline_container, text="Session Timeline", font=("Arial", 12, "bold")
-        ).pack(anchor=tk.W, pady=(0, 5))
+        ttk.Label(timeline_container, text="Session Timeline", font=FONT_HEADING).pack(
+            anchor=tk.W, pady=(0, 5)
+        )
 
         # Build master list of all periods
         self.all_periods = []
@@ -733,8 +915,8 @@ class CompletionFrame(ttk.Frame):
         periods_frame = ttk.Frame(timeline_container)
         periods_frame.pack(fill="both", expand=True)
 
-        for idx, period in enumerate(self.all_periods):
-            col = 0
+        for period_idx, period in enumerate(self.all_periods):
+            timeline_column = 0
 
             # Extract saved values at the start for use throughout the loop
             saved_comment = period.get("comment", "")
@@ -758,11 +940,13 @@ class CompletionFrame(ttk.Frame):
             type_label = ttk.Label(
                 periods_frame,
                 text=period["type"],
-                font=("Arial", 10, "bold"),
+                font=FONT_NORMAL_BOLD,
                 width=10,
             )
-            type_label.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
-            col += 1
+            type_label.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
+            )
+            timeline_column += 1
 
             # Start time (from timestamp)
             start_time = (
@@ -772,16 +956,16 @@ class CompletionFrame(ttk.Frame):
                 if period["start_timestamp"]
                 else ""
             )
-            ttk.Label(periods_frame, text=start_time, font=("Arial", 10)).grid(
-                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            ttk.Label(periods_frame, text=start_time, font=FONT_NORMAL).grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=1, pady=2
             )
-            col += 1
+            timeline_column += 1
 
             # insert dash between start and end time
-            ttk.Label(periods_frame, text="-", font=("Arial", 10)).grid(
-                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            ttk.Label(periods_frame, text="-", font=FONT_NORMAL).grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=1, pady=2
             )
-            col += 1
+            timeline_column += 1
 
             # End time (from timestamp)
             end_time = (
@@ -791,18 +975,18 @@ class CompletionFrame(ttk.Frame):
                 if period["end_timestamp"]
                 else ""
             )
-            ttk.Label(periods_frame, text=end_time, font=("Arial", 10)).grid(
-                row=idx, column=col, sticky=tk.W, padx=1, pady=2
+            ttk.Label(periods_frame, text=end_time, font=FONT_NORMAL).grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=1, pady=2
             )
-            col += 1
+            timeline_column += 1
 
             # Duration
             ttk.Label(
                 periods_frame,
                 text=self.tracker.format_time(period["duration"]),
-                font=("Arial", 10),
-            ).grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
-            col += 1
+                font=FONT_NORMAL,
+            ).grid(row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2)
+            timeline_column += 1
 
             # dropdown menu for project selection
             if period["type"] == "Active":
@@ -832,7 +1016,9 @@ class CompletionFrame(ttk.Frame):
                 )
                 project_menu.set(initial_value)
                 disable_combobox_scroll(project_menu)
-                project_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                project_menu.grid(
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
+                )
 
                 # Bind selection event to handle "Add New Project..."
                 project_menu.bind(
@@ -842,11 +1028,13 @@ class CompletionFrame(ttk.Frame):
 
                 # Store reference to update later when sphere changes
                 self.project_menus.append(project_menu)
-                col += 1
+                timeline_column += 1
 
             else:
                 # For non-active periods (break and idle), project dropdown with break actions
-                break_actions, default_break_action = self._get_break_actions()
+                break_actions, default_break_action = (
+                    self.tracker.get_active_break_actions()
+                )
 
                 # Add "Add New Break Action..." option
                 break_action_options = list(break_actions) + ["Add New Break Action..."]
@@ -871,7 +1059,9 @@ class CompletionFrame(ttk.Frame):
                 )
                 break_action_menu.set(initial_value)
                 disable_combobox_scroll(break_action_menu)
-                break_action_menu.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+                break_action_menu.grid(
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
+                )
 
                 # Bind selection event to handle "Add New Break Action..."
                 break_action_menu.bind(
@@ -886,15 +1076,17 @@ class CompletionFrame(ttk.Frame):
                     self.break_action_menus.append(break_action_menu)
                 else:  # Idle
                     self.idle_action_menus.append(break_action_menu)
-                col += 1
+                timeline_column += 1
 
             # First text box (always visible) - populate with saved comment
             text_box = ttk.Entry(periods_frame, width=20)
-            text_box.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            text_box.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
+            )
             if saved_comment:
                 text_box.insert(0, saved_comment)
             self.text_boxes.append(text_box)
-            col += 1
+            timeline_column += 1
 
             # Add toggle button (starts as +, stays in same position)
             toggle_btn_text = "-" if has_secondary_data else "+"
@@ -902,11 +1094,13 @@ class CompletionFrame(ttk.Frame):
                 periods_frame,
                 text=toggle_btn_text,
                 width=3,
-                command=lambda i=idx: self._toggle_secondary(i),
+                command=lambda i=period_idx: self._toggle_secondary(i),
             )
-            toggle_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            toggle_btn.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=2, pady=2
+            )
             self.toggle_buttons.append(toggle_btn)
-            col += 1
+            timeline_column += 1
 
             # Secondary dropdown (hidden initially, appears after toggle button)
             if period["type"] == "Active":
@@ -927,7 +1121,7 @@ class CompletionFrame(ttk.Frame):
                     secondary_project_menu.set("Select A Project")
                 disable_combobox_scroll(secondary_project_menu)
                 secondary_project_menu.grid(
-                    row=idx, column=col, sticky=tk.W, padx=5, pady=2
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
                 )
                 if not has_secondary_data:
                     secondary_project_menu.grid_remove()  # Hide initially if no data
@@ -956,7 +1150,7 @@ class CompletionFrame(ttk.Frame):
                     secondary_action_menu.set("Select An Action")
                 disable_combobox_scroll(secondary_action_menu)
                 secondary_action_menu.grid(
-                    row=idx, column=col, sticky=tk.W, padx=5, pady=2
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
                 )
                 if not has_secondary_data:
                     secondary_action_menu.grid_remove()  # Hide initially if no data
@@ -970,11 +1164,13 @@ class CompletionFrame(ttk.Frame):
                 )
 
                 self.secondary_menus.append(secondary_action_menu)
-            col += 1
+            timeline_column += 1
 
             # Secondary text box (hidden initially, appears after secondary dropdown)
             text_box_secondary = ttk.Entry(periods_frame, width=20)
-            text_box_secondary.grid(row=idx, column=col, sticky=tk.W, padx=5, pady=2)
+            text_box_secondary.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=5, pady=2
+            )
             # Populate with saved secondary comment if available
             if saved_secondary_comment:
                 text_box_secondary.insert(0, saved_secondary_comment)
@@ -990,11 +1186,10 @@ class CompletionFrame(ttk.Frame):
                 state="readonly",
                 takefocus=0,
             )
-            col += 1
+            timeline_column += 1
 
-            percentage_spinbox.set(
-                saved_secondary_percentage
-            )  # Use saved percentage or default 50%
+            # Use saved percentage or default 50%
+            percentage_spinbox.set(saved_secondary_percentage)
 
             # Prevent text selection highlighting - clear selection after any change
             def clear_selection(event):
@@ -1003,22 +1198,26 @@ class CompletionFrame(ttk.Frame):
             percentage_spinbox.bind("<<Increment>>", clear_selection)
             percentage_spinbox.bind("<<Decrement>>", clear_selection)
             percentage_spinbox.bind("<FocusIn>", clear_selection)
-            percentage_spinbox.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+            percentage_spinbox.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, padx=2, pady=2
+            )
             if not has_secondary_data:
                 percentage_spinbox.grid_remove()  # Hide initially if no data
             self.percentage_spinboxes.append(percentage_spinbox)
 
-            col += 1
+            timeline_column += 1
 
             # label
             label_secondary_percentage = ttk.Label(
                 periods_frame, text="% of this period"
             )
-            label_secondary_percentage.grid(row=idx, column=col, sticky=tk.W, pady=2)
+            label_secondary_percentage.grid(
+                row=period_idx, column=timeline_column, sticky=tk.W, pady=2
+            )
             if not has_secondary_data:
                 label_secondary_percentage.grid_remove()  # Hide initially if no data
             self.secondary_percentage_labels.append(label_secondary_percentage)
-            col += 1
+            timeline_column += 1
 
             # Screenshot folder button
             screenshot_folder = period.get("screenshot_folder", "")
@@ -1031,11 +1230,13 @@ class CompletionFrame(ttk.Frame):
                         folder
                     ),
                 )
-                screenshot_btn.grid(row=idx, column=col, sticky=tk.W, padx=2, pady=2)
+                screenshot_btn.grid(
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=2, pady=2
+                )
             else:
                 # Empty space to maintain alignment
                 ttk.Label(periods_frame, text="", width=3).grid(
-                    row=idx, column=col, sticky=tk.W, padx=2, pady=2
+                    row=period_idx, column=timeline_column, sticky=tk.W, padx=2, pady=2
                 )
 
     def _open_screenshot_folder(self, folder_path):
@@ -1093,9 +1294,39 @@ class CompletionFrame(ttk.Frame):
                 button.config(text="+")
 
     def _on_project_selected(self, event, combobox):
-        """Handle project selection - enable editing if 'Add New Project...' is selected"""
+        """Handle project dropdown selection, enabling inline creation if needed.
+
+        Called on <<ComboboxSelected>> event for any project combobox. Checks if user
+        selected "Add New Project..." option and switches to inline creation mode.
+
+        Special handling for default_project_menu:
+        - Updates all project dropdowns when default changes (update_all=True)
+        - Ensures consistency across all period project selectors
+
+        Inline creation mode (when "Add New Project..." selected):
+        - Switches combobox to "normal" state (editable)
+        - Clears placeholder text
+        - Focuses combobox for immediate typing
+        - Binds <Return> to _save_new_project()
+        - Binds <FocusOut> to _cancel_new_project()
+
+        Args:
+            event: Tkinter event object
+            combobox: The specific project combobox that fired the event
+
+        Side effects:
+            - If default_project_menu: Calls _update_project_dropdowns(update_all=True)
+            - If "Add New Project..." selected:
+              - Changes combobox state to normal
+              - Sets focus to combobox
+              - Binds inline creation event handlers
+
+        Note:
+            Inline creation saves project with current selected_sphere.
+        """
         selected = combobox.get()
 
+        # If default project menu changed, update all period project dropdowns
         if combobox == self.default_project_menu:
             self._update_project_dropdowns(True)
 
@@ -1108,7 +1339,44 @@ class CompletionFrame(ttk.Frame):
             combobox.bind("<FocusOut>", lambda e: self._cancel_new_project(e, combobox))
 
     def _save_new_project(self, event, combobox):
-        """Save the new project to settings"""
+        """Save inline-created project to settings with current sphere association.
+
+        Creates new project in settings.json associated with selected_sphere.
+        Handles special case where combobox is default_project_menu (updates all
+        dropdowns) vs period-specific project menu (updates only non-default dropdowns).
+
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Project..." placeholder
+        - Checks for duplicate project names (case-sensitive)
+
+        On success:
+        - Adds project to settings["projects"] with:
+          {active: True, sphere: selected_sphere, is_default: False}
+        - Saves settings.json to disk
+        - Updates combobox values and selection
+        - Calls _update_project_dropdowns() to refresh all dependent dropdowns
+          - update_all=True if default_project_menu (affects all periods)
+          - update_all=False if period-specific menu (only that period's dropdowns)
+        - Returns combobox to readonly state
+
+        On duplicate or empty:
+        - Calls _cancel_new_project() to revert
+
+        Args:
+            event: Tkinter event object (Return or FocusOut)
+            combobox: The specific project combobox being edited
+
+        Side effects:
+            - Modifies tracker.settings["projects"] dict
+            - Writes to settings.json file
+            - Unbinds <Return> and <FocusOut> events
+            - Updates all project dropdowns in UI
+
+        Note:
+            New projects inherit sphere from current selection, not user-specified.
+        """
         new_project = combobox.get().strip()
 
         if new_project and new_project != "Add New Project...":
@@ -1121,8 +1389,14 @@ class CompletionFrame(ttk.Frame):
                 }
 
                 # Save to file
-                with open(self.tracker.settings_file, "w") as f:
-                    json.dump(self.tracker.settings, f, indent=2)
+                try:
+                    with open(self.tracker.settings_file, "w") as f:
+                        json.dump(self.tracker.settings, f, indent=2)
+                except Exception as error:
+                    messagebox.showerror(
+                        "Error", f"Failed to save project settings: {error}"
+                    )
+                    return
 
                 # Update combobox
                 active_projects, _ = self._get_sphere_projects()
@@ -1130,9 +1404,12 @@ class CompletionFrame(ttk.Frame):
                 combobox.config(values=project_options, state="readonly")
                 combobox.set(new_project)
 
+                # Update all dropdowns based on which combobox was used
                 if combobox == self.default_project_menu:
+                    # Default menu: update all period dropdowns to show new project
                     self._update_project_dropdowns(True)
                 else:
+                    # Period-specific menu: update only that period's dropdowns
                     self._update_project_dropdowns()
             else:
                 # Already exists
@@ -1147,7 +1424,27 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _cancel_new_project(self, event, combobox):
-        """Cancel adding new project and revert to previous state"""
+        """Cancel inline project creation and restore combobox to readonly state.
+
+        Reverts project combobox to readonly with sensible fallback. Handles both
+        default_project_menu and period-specific project menus.
+
+        Fallback priority:
+        1. Default project for sphere (if exists and in active projects)
+        2. "Select Project" placeholder (if no suitable default)
+
+        Args:
+            event: Tkinter event object
+            combobox: The project combobox to revert
+
+        Side effects:
+            - Sets combobox to readonly state
+            - Updates combobox value to fallback
+            - Does NOT unbind events (handled by caller)
+
+        Note:
+            Does NOT modify settings. Pure UI reversion.
+        """
         active_projects, default_project = self._get_sphere_projects()
 
         fallback = (
@@ -1165,6 +1462,7 @@ class CompletionFrame(ttk.Frame):
         """Handle break action selection - enable editing if 'Add New Break Action...' is selected"""
         selected = combobox.get()
 
+        # If default action menu changed, update all period break action dropdowns
         if combobox == self.default_action_menu:
             self._update_break_action_dropdowns(True)
 
@@ -1181,7 +1479,43 @@ class CompletionFrame(ttk.Frame):
             )
 
     def _save_new_break_action(self, event, combobox):
-        """Save the new break action to settings"""
+        """Save inline-created break action to settings and update all dropdowns.
+
+        Creates new break action in settings.json. Unlike projects, break actions are
+        not sphere-specific (they're global). Handles default vs period-specific menus.
+
+        Validation:
+        - Strips whitespace from input
+        - Rejects empty strings
+        - Rejects "Add New Break Action..." placeholder
+        - Checks for duplicate action names
+
+        On success:
+        - Adds action to settings["break_actions"] with:
+          {active: True, is_default: False}
+        - Saves settings.json to disk
+        - Updates combobox values and selection
+        - Calls _update_break_action_dropdowns():
+          - update_all=True if default_action_menu
+          - update_all=False if period-specific menu
+        - Returns combobox to readonly state
+
+        On duplicate or empty:
+        - Calls _cancel_new_break_action() to revert
+
+        Args:
+            event: Tkinter event object (Return or FocusOut)
+            combobox: The specific break action combobox being edited
+
+        Side effects:
+            - Modifies tracker.settings["break_actions"] dict
+            - Writes to settings.json file
+            - Unbinds <Return> and <FocusOut> events
+            - Updates all break action dropdowns in UI
+
+        Note:
+            Break actions are global, not sphere-specific like projects.
+        """
         new_action = combobox.get().strip()
 
         if new_action and new_action != "Add New Break Action...":
@@ -1193,18 +1527,27 @@ class CompletionFrame(ttk.Frame):
                 }
 
                 # Save to file
-                with open(self.tracker.settings_file, "w") as f:
-                    json.dump(self.tracker.settings, f, indent=2)
+                try:
+                    with open(self.tracker.settings_file, "w") as f:
+                        json.dump(self.tracker.settings, f, indent=2)
+                except Exception as error:
+                    messagebox.showerror(
+                        "Error", f"Failed to save break action settings: {error}"
+                    )
+                    return
 
                 # Update combobox
-                break_actions, _ = self._get_break_actions()
+                break_actions, _ = self.tracker.get_active_break_actions()
                 action_options = list(break_actions) + ["Add New Break Action..."]
                 combobox.config(values=action_options, state="readonly")
                 combobox.set(new_action)
 
+                # Update all dropdowns based on which combobox was used
                 if combobox == self.default_action_menu:
+                    # Default menu: update all period dropdowns to show new action
                     self._update_break_action_dropdowns(True)
                 else:
+                    # Period-specific menu: update only that period's dropdowns
                     self._update_break_action_dropdowns()
             else:
                 # Already exists
@@ -1219,8 +1562,27 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _cancel_new_break_action(self, event, combobox):
-        """Cancel adding new break action and revert to previous state"""
-        break_actions, default_break_action = self._get_break_actions()
+        """Cancel inline break action creation and restore combobox to readonly.
+
+        Reverts break action combobox to readonly with sensible fallback.
+
+        Fallback priority:
+        1. Default break action (if exists in active actions)
+        2. "Select Break Action" placeholder (if no suitable default)
+
+        Args:
+            event: Tkinter event object
+            combobox: The break action combobox to revert
+
+        Side effects:
+            - Sets combobox to readonly state
+            - Updates combobox value to fallback
+            - Does NOT unbind events (handled by caller)
+
+        Note:
+            Does NOT modify settings. Pure UI reversion.
+        """
+        break_actions, default_break_action = self.tracker.get_active_break_actions()
 
         fallback = (
             default_break_action
@@ -1234,7 +1596,13 @@ class CompletionFrame(ttk.Frame):
         combobox.unbind("<FocusOut>")
 
     def _update_project_dropdowns(self, update_all=False):
-        """Update all project dropdown menus when sphere selection changes"""
+        """Update all project dropdown menus when sphere selection changes
+
+        Args:
+            update_all: If True, sets all period dropdowns to match default_project_menu selection.
+                       If False (default), only updates dropdown options while preserving individual selections.
+                       Set to True when default_project_menu changes to sync all periods.
+        """
 
         # Get projects for the currently selected sphere
         active_projects, default_project = self._get_sphere_projects()
@@ -1257,10 +1625,9 @@ class CompletionFrame(ttk.Frame):
                 menu.set("Select Project")
 
         # Update secondary project dropdowns' options (but not their selection)
-        # Only update the ones that correspond to Active periods
-        project_count = len(self.project_menus)
-        for i in range(project_count):
-            if i < len(self.secondary_menus):
+        # Check period type to handle chronologically interleaved Active/Break/Idle periods
+        for i, period in enumerate(self.all_periods):
+            if i < len(self.secondary_menus) and period["type"] == "Active":
                 menu = self.secondary_menus[i]
                 current_val = menu.get()
                 menu["values"] = project_options
@@ -1282,8 +1649,14 @@ class CompletionFrame(ttk.Frame):
             self.default_project_menu.set("Select Project")
 
     def _update_break_action_dropdowns(self, update_all=False):
-        """Update all break action dropdown menus when break action selection changes"""
-        break_actions, default_break_action = self._get_break_actions()
+        """Update all break action dropdown menus when break action selection changes
+
+        Args:
+            update_all: If True, sets all period dropdowns to match default_action_menu selection.
+                       If False (default), only updates dropdown options while preserving individual selections.
+                       Set to True when default_action_menu changes to sync all periods.
+        """
+        break_actions, default_break_action = self.tracker.get_active_break_actions()
         action_options = list(break_actions) + ["Add New Break Action..."]
 
         # Update both break and idle action menus
@@ -1300,7 +1673,9 @@ class CompletionFrame(ttk.Frame):
             else:
                 menu.set("Select Break Action")
 
-        # Update default action menu (once, outside loop)
+        # Update default action menu's options and preserve valid selection
+        # Handles changes to break action availability (e.g., newly added or removed actions)
+        # Falls back to default action or placeholder if current selection is no longer valid
         current_default = self.default_action_menu.get()
         self.default_action_menu.config(values=action_options)
 
@@ -1312,15 +1687,15 @@ class CompletionFrame(ttk.Frame):
             self.default_action_menu.set("Select Break Action")
 
         # Update secondary break/idle action dropdowns' options (but not their selection)
-        # Only update the ones that correspond to Break/Idle periods
-        project_count = len(self.project_menus)
-        for i in range(project_count, len(self.secondary_menus)):
-            menu = self.secondary_menus[i]
-            current_val = menu.get()
-            menu["values"] = action_options
-            # Keep current selection if still valid, otherwise clear
-            if current_val and current_val not in action_options:
-                menu.set("")
+        # Check period type to handle chronologically interleaved Active/Break/Idle periods
+        for i, period in enumerate(self.all_periods):
+            if i < len(self.secondary_menus) and period["type"] != "Active":
+                menu = self.secondary_menus[i]
+                current_val = menu.get()
+                menu["values"] = action_options
+                # Keep current selection if still valid, otherwise clear
+                if current_val and current_val not in action_options:
+                    menu.set("")
 
     def _create_session_notes(self):
         """Create the notes input section"""
@@ -1333,37 +1708,67 @@ class CompletionFrame(ttk.Frame):
         ttk.Label(
             session_comments_container,
             text="Session Comments:",
-            font=("Arial", 12, "bold"),
+            font=FONT_HEADING,
         ).grid(row=0, column=0, columnspan=2, pady=10)
 
         # Active notes
         ttk.Label(
-            session_comments_container, text="Active Notes:", font=("Arial", 10)
+            session_comments_container, text="Active Notes:", font=FONT_NORMAL
         ).grid(row=1, column=0, sticky=tk.W, pady=5)
         self.active_notes = ttk.Entry(session_comments_container, width=30)
         self.active_notes.grid(row=1, column=1, sticky=tk.W, pady=5)
         # Break notes
         ttk.Label(
-            session_comments_container, text="Break Notes:", font=("Arial", 10)
+            session_comments_container, text="Break Notes:", font=FONT_NORMAL
         ).grid(row=2, column=0, sticky=tk.W, pady=5)
         self.break_notes = ttk.Entry(session_comments_container, width=30)
         self.break_notes.grid(row=2, column=1, sticky=tk.W, pady=5)
 
         # Idle notes
         ttk.Label(
-            session_comments_container, text="Idle Notes:", font=("Arial", 10)
+            session_comments_container, text="Idle Notes:", font=FONT_NORMAL
         ).grid(row=3, column=0, sticky=tk.W, pady=5)
         self.idle_notes = ttk.Entry(session_comments_container, width=30)
         self.idle_notes.grid(row=3, column=1, sticky=tk.W, pady=5)
 
         # Session notes
         ttk.Label(
-            session_comments_container, text="Session Notes:", font=("Arial", 10)
+            session_comments_container, text="Session Notes:", font=FONT_NORMAL
         ).grid(row=12, column=0, sticky=(tk.W, tk.N), pady=5)
         self.session_notes_text = tk.Text(
-            session_comments_container, width=30, height=4, font=("Arial", 10)
+            session_comments_container, width=30, height=4, font=FONT_NORMAL
         )
         self.session_notes_text.grid(row=12, column=1, sticky=tk.W, pady=5)
+
+        # Populate comment fields with existing session comments
+        self._populate_session_comments()
+
+    def _populate_session_comments(self):
+        """Populate the comment fields with existing session comments"""
+        if hasattr(self, "session_comments") and self.session_comments:
+            # Populate active notes
+            active_notes = self.session_comments.get("active_notes", "")
+            if active_notes:
+                self.active_notes.delete(0, tk.END)
+                self.active_notes.insert(0, active_notes)
+
+            # Populate break notes
+            break_notes = self.session_comments.get("break_notes", "")
+            if break_notes:
+                self.break_notes.delete(0, tk.END)
+                self.break_notes.insert(0, break_notes)
+
+            # Populate idle notes
+            idle_notes = self.session_comments.get("idle_notes", "")
+            if idle_notes:
+                self.idle_notes.delete(0, tk.END)
+                self.idle_notes.insert(0, idle_notes)
+
+            # Populate session notes
+            session_notes = self.session_comments.get("session_notes", "")
+            if session_notes:
+                self.session_notes_text.delete("1.0", tk.END)
+                self.session_notes_text.insert("1.0", session_notes)
 
     def _create_buttons(self):
         """Create action buttons"""
@@ -1386,7 +1791,12 @@ class CompletionFrame(ttk.Frame):
         ).grid(row=0, column=2, padx=5)
 
         ttk.Button(
-            button_frame, text="Analysis", command=self.tracker.open_analysis
+            button_frame,
+            text="Save & Go to Analysis Frame",
+            command=lambda: (
+                self.save_and_close(navigate=False),
+                self.tracker.open_analysis(),
+            ),
         ).grid(row=0, column=3, padx=5)
 
     def save_and_close(self, navigate=True):
@@ -1418,37 +1828,20 @@ class CompletionFrame(ttk.Frame):
             start_ts = period["start_timestamp"]
 
             # Get the primary text box value for this period
-            comment = (
-                self.text_boxes[idx].get().strip() if idx < len(self.text_boxes) else ""
-            )
+            comment = self.text_boxes[idx].get().strip()
 
             # Get secondary dropdown value if exists
-            secondary_value = ""
-            if idx < len(self.secondary_menus):
-                secondary_value = self.secondary_menus[idx].get().strip()
+            secondary_value = self.secondary_menus[idx].get().strip()
 
-            # Get percentage value for secondary (default 50 if not set)
-            secondary_percentage = 50
-            if idx < len(self.percentage_spinboxes):
-                try:
-                    secondary_percentage = int(self.percentage_spinboxes[idx].get())
-                except (ValueError, tk.TclError):
-                    secondary_percentage = 50
+            # Get percentage value for secondary
+            secondary_percentage = int(self.percentage_spinboxes[idx].get())
 
             # get the secondary text box value for this period
-            comment_secondary = (
-                self.secondary_text_boxes[idx].get().strip()
-                if idx < len(self.secondary_text_boxes)
-                else ""
-            )
+            comment_secondary = self.secondary_text_boxes[idx].get().strip()
 
             # Find and update the corresponding period in the session data
             if period_type == "Active":
-                project = (
-                    self.project_menus[project_idx].get()
-                    if project_idx < len(self.project_menus)
-                    else ""
-                )
+                project = self.project_menus[project_idx].get()
                 project_idx += 1
 
                 # Find matching active period by timestamp
@@ -1483,7 +1876,8 @@ class CompletionFrame(ttk.Frame):
                                     "project_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-project format keys
+                            # when switching to projects array (prevents conflicting data)
                             active_period.pop("project", None)
                             active_period.pop("comment", None)
                             active_period.pop("comment_secondary", None)
@@ -1496,17 +1890,14 @@ class CompletionFrame(ttk.Frame):
                             active_period["project"] = project
                             if comment:
                                 active_period["comment"] = comment
-                            # Remove projects array if it exists
+                            # Bidirectional format migration: remove projects array format
+                            # when switching to single project (prevents conflicting data)
                             active_period.pop("projects", None)
                             active_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Break":
-                break_action = (
-                    self.break_action_menus[break_action_idx].get()
-                    if break_action_idx < len(self.break_action_menus)
-                    else ""
-                )
+                break_action = self.break_action_menus[break_action_idx].get()
                 break_action_idx += 1
 
                 # Find matching break period by timestamp
@@ -1541,7 +1932,8 @@ class CompletionFrame(ttk.Frame):
                                     "break_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-action format keys
+                            # when switching to actions array (prevents conflicting data)
                             break_period.pop("action", None)
                             break_period.pop("comment", None)
                             break_period.pop("comment_secondary", None)
@@ -1554,17 +1946,14 @@ class CompletionFrame(ttk.Frame):
                             break_period["action"] = break_action
                             if comment:
                                 break_period["comment"] = comment
-                            # Remove actions array if it exists
+                            # Bidirectional format migration: remove actions array format
+                            # when switching to single action (prevents conflicting data)
                             break_period.pop("actions", None)
                             break_period.pop("comment_secondary", None)
                         break
 
             elif period_type == "Idle":
-                idle_action = (
-                    self.idle_action_menus[idle_action_idx].get()
-                    if idle_action_idx < len(self.idle_action_menus)
-                    else ""
-                )
+                idle_action = self.idle_action_menus[idle_action_idx].get()
                 idle_action_idx += 1
 
                 # Find matching idle period by timestamp
@@ -1599,7 +1988,8 @@ class CompletionFrame(ttk.Frame):
                                     "idle_primary": False,
                                 },
                             ]
-                            # Remove old fields to avoid duplication
+                            # Bidirectional format migration: remove single-action format keys
+                            # when switching to actions array (prevents conflicting data)
                             idle_period.pop("action", None)
                             idle_period.pop("comment", None)
                             idle_period.pop("comment_secondary", None)
@@ -1612,7 +2002,8 @@ class CompletionFrame(ttk.Frame):
                             idle_period["action"] = idle_action
                             if comment:
                                 idle_period["comment"] = comment
-                            # Remove actions array if it exists
+                            # Bidirectional format migration: remove actions array format
+                            # when switching to single action (prevents conflicting data)
                             idle_period.pop("actions", None)
                             idle_period.pop("comment_secondary", None)
                         break
@@ -1635,14 +2026,8 @@ class CompletionFrame(ttk.Frame):
         if not navigate:
             return
 
-        # Check if we're in session view mode
-        if (
-            hasattr(self.tracker, "session_view_frame")
-            and self.tracker.session_view_frame == self
-        ):
-            self.tracker.close_session_view()
-        else:
-            self.tracker.show_main_frame()
+        # Always navigate to main frame
+        self.tracker.show_main_frame()
 
     def _upload_to_google_sheets(self, session_data):
         """
@@ -1657,28 +2042,68 @@ class CompletionFrame(ttk.Frame):
             uploader = GoogleSheetsUploader(self.tracker.settings_file)
 
             if uploader.is_enabled():
-                success = uploader.upload_session(session_data, self.session_name)
-                if success:
-                    print(f"Session {self.session_name} uploaded to Google Sheets")
-                else:
-                    print(
-                        f"Failed to upload session {self.session_name} to Google Sheets"
-                    )
+                uploader.upload_session(session_data, self.session_name)
         except ImportError:
-            print("Google Sheets integration not available - missing dependencies")
-        except Exception as e:
-            print(f"Error uploading to Google Sheets: {e}")
+            pass
+        except Exception:
+            pass
 
     def skip_and_close(self):
-        """Return to appropriate frame without saving"""
-        # Check if we're in session view mode
-        if (
-            hasattr(self.tracker, "session_view_frame")
-            and self.tracker.session_view_frame == self
-        ):
-            self.tracker.close_session_view()
-        else:
+        """Return to main frame, applying defaults to any incomplete data
+
+        Applies default sphere/project/action to periods that lack assignments.
+        This handles edge cases like old data created before end_session() fix,
+        or data loaded from external sources.
+
+        Note: Normally defaults are set in end_session(), but this provides
+        a fallback for any incomplete data that reaches the completion frame.
+        """
+        all_data = self.tracker.load_data()
+
+        if self.session_name not in all_data:
             self.tracker.show_main_frame()
+            return
+
+        session = all_data[self.session_name]
+
+        # Get defaults using tracker's helper methods that parse JSON structure correctly
+        default_sphere = self.tracker._get_default_sphere()
+        default_project = self.tracker.get_default_project(default_sphere)
+        _, default_break_action = self.tracker.get_active_break_actions()
+
+        # Fallback if helpers return None
+        if not default_sphere:
+            default_sphere = "General"
+        if not default_project:
+            default_project = "General"
+        if not default_break_action:
+            default_break_action = "Break"
+        if not session.get("sphere"):
+            session["sphere"] = default_sphere
+
+        # Apply default project to active periods without project
+        for active_period in session.get("active", []):
+            has_project = active_period.get("project") or active_period.get("projects")
+            if not has_project:
+                active_period["project"] = default_project
+
+        # Apply default action to break periods without action
+        for break_period in session.get("breaks", []):
+            has_action = break_period.get("action") or break_period.get("actions")
+            if not has_action:
+                break_period["action"] = default_break_action
+
+        # Apply default action to idle periods without action
+        for idle_period in session.get("idle_periods", []):
+            has_action = idle_period.get("action") or idle_period.get("actions")
+            if not has_action:
+                idle_period["action"] = default_break_action
+
+        # Save if any defaults were applied
+        self.tracker.save_data(all_data)
+
+        # Navigate to main frame
+        self.tracker.show_main_frame()
 
     def _delete_session(self):
         """Delete the current session after confirmation"""
@@ -1703,16 +2128,11 @@ class CompletionFrame(ttk.Frame):
 
             # Delete the session if it exists
             if self.session_name in all_data:
-                # Create backup before deletion
-                import shutil
-                import datetime
-                import os
-
                 # Ensure backups directory exists
-                backup_dir = "backups"
+                backup_dir = DEFAULT_BACKUP_FOLDER
                 os.makedirs(backup_dir, exist_ok=True)
 
-                backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                backup_filename = f"{os.path.basename(self.tracker.data_file)}.backup_{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}"
                 backup_file = os.path.join(backup_dir, backup_filename)
                 try:
                     shutil.copy2(self.tracker.data_file, backup_file)

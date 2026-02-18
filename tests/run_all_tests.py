@@ -13,9 +13,78 @@ Usage:
 import unittest
 import sys
 import os
+import gc
+import time
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+
+class GarbageCollectingTestRunner(unittest.TextTestRunner):
+    """Custom test runner that performs garbage collection between test classes
+
+    This helps prevent "Variable.__del__" errors in large test suites with many
+    tkinter roots by forcing cleanup of orphaned tkinter variables between classes.
+    """
+
+    def run(self, test):
+        """Run tests with garbage collection between test classes"""
+        result = self._makeResult()
+        result.failfast = self.failfast
+        result.buffer = self.buffer
+        result.tb_locals = self.tb_locals
+
+        startTestRun = getattr(result, "startTestRun", None)
+        if startTestRun is not None:
+            startTestRun()
+
+        try:
+            # Track previous test class to detect class changes
+            prev_test_class = None
+
+            # Iterate through all tests
+            for test_case in self._flatten_suite(test):
+                # Get current test class
+                current_test_class = test_case.__class__.__name__
+
+                # If we switched to a different test class, force garbage collection
+                if (
+                    prev_test_class is not None
+                    and current_test_class != prev_test_class
+                ):
+                    collected = gc.collect()
+                    if collected > 0:
+                        print(
+                            f"\n[GC] Switching from {prev_test_class} to {current_test_class}: collected {collected} objects\n"
+                        )
+
+                prev_test_class = current_test_class
+
+                # Run the individual test
+                test_case(result)
+
+                if result.shouldStop:
+                    break
+
+            # Final garbage collection after all tests
+            collected = gc.collect()
+            if collected > 0:
+                print(f"\n[GC] Final cleanup: collected {collected} objects\n")
+
+        finally:
+            stopTestRun = getattr(result, "stopTestRun", None)
+            if stopTestRun is not None:
+                stopTestRun()
+
+        return result
+
+    def _flatten_suite(self, suite):
+        """Flatten a test suite into individual test cases"""
+        for test in suite:
+            if isinstance(test, unittest.TestSuite):
+                yield from self._flatten_suite(test)
+            else:
+                yield test
 
 
 def run_all_tests(verbosity=2, pattern="test_*.py"):
@@ -38,8 +107,8 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     # Discover all tests in the current directory
     suite = loader.discover(test_dir, pattern=pattern)
 
-    # Create test runner
-    runner = unittest.TextTestRunner(verbosity=verbosity)
+    # Create custom test runner with garbage collection
+    runner = GarbageCollectingTestRunner(verbosity=verbosity)
 
     # Run tests
     print(f"\n{'='*70}")
@@ -48,7 +117,68 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Discovering tests in: {test_dir}")
     print(f"Pattern: {pattern}\n")
 
+    start_time = time.time()
     result = runner.run(suite)
+    end_time = time.time()
+    total_seconds = end_time - start_time
+
+    # Print failed/errored tests details
+    if result.failures or result.errors:
+        print(f"\n{'='*70}")
+        print("FAILED/ERRORED TESTS")
+        print(f"{'='*70}")
+
+        if result.failures:
+            print("\nFAILURES:")
+            for test, traceback in result.failures:
+                print(f"\n  - {test}")
+                # Extract the actual AssertionError message
+                lines = traceback.strip().split("\n")
+
+                # Find the AssertionError line (contains the actual error message)
+                assertion_error = None
+                assertion_line = None
+
+                for i, line in enumerate(lines):
+                    if line.strip().startswith("AssertionError:"):
+                        assertion_error = line.strip()
+                        # Look backwards for the assertion call
+                        for j in range(i - 1, max(i - 5, -1), -1):
+                            if "self.assert" in lines[j]:
+                                assertion_line = lines[j].strip()
+                                break
+                        break
+
+                if assertion_error:
+                    if assertion_line:
+                        print(f"    Failed: {assertion_line}")
+                    print(f"    {assertion_error}")
+                else:
+                    # Fallback: print last non-empty line
+                    for line in reversed(lines):
+                        if line.strip():
+                            print(f"    Cause: {line.strip()}")
+                            break
+
+        if result.errors:
+            print("\nERRORS:")
+            for test, traceback in result.errors:
+                print(f"\n  - {test}")
+                # Extract the exception type and message
+                lines = traceback.strip().split("\n")
+
+                # Find the actual exception line (usually last non-empty line)
+                for line in reversed(lines):
+                    stripped = line.strip()
+                    if (
+                        stripped
+                        and not stripped.startswith("File ")
+                        and ":" in stripped
+                    ):
+                        print(f"    {stripped}")
+                        break
+
+        print(f"\n{'='*70}")
 
     # Print summary
     print(f"\n{'='*70}")
@@ -59,9 +189,7 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Failures: {len(result.failures)}")
     print(f"Errors: {len(result.errors)}")
     print(f"Skipped: {len(result.skipped)}")
-    print(f"{'='*70}\n")
-
-    return result
+    print(f"Total time: {total_seconds:.2f} seconds ({total_seconds/60:.2f} minutes)")
 
 
 def run_specific_test(test_name, verbosity=2):
@@ -82,8 +210,8 @@ def run_specific_test(test_name, verbosity=2):
     # Load specific test
     suite = loader.loadTestsFromName(test_name)
 
-    # Create test runner
-    runner = unittest.TextTestRunner(verbosity=verbosity)
+    # Create custom test runner with garbage collection
+    runner = GarbageCollectingTestRunner(verbosity=verbosity)
 
     # Run tests
     print(f"\n{'='*70}")
@@ -131,6 +259,8 @@ Usage Examples:
 
 if __name__ == "__main__":
     # Parse command line arguments
+    result = None
+
     if len(sys.argv) > 1:
         arg = sys.argv[1]
 
@@ -155,4 +285,4 @@ if __name__ == "__main__":
         result = run_all_tests(verbosity=2)
 
     # Exit with appropriate code
-    sys.exit(0 if result.wasSuccessful() else 1)
+    sys.exit(0 if result and result.wasSuccessful() else 1)

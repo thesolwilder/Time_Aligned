@@ -1,12 +1,92 @@
+"""
+Settings Frame Module
+
+Provides the settings interface for configuring the time tracker application.
+Includes settings for spheres, projects, actions, Google Sheets integration,
+backup configuration, screenshot capture, and idle tracking.
+"""
+
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox, simpledialog, filedialog
 import json
 import os
 import csv
 import subprocess
 import platform
+import re
 
-from src.ui_helpers import ScrollableFrame, sanitize_name
+from src.ui_helpers import ScrollableFrame, sanitize_name, get_frame_background
+from src.google_sheets_integration import GoogleSheetsUploader
+from src.constants import (
+    COLOR_LINK_BLUE,
+    COLOR_GRAY_TEXT,
+    COLOR_ERROR_RED,
+    COLOR_SUCCESS_GREEN,
+    COLOR_INFO_BLUE,
+    DEFAULT_SCREENSHOT_FOLDER,
+    FONT_LINK,
+    FONT_TITLE,
+    FONT_TIMER_SMALL,
+    FONT_NORMAL_BOLD,
+    FONT_NORMAL,
+    FONT_BODY,
+    FONT_SMALL_ITALIC,
+    FONT_EXTRA_SMALL,
+    FONT_MONOSPACE,
+)
+
+
+def validate_idle_threshold(value_str):
+    """
+    Validate idle threshold input.
+
+    Args:
+        value_str: String value from spinbox input
+
+    Returns:
+        int: Valid threshold value (1-600) if validation passes
+        None: If validation fails
+    """
+    try:
+        value = int(value_str)
+
+        # Check range: must be between 1 and 600 seconds
+        if value < 1 or value > 600:
+            return None
+
+        return value
+    except (ValueError, TypeError):
+        # Not a valid integer
+        return None
+
+
+def extract_spreadsheet_id_from_url(value):
+    """
+    Extract spreadsheet ID from Google Sheets URL or return value unchanged.
+
+    Args:
+        value: Either a full Google Sheets URL or a plain spreadsheet ID
+
+    Returns:
+        str: The extracted spreadsheet ID, or original value if not a URL
+
+    Examples:
+        >>> extract_spreadsheet_id_from_url("https://docs.google.com/spreadsheets/d/ABC123/edit")
+        'ABC123'
+        >>> extract_spreadsheet_id_from_url("ABC123")
+        'ABC123'
+    """
+    if not value:
+        return ""
+
+    # If it looks like a URL, extract the ID
+    if "docs.google.com/spreadsheets/d/" in value:
+        match = re.search(r"/spreadsheets/d/([a-zA-Z0-9-_]+)", value)
+        if match:
+            return match.group(1)
+
+    # Otherwise return as-is (could be plain ID or invalid input)
+    return value
 
 
 class SettingsFrame(ttk.Frame):
@@ -23,9 +103,9 @@ class SettingsFrame(ttk.Frame):
         self.tracker = tracker
         self.root = root
         self.current_sphere = None
-        self.sphere_filter = tk.StringVar(value="active")
-        self.project_filter = tk.StringVar(value="active")
-        self.break_action_filter = tk.StringVar(value="active")
+        self.sphere_filter = tk.StringVar(master=root, value="active")
+        self.project_filter = tk.StringVar(master=root, value="active")
+        self.break_action_filter = tk.StringVar(master=root, value="active")
 
         # Track editing states
         self.editing_projects = {}  # {project_name: {widgets}}
@@ -40,8 +120,8 @@ class SettingsFrame(ttk.Frame):
         try:
             with open(self.tracker.settings_file, "w") as f:
                 json.dump(self.tracker.settings, f, indent=2)
-        except Exception as e:
-            messagebox.showerror("Error", f"Failed to save settings: {e}")
+        except Exception as error:
+            messagebox.showerror("Error", f"Failed to save settings: {error}")
 
     def create_widgets(self):
         """Create main settings interface"""
@@ -61,16 +141,23 @@ class SettingsFrame(ttk.Frame):
 
         self.row = 0
 
+        # Get background color to match frame
+        frame_bg = get_frame_background()
+
         # Back button at top
-        ttk.Button(
-            content_frame, text="Back to Tracker", command=self.tracker.close_settings
-        ).grid(row=self.row, column=0, columnspan=3, pady=10)
+        back_button_top = tk.Label(
+            content_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_button_top.grid(row=self.row, column=0, pady=10, sticky=tk.W)
+        back_button_top.bind("<Button-1>", lambda e: self.tracker.close_settings())
         self.row += 1
 
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=10
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # Sphere management section
         self.create_sphere_section(content_frame)
@@ -82,52 +169,48 @@ class SettingsFrame(ttk.Frame):
         self.create_project_section(content_frame)
         self.row += 20  # Reserve space for project section
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
-        # Break actions and idle settings
-        self.create_break_idle_section(content_frame)
+        # Break actions, idle settings, and screenshot settings
+        self._create_break_actions_subsection(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
+
+        self._create_idle_settings_subsection(content_frame)
+
+        self._add_settings_separator(content_frame)
+
+        self._create_screenshot_settings_subsection(content_frame)
+
+        self._add_settings_separator(content_frame)
 
         # Google Sheets integration section
         self.create_google_sheets_section(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # Keyboard shortcuts reference section
         self.create_keyboard_shortcuts_section(content_frame)
 
-        # Separator
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
         # CSV Export section
         self.create_csv_export_section(content_frame)
 
-        # Back button
         self.row += 1
-        ttk.Separator(content_frame, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+        self._add_settings_separator(content_frame)
 
-        ttk.Button(
-            content_frame, text="Back to Tracker", command=self.tracker.close_settings
-        ).grid(row=self.row, column=0, columnspan=3, pady=10)
+        # Back button
+        back_button_bottom = tk.Label(
+            content_frame,
+            text="← Back to Tracker",
+            fg=COLOR_LINK_BLUE,
+            bg=frame_bg,
+            cursor="hand2",
+            font=FONT_LINK,
+        )
+        back_button_bottom.grid(row=self.row, column=0, pady=10, sticky=tk.W)
+        back_button_bottom.bind("<Button-1>", lambda e: self.tracker.close_settings())
 
         # Store references
         self.content_frame = content_frame
@@ -139,13 +222,46 @@ class SettingsFrame(ttk.Frame):
         )
 
     def create_sphere_section(self, parent):
-        """Create sphere management section"""
+        """Create sphere management UI section with dropdown and filter controls.
+
+        Builds complete sphere management interface with:
+        - Section header with "Spheres" title (16pt bold)
+        - Filter radio buttons (Active/All/Inactive)
+        - Large sphere dropdown (20pt font)
+        - Sphere management frame (shows details when sphere selected)
+
+        Layout:
+        - Row 1: Header + filter buttons (Active/All/Inactive)
+        - Row 2: Sphere dropdown + management frame (initially empty)
+
+        Filter behavior:
+        - Active: Shows only active spheres (default)
+        - All: Shows all spheres regardless of status
+        - Inactive: Shows only archived spheres
+        - Calls refresh_sphere_dropdown() on filter change
+
+        Dropdown bindings:
+        - <<ComboboxSelected>>: Calls on_sphere_selected() to show management UI
+        - <FocusIn>: Clears selection highlight for cleaner appearance
+
+        Side effects:
+            - Creates sphere_var StringVar
+            - Creates sphere_dropdown Combobox (readonly, 20pt font)
+            - Creates sphere_mgmt_frame (populated by on_sphere_selected())
+            - Creates sphere_filter StringVar ("active" default)
+            - Calls refresh_sphere_dropdown() to populate initial options
+            - Increments row counter by 2
+
+        Note:
+            Management buttons (Rename, Archive, Delete, Set Default) are added
+            to sphere_mgmt_frame by on_sphere_selected() when user picks a sphere.
+        """
 
         # Spheres label and filter buttons on same row
         header_frame = ttk.Frame(parent)
         header_frame.grid(row=self.row, column=0, columnspan=3, pady=10, sticky=tk.W)
 
-        ttk.Label(header_frame, text="Spheres", font=("Arial", 16, "bold")).pack(
+        ttk.Label(header_frame, text="Spheres", font=FONT_TITLE).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
@@ -171,7 +287,7 @@ class SettingsFrame(ttk.Frame):
 
         ttk.Radiobutton(
             filter_frame,
-            text="Inactive",
+            text="Archived",
             variable=self.sphere_filter,
             value="inactive",
             command=self.refresh_sphere_dropdown,
@@ -180,12 +296,12 @@ class SettingsFrame(ttk.Frame):
         self.row += 1
 
         # Dropdown and sphere management frame on the same row
-        self.sphere_var = tk.StringVar()
+        self.sphere_var = tk.StringVar(master=self.root)
         self.sphere_dropdown = ttk.Combobox(
             parent,
             textvariable=self.sphere_var,
             width=15,
-            font=("Arial", 20),
+            font=FONT_TITLE,
             state="readonly",
             exportselection=False,
         )
@@ -209,7 +325,29 @@ class SettingsFrame(ttk.Frame):
         self.refresh_sphere_dropdown()
 
     def refresh_sphere_dropdown(self):
-        """Refresh the sphere dropdown based on filter"""
+        """Rebuild sphere dropdown based on current filter selection.
+
+        Filters and sorts sphere list according to sphere_filter radio button value.
+        Called when filter changes or spheres are added/modified/deleted.
+
+        Filter logic:
+        - "active": Include spheres where data["active"] == True
+        - "inactive": Include spheres where data["active"] == False
+        - "all": Include all spheres regardless of active status
+
+        Sorting:
+        - Alphabetically by sphere name (case-insensitive)
+
+        Side effects:
+            - Updates sphere_dropdown combobox values
+            - Selects first sphere if list non-empty
+            - Clears selection if list empty
+            - Calls on_sphere_selected() to update management UI
+
+        Note:
+            Always calls on_sphere_selected() after refresh to ensure
+            management frame displays correct sphere or clears if none selected.
+        """
         filter_val = self.sphere_filter.get()
         spheres = self.tracker.settings.get("spheres", {})
 
@@ -234,6 +372,10 @@ class SettingsFrame(ttk.Frame):
             else:
                 self.sphere_var.set(filtered_spheres[0])
             self.load_selected_sphere()
+            # Update project list to reflect the newly selected sphere
+            # Only call if projects_list_frame exists (it's created after sphere section)
+            if hasattr(self, "projects_list_frame"):
+                self.refresh_project_section()
 
     def on_sphere_selected(self):
         """Handle sphere selection or create new sphere"""
@@ -250,7 +392,7 @@ class SettingsFrame(ttk.Frame):
 
     def create_new_sphere(self):
         """Create a new sphere"""
-        name = simpledialog.askstring("New Sphere", "Enter sphere name:")
+        name = simpledialog.askstring("New Sphere", "Enter New Sphere Name:")
         if name and name.strip():
             name = sanitize_name(name.strip())
             if not name:
@@ -365,9 +507,7 @@ class SettingsFrame(ttk.Frame):
             self.tracker.settings["spheres"][new_name] = sphere_data
 
             # Update projects that reference this sphere
-            for project_name, project_data in self.tracker.settings.get(
-                "projects", {}
-            ).items():
+            for _, project_data in self.tracker.settings.get("projects", {}).items():
                 if project_data.get("sphere") == old_name:
                     project_data["sphere"] = new_name
 
@@ -416,7 +556,41 @@ class SettingsFrame(ttk.Frame):
         self.refresh_project_section()
 
     def create_project_section(self, parent):
-        """Create project management section"""
+        """Create project management UI section with list and filter controls.
+
+        Builds complete project management interface with:
+        - Section header with "Projects" title
+        - Filter radio buttons (Active/All/Inactive)
+        - Sphere filter dropdown (filter projects by sphere)
+        - Scrollable list of project rows
+        - "Add Project" button
+
+        Each project row contains:
+        - Project name (editable when "Edit" clicked)
+        - Sphere assignment dropdown
+        - Default checkbox (sets as sphere default)
+        - Edit/Save button (toggles edit mode)
+        - Archive/Activate button
+        - Delete button
+
+        Created by refresh_project_section() which is called:
+        - Initially during settings frame creation
+        - When filter changes
+        - When sphere selection changes
+        - When projects are added/edited/deleted
+
+        Side effects:
+            - Creates project_filter StringVar ("active" default)
+            - Creates project_sphere_filter StringVar ("All Spheres" default)
+            - Creates projects_container LabelFrame
+            - Creates scrollable_projects_frame for project rows
+            - Calls refresh_project_section() to populate
+            - Increments row counter
+
+        Note:
+            Actual project list populated by refresh_project_section(), not here.
+            This method just creates the container and filter controls.
+        """
 
         # Projects frame with border
         projects_frame = ttk.LabelFrame(parent, padding=10)
@@ -434,7 +608,7 @@ class SettingsFrame(ttk.Frame):
         header_frame = ttk.Frame(projects_frame)
         header_frame.grid(row=0, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
 
-        ttk.Label(header_frame, text="Projects", font=("Arial", 14, "bold")).pack(
+        ttk.Label(header_frame, text="Projects", font=FONT_TIMER_SMALL).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
@@ -540,16 +714,18 @@ class SettingsFrame(ttk.Frame):
         frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
 
         # Project name
-        ttk.Label(frame, text="Name:", font=("Arial", 10, "bold")).grid(
+        ttk.Label(frame, text="Name:", font=FONT_NORMAL_BOLD).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
-        name_var = tk.StringVar(value=project_name)
+        name_var = tk.StringVar(master=self.root, value=project_name)
         name_entry = ttk.Entry(frame, textvariable=name_var, state="readonly", width=30)
         name_entry.grid(row=0, column=1, sticky=(tk.W, tk.E), padx=5)
 
         # Sphere
         ttk.Label(frame, text="Sphere:").grid(row=0, column=2, sticky=tk.W, padx=5)
-        sphere_var = tk.StringVar(value=project_data.get("sphere", ""))
+        sphere_var = tk.StringVar(
+            master=self.root, value=project_data.get("sphere", "")
+        )
         # Get all active spheres
         active_spheres = [
             name
@@ -567,7 +743,7 @@ class SettingsFrame(ttk.Frame):
 
         # Note
         ttk.Label(frame, text="Note:").grid(row=1, column=0, sticky=tk.W, padx=5)
-        note_var = tk.StringVar(value=project_data.get("note", ""))
+        note_var = tk.StringVar(master=self.root, value=project_data.get("note", ""))
         note_entry = ttk.Entry(frame, textvariable=note_var, state="readonly", width=50)
         note_entry.grid(
             row=1, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=2
@@ -575,11 +751,64 @@ class SettingsFrame(ttk.Frame):
 
         # Goal
         ttk.Label(frame, text="Goal:").grid(row=2, column=0, sticky=tk.W, padx=5)
-        goal_var = tk.StringVar(value=project_data.get("goal", ""))
+        goal_var = tk.StringVar(master=self.root, value=project_data.get("goal", ""))
         goal_entry = ttk.Entry(frame, textvariable=goal_var, state="readonly", width=50)
         goal_entry.grid(
             row=2, column=1, columnspan=3, sticky=(tk.W, tk.E), padx=5, pady=2
         )
+
+        # Define nested toggle function with closure over widget references
+        def toggle_edit():
+            """Toggle project edit mode - uses closure to access parent scope variables"""
+            if edit_btn["text"] == "Edit":
+                # Enable editing
+                name_entry.config(state="normal")
+                sphere_combo.config(state="readonly")
+                note_entry.config(state="normal")
+                goal_entry.config(state="normal")
+                edit_btn.config(text="Save")
+            else:
+                # Save changes
+                new_name = name_var.get().strip()
+
+                if not new_name:
+                    messagebox.showerror("Error", "Project name cannot be empty")
+                    return
+
+                # Check if name changed and new name already exists
+                if new_name != project_name and new_name in self.tracker.settings.get(
+                    "projects", {}
+                ):
+                    messagebox.showerror(
+                        "Error", "A project with this name already exists"
+                    )
+                    return
+
+                # Update project data
+                project_data = self.tracker.settings["projects"].get(project_name, {})
+                old_sphere = project_data.get("sphere")
+                new_sphere = sphere_var.get()
+                project_data["sphere"] = new_sphere
+                project_data["note"] = note_var.get()
+                project_data["goal"] = goal_var.get()
+
+                # If name changed, rename project
+                if new_name != project_name:
+                    self.tracker.settings["projects"].pop(project_name)
+                    self.tracker.settings["projects"][new_name] = project_data
+
+                self.save_settings()
+
+                # Disable editing
+                name_entry.config(state="readonly")
+                sphere_combo.config(state="disabled")
+                note_entry.config(state="readonly")
+                goal_entry.config(state="readonly")
+                edit_btn.config(text="Edit")
+
+                # Refresh project list if name or sphere changed
+                if new_name != project_name or old_sphere != new_sphere:
+                    self.refresh_project_section()
 
         # Buttons
         button_frame = ttk.Frame(frame)
@@ -589,18 +818,7 @@ class SettingsFrame(ttk.Frame):
         edit_btn = ttk.Button(
             button_frame,
             text="Edit",
-            command=lambda: self.toggle_project_edit(
-                project_name,
-                name_entry,
-                sphere_combo,
-                note_entry,
-                goal_entry,
-                edit_btn,
-                name_var,
-                sphere_var,
-                note_var,
-                goal_var,
-            ),
+            command=toggle_edit,
         )
         edit_btn.pack(side=tk.LEFT, padx=5)
 
@@ -639,66 +857,6 @@ class SettingsFrame(ttk.Frame):
             command=lambda: self.delete_project(project_name),
         ).pack(side=tk.LEFT, padx=5)
 
-    def toggle_project_edit(
-        self,
-        project_name,
-        name_entry,
-        sphere_combo,
-        note_entry,
-        goal_entry,
-        edit_btn,
-        name_var,
-        sphere_var,
-        note_var,
-        goal_var,
-    ):
-        """Toggle project edit mode"""
-        if edit_btn["text"] == "Edit":
-            # Enable editing
-            name_entry.config(state="normal")
-            sphere_combo.config(state="readonly")
-            note_entry.config(state="normal")
-            goal_entry.config(state="normal")
-            edit_btn.config(text="Save")
-        else:
-            # Save changes
-            new_name = name_var.get().strip()
-
-            if not new_name:
-                messagebox.showerror("Error", "Project name cannot be empty")
-                return
-
-            # Check if name changed and new name already exists
-            if new_name != project_name and new_name in self.tracker.settings.get(
-                "projects", {}
-            ):
-                messagebox.showerror("Error", "A project with this name already exists")
-                return
-
-            # Update project data
-            project_data = self.tracker.settings["projects"].get(project_name, {})
-            project_data["sphere"] = sphere_var.get()
-            project_data["note"] = note_var.get()
-            project_data["goal"] = goal_var.get()
-
-            # If name changed, rename project
-            if new_name != project_name:
-                self.tracker.settings["projects"].pop(project_name)
-                self.tracker.settings["projects"][new_name] = project_data
-
-            self.save_settings()
-
-            # Disable editing
-            name_entry.config(state="readonly")
-            sphere_combo.config(state="disabled")
-            note_entry.config(state="readonly")
-            goal_entry.config(state="readonly")
-            edit_btn.config(text="Edit")
-
-            # Refresh if name changed
-            if new_name != project_name:
-                self.refresh_project_section()
-
     def create_new_project(self):
         """Create a new project"""
         # Create custom dialog
@@ -715,10 +873,10 @@ class SettingsFrame(ttk.Frame):
         dialog.geometry(f"+{x}+{y}")
 
         # Variables
-        name_var = tk.StringVar()
-        sphere_var = tk.StringVar()
-        note_var = tk.StringVar()
-        goal_var = tk.StringVar()
+        name_var = tk.StringVar(master=dialog)
+        sphere_var = tk.StringVar(master=dialog)
+        note_var = tk.StringVar(master=dialog)
+        goal_var = tk.StringVar(master=dialog)
         result = {"confirmed": False}
 
         # Get selected sphere (or default if none selected)
@@ -861,10 +1019,23 @@ class SettingsFrame(ttk.Frame):
         self.save_settings()
         self.refresh_project_section()
 
-    def create_break_idle_section(self, parent):
-        """Create break actions and idle settings section"""
-        # BREAK ACTIONS SECTION (First)
+    def _add_settings_separator(self, parent):
+        """Add horizontal separator between settings sections."""
+        ttk.Separator(parent, orient="horizontal").grid(
+            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
+        )
+        self.row += 1
 
+    def _create_break_actions_subsection(self, parent):
+        """Create break actions management UI subsection.
+
+        Creates a labeled frame containing the break actions list with:
+        - Add break action button
+        - List of break actions (editable, archivable, deletable)
+        - Default break action selection
+
+        Note: Break actions are global (not sphere-specific like projects).
+        """
         break_frame = ttk.LabelFrame(parent, padding=10)
         break_frame.grid(
             row=self.row,
@@ -881,13 +1052,17 @@ class SettingsFrame(ttk.Frame):
 
         self.create_break_actions_list(break_frame)
 
-        # SEPARATOR
-        ttk.Separator(parent, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+    def _create_idle_settings_subsection(self, parent):
+        """Create idle detection settings UI subsection.
 
-        # IDLE SETTINGS SECTION (Second)
+        Creates a labeled frame with controls for:
+        - Enable/disable idle tracking
+        - Idle threshold (seconds before marking idle)
+        - Auto-break threshold (seconds idle before auto-starting break)
+        - Save button with nested handler
+
+        Uses nested save function to access variables via closure.
+        """
         idle_frame = ttk.LabelFrame(parent, padding=10)
         idle_frame.grid(
             row=self.row,
@@ -901,7 +1076,7 @@ class SettingsFrame(ttk.Frame):
 
         # Header inside the frame
         header_row = 0
-        ttk.Label(idle_frame, text="Idle Settings", font=("Arial", 14, "bold")).grid(
+        ttk.Label(idle_frame, text="Idle Settings", font=FONT_TIMER_SMALL).grid(
             row=header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
         )
         header_row += 1
@@ -913,24 +1088,23 @@ class SettingsFrame(ttk.Frame):
 
         # Idle tracking enabled toggle
         idle_enabled_var = tk.BooleanVar(
-            value=idle_settings.get("idle_tracking_enabled", True)
+            master=self.root, value=idle_settings.get("idle_tracking_enabled", True)
         )
-        ttk.Checkbutton(
-            idle_frame,
-            text="Enable Idle Tracking",
-            variable=idle_enabled_var,
-        ).grid(row=idle_row, column=0, columnspan=2, sticky=tk.W, pady=5)
-        idle_row += 1
 
         # Idle threshold
+        idle_row += 1
         ttk.Label(idle_frame, text="Idle Threshold (seconds):").grid(
             row=idle_row, column=0, sticky=tk.W, pady=5
         )
-        idle_threshold_var = tk.IntVar(value=idle_settings.get("idle_threshold", 60))
-        idle_threshold_spin = ttk.Spinbox(
-            idle_frame, from_=1, to=600, textvariable=idle_threshold_var, width=10
-        )
+        # Get value from settings, textvariable= doesn't work well with validation,
+        # so we'll set value manually after creating the Spinbox
+        idle_threshold_value = idle_settings.get("idle_threshold", 60)
+        idle_threshold_spin = ttk.Spinbox(idle_frame, from_=1, to=600, width=3)
         idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
+
+        # Set value after grid using insert
+        idle_threshold_spin.delete(0, "end")
+        idle_threshold_spin.insert(0, str(idle_threshold_value))
         idle_row += 1
 
         # Idle break threshold
@@ -941,7 +1115,7 @@ class SettingsFrame(ttk.Frame):
         idle_break_frame = ttk.Frame(idle_frame)
         idle_break_frame.grid(row=idle_row, column=1, pady=5, padx=5)
 
-        idle_break_var = tk.StringVar()
+        idle_break_var = tk.StringVar(master=self.root)
         current_threshold = idle_settings.get("idle_break_threshold", 300)
         if current_threshold == -1:
             idle_break_var.set("Never")
@@ -955,19 +1129,58 @@ class SettingsFrame(ttk.Frame):
             idle_break_frame,
             textvariable=idle_break_var,
             values=idle_break_options,
-            width=10,
+            width=4,
         )
         idle_break_combo.pack()
         idle_row += 1
 
-        # Save idle settings button
+        # Define nested toggle function to enable/disable idle threshold controls
+        def toggle_idle_controls():
+            """Enable or disable idle threshold controls based on checkbox state."""
+            if idle_enabled_var.get():
+                idle_threshold_spin.config(state="normal")
+                idle_break_combo.config(state="readonly")
+            else:
+                idle_threshold_spin.config(state="disabled")
+                idle_break_combo.config(state="disabled")
+
+        # Add checkbox after controls are created so toggle function has access to widgets
+        ttk.Checkbutton(
+            idle_frame,
+            text="Enable Idle Tracking",
+            variable=idle_enabled_var,
+            command=toggle_idle_controls,
+        ).grid(row=header_row, column=0, columnspan=2, sticky=tk.W, pady=5)
+
+        # Initialize control states based on current setting
+        toggle_idle_controls()
+
+        # Define nested save function with closure over widget variables
         def save_idle_settings():
+            """Save idle settings - uses closure to access parent scope variables."""
+            # Validate idle threshold - read from spinbox widget (to catch invalid text input)
+            # User can type invalid strings even though it's bound to IntVar
+            threshold_str = idle_threshold_spin.get()
+            validated_threshold = validate_idle_threshold(threshold_str)
+
+            if validated_threshold is None:
+                messagebox.showerror(
+                    "Invalid Idle Threshold",
+                    f"Idle Threshold must be a numeric value between 1 and 600 seconds.\n\nYou entered: '{threshold_str}'",
+                )
+                # reset to previous valid value from settings file
+                idle_threshold_spin.delete(0, "end")
+                idle_threshold_spin.insert(0, str(idle_threshold_value))
+
+                return
+
+            # All validation passed - save settings
             self.tracker.settings["idle_settings"][
                 "idle_tracking_enabled"
             ] = idle_enabled_var.get()
             self.tracker.settings["idle_settings"][
                 "idle_threshold"
-            ] = idle_threshold_var.get()
+            ] = validated_threshold
 
             break_val = idle_break_var.get()
             if break_val == "Never":
@@ -984,13 +1197,18 @@ class SettingsFrame(ttk.Frame):
             idle_frame, text="Save Idle Settings", command=save_idle_settings
         ).grid(row=idle_row, column=0, columnspan=2, pady=10)
 
-        # SEPARATOR
-        ttk.Separator(parent, orient="horizontal").grid(
-            row=self.row, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=20
-        )
-        self.row += 1
+    def _create_screenshot_settings_subsection(self, parent):
+        """Create screenshot capture settings UI subsection.
 
-        # SCREENSHOT SETTINGS SECTION (Third)
+        Creates a labeled frame with controls for:
+        - Enable/disable screenshot capture
+        - Warning message about sensitive data (conditionally shown)
+        - Capture on window focus change
+        - Min seconds between captures
+        - Save button with nested handler
+
+        Uses nested functions for toggle_warning and save handlers via closure.
+        """
         screenshot_frame = ttk.LabelFrame(parent, padding=10)
         screenshot_frame.grid(
             row=self.row,
@@ -1005,7 +1223,7 @@ class SettingsFrame(ttk.Frame):
         # Header inside the frame
         screenshot_header_row = 0
         ttk.Label(
-            screenshot_frame, text="Screenshot Settings", font=("Arial", 14, "bold")
+            screenshot_frame, text="Screenshot Settings", font=FONT_TIMER_SMALL
         ).grid(
             row=screenshot_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W
         )
@@ -1016,46 +1234,142 @@ class SettingsFrame(ttk.Frame):
 
         screenshot_row = screenshot_header_row
 
-        # Screenshot capture enabled toggle
-        screenshot_enabled_var = tk.BooleanVar(
-            value=screenshot_settings.get("enabled", False)
-        )
-
-        # Warning label (initially hidden)
-        warning_label = ttk.Label(
+        # Hint label explaining the purpose
+        hint_label = ttk.Label(
             screenshot_frame,
-            text="⚠️ Warning: Screenshots may capture sensitive information (passwords, private messages, etc.).\nSoftware creator is not liable for any data captured. Use at your own risk.",
-            foreground="red",
-            wraplength=500,
+            text="💡 Capture screenshots to help you remember what was accomplished during active periods",
+            font=FONT_SMALL_ITALIC,
+            foreground=COLOR_GRAY_TEXT,
+            wraplength=600,
             justify=tk.LEFT,
         )
+        hint_label.grid(
+            row=screenshot_row, column=0, columnspan=3, sticky=tk.W, pady=(0, 10)
+        )
+        screenshot_row += 1
 
-        def toggle_warning():
+        # Screenshot capture enabled toggle
+        screenshot_enabled_var = tk.BooleanVar(
+            master=self.root, value=screenshot_settings.get("enabled", False)
+        )
+
+        # Define nested toggle function to show confirmation dialog
+        def toggle_screenshot_with_confirmation():
+            """Show confirmation dialog when enabling screenshots."""
             if screenshot_enabled_var.get():
-                warning_label.grid(
-                    row=screenshot_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
+                # User is trying to enable - create custom dialog with larger font
+                dialog = tk.Toplevel(self.root)
+                dialog.title("Screenshot Capture - Terms of Use")
+                dialog.transient(self.root)
+                dialog.grab_set()
+
+                # Get and apply background color
+                bg_color = get_frame_background()
+                dialog.configure(bg=bg_color)
+
+                # Center the dialog
+                dialog.geometry("650x450")
+                dialog.update_idletasks()
+                x = (dialog.winfo_screenwidth() // 2) - (dialog.winfo_width() // 2)
+                y = (dialog.winfo_screenheight() // 2) - (dialog.winfo_height() // 2)
+                dialog.geometry(f"+{x}+{y}")
+
+                # Warning icon and title
+                title_frame = tk.Frame(dialog, bg=bg_color)
+                title_frame.pack(pady=20)
+                tk.Label(
+                    title_frame,
+                    text="⚠️ WARNING: Screenshot Capture Disclaimer",
+                    font=FONT_TITLE,
+                    foreground=COLOR_ERROR_RED,
+                    bg=bg_color,
+                ).pack()
+
+                # Message content
+                message_frame = tk.Frame(dialog, bg=bg_color)
+                message_frame.pack(padx=20, pady=10, fill=tk.BOTH, expand=True)
+
+                message_text = (
+                    "By enabling this feature, you acknowledge and agree that:\n\n"
+                    "• Screenshots may capture sensitive information including passwords, "
+                    "private messages, financial data, and other confidential content\n\n"
+                    "• You are solely responsible for any data captured by this feature\n\n"
+                    "• The software creator is NOT LIABLE for any data captured, "
+                    "exposed, or misused through this feature\n\n"
+                    "• You use this feature entirely at your own risk\n\n"
+                    "Do you agree to these terms and wish to enable screenshot capture?"
                 )
-            else:
-                warning_label.grid_remove()
+
+                message_label = tk.Label(
+                    message_frame,
+                    text=message_text,
+                    font=FONT_BODY,
+                    wraplength=600,
+                    justify=tk.LEFT,
+                    bg=bg_color,
+                )
+                message_label.pack()
+
+                # Result variable
+                result = {"confirmed": False}
+
+                def on_agree():
+                    result["confirmed"] = True
+                    dialog.destroy()
+
+                def on_decline():
+                    result["confirmed"] = False
+                    dialog.destroy()
+
+                # Buttons
+                button_frame = tk.Frame(dialog, bg=bg_color)
+                button_frame.pack(pady=20)
+
+                tk.Button(
+                    button_frame,
+                    text="I Agree",
+                    command=on_agree,
+                    width=15,
+                    font=FONT_BODY,
+                ).pack(side=tk.LEFT, padx=10)
+
+                tk.Button(
+                    button_frame,
+                    text="Decline",
+                    command=on_decline,
+                    width=15,
+                    font=FONT_BODY,
+                ).pack(side=tk.LEFT, padx=10)
+
+                # Bind keys
+                dialog.bind("<Return>", lambda e: on_agree())
+                dialog.bind("<Escape>", lambda e: on_decline())
+
+                # Wait for dialog
+                dialog.wait_window()
+
+                if not result["confirmed"]:
+                    # User declined - revert checkbox
+                    screenshot_enabled_var.set(False)
 
         ttk.Checkbutton(
             screenshot_frame,
             text="Enable Screenshot Capture",
             variable=screenshot_enabled_var,
-            command=toggle_warning,
+            command=toggle_screenshot_with_confirmation,
+            style="Large.TCheckbutton",
         ).grid(row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5)
-        screenshot_row += 1
 
-        # Show warning if already enabled
-        if screenshot_enabled_var.get():
-            warning_label.grid(
-                row=screenshot_row, column=0, columnspan=3, sticky=tk.W, pady=5
-            )
+        # Configure larger font for this checkbutton
+        style = ttk.Style()
+        style.configure("Large.TCheckbutton", font=FONT_BODY)
+
         screenshot_row += 1
 
         # Capture on focus change
         capture_on_focus_var = tk.BooleanVar(
-            value=screenshot_settings.get("capture_on_focus_change", True)
+            master=self.root,
+            value=screenshot_settings.get("capture_on_focus_change", True),
         )
         ttk.Checkbutton(
             screenshot_frame,
@@ -1066,25 +1380,27 @@ class SettingsFrame(ttk.Frame):
 
         # Min seconds between captures
         ttk.Label(screenshot_frame, text="Min seconds between captures:").grid(
-            row=screenshot_row, column=0, sticky=tk.W, pady=5
+            row=screenshot_row, column=0, columnspan=2, sticky=tk.W, pady=5
         )
         min_seconds_var = tk.IntVar(
-            value=screenshot_settings.get("min_seconds_between_captures", 10)
+            master=self.root,
+            value=screenshot_settings.get("min_seconds_between_captures", 10),
         )
         min_seconds_spin = ttk.Spinbox(
-            screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=10
+            screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=3
         )
-        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, padx=5)
+        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W)
         screenshot_row += 1
 
-        # Save screenshot settings button
+        # Define nested save function with closure over widget variables
         def save_screenshot_settings():
+            """Save screenshot settings - uses closure to access parent scope variables."""
             self.tracker.settings["screenshot_settings"] = {
                 "enabled": screenshot_enabled_var.get(),
                 "capture_on_focus_change": capture_on_focus_var.get(),
                 "min_seconds_between_captures": min_seconds_var.get(),
                 "screenshot_path": screenshot_settings.get(
-                    "screenshot_path", "screenshots"
+                    "screenshot_path", DEFAULT_SCREENSHOT_FOLDER
                 ),
             }
             self.save_settings()
@@ -1101,9 +1417,44 @@ class SettingsFrame(ttk.Frame):
             self.bind_mousewheel_func()
 
     def create_google_sheets_section(self, parent):
-        """Create Google Sheets integration settings section"""
-        from tkinter import filedialog
+        """Create Google Sheets integration settings UI section.
 
+        Builds interface for configuring Google Sheets upload:
+        - Enable/disable integration checkbox
+        - Spreadsheet URL input with smart extraction button
+        - Sheet name input (tab name within spreadsheet)
+        - Credentials file path display and browse button
+        - Test connection button (validates credentials + access)
+
+        Smart spreadsheet URL extraction:
+        - Detects various Google Sheets URL formats
+        - Extracts spreadsheet ID from full URL
+        - Validates extracted ID before saving
+        - Handles docs.google.com/spreadsheets/d/{ID}/... format
+
+        Credentials file:
+        - Expects credentials.json from Google Cloud Console
+        - Browse button opens file dialog
+        - Path saved relative to project root
+        - Required for Google Sheets API access
+
+        Test connection:
+        - Validates credentials file exists and is valid JSON
+        - Attempts to authenticate with Google Sheets API
+        - Verifies read/write access to specified spreadsheet
+        - Shows success/error messagebox with details
+
+        Side effects:
+            - Creates enable checkbox bound to settings["google_sheets"]["enabled"]
+            - Creates spreadsheet_url_var StringVar
+            - Creates sheet_name_var StringVar (default "Sessions")
+            - Creates credentials_path display
+            - Creates "Extract ID" button (calls extract_spreadsheet_id())
+            - Creates "Test Connection" button (validates credentials)
+            - Increments row counter multiple times
+
+
+        """
         google_frame = ttk.LabelFrame(parent, padding=10)
         google_frame.grid(
             row=self.row,
@@ -1118,7 +1469,7 @@ class SettingsFrame(ttk.Frame):
         # Header
         google_header_row = 0
         ttk.Label(
-            google_frame, text="Google Sheets Integration", font=("Arial", 14, "bold")
+            google_frame, text="Google Sheets Integration", font=FONT_TIMER_SMALL
         ).grid(row=google_header_row, column=0, columnspan=3, pady=(0, 10), sticky=tk.W)
         google_header_row += 1
 
@@ -1128,7 +1479,9 @@ class SettingsFrame(ttk.Frame):
         google_row = google_header_row
 
         # Enable toggle
-        enabled_var = tk.BooleanVar(value=google_settings.get("enabled", False))
+        enabled_var = tk.BooleanVar(
+            master=self.root, value=google_settings.get("enabled", False)
+        )
         ttk.Checkbutton(
             google_frame,
             text="Enable automatic upload to Google Sheets",
@@ -1141,7 +1494,7 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         spreadsheet_id_var = tk.StringVar(
-            value=google_settings.get("spreadsheet_id", "")
+            master=self.root, value=google_settings.get("spreadsheet_id", "")
         )
         spreadsheet_id_entry = ttk.Entry(
             google_frame, textvariable=spreadsheet_id_var, width=50
@@ -1149,14 +1502,26 @@ class SettingsFrame(ttk.Frame):
         spreadsheet_id_entry.grid(
             row=google_row, column=1, columnspan=2, pady=5, padx=5, sticky=(tk.W, tk.E)
         )
+
+        # Auto-extract spreadsheet ID from URL when pasted
+        def on_spreadsheet_id_change(*args):
+            """Extract spreadsheet ID from full Google Sheets URL"""
+            current_value = spreadsheet_id_var.get()
+            extracted_id = extract_spreadsheet_id_from_url(current_value)
+            if extracted_id != current_value:
+                spreadsheet_id_var.set(extracted_id)
+
+        # Bind to track changes
+        spreadsheet_id_var.trace_add("write", on_spreadsheet_id_change)
+
         google_row += 1
 
         # Help text for spreadsheet ID
         help_text = ttk.Label(
             google_frame,
             text="Get ID from URL: https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit",
-            font=("Arial", 8),
-            foreground="gray",
+            font=FONT_EXTRA_SMALL,
+            foreground=COLOR_GRAY_TEXT,
         )
         help_text.grid(row=google_row, column=1, columnspan=2, sticky=tk.W, padx=5)
         google_row += 1
@@ -1166,7 +1531,7 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         sheet_name_var = tk.StringVar(
-            value=google_settings.get("sheet_name", "Sessions")
+            master=self.root, value=google_settings.get("sheet_name", "Sessions")
         )
         sheet_name_entry = ttk.Entry(
             google_frame, textvariable=sheet_name_var, width=30
@@ -1179,7 +1544,8 @@ class SettingsFrame(ttk.Frame):
             row=google_row, column=0, sticky=tk.W, pady=5
         )
         credentials_var = tk.StringVar(
-            value=google_settings.get("credentials_file", "credentials.json")
+            master=self.root,
+            value=google_settings.get("credentials_file", "credentials.json"),
         )
         credentials_entry = ttk.Entry(
             google_frame, textvariable=credentials_var, width=30
@@ -1208,8 +1574,8 @@ class SettingsFrame(ttk.Frame):
             "3. Enable Google Sheets API\n"
             "4. Create OAuth 2.0 credentials (Desktop app)\n"
             "5. Download as credentials.json",
-            font=("Arial", 8),
-            foreground="blue",
+            font=FONT_EXTRA_SMALL,
+            foreground=COLOR_INFO_BLUE,
             justify=tk.LEFT,
         )
         instructions_label.grid(
@@ -1217,15 +1583,17 @@ class SettingsFrame(ttk.Frame):
         )
         google_row += 1
 
-        # Test connection button
-        status_label = ttk.Label(google_frame, text="", foreground="blue")
+        # Test connection results label (updated by test_connection function)
+        status_label = ttk.Label(google_frame, text="", foreground=COLOR_INFO_BLUE)
         status_label.grid(
             row=google_row + 1, column=0, columnspan=3, sticky=tk.W, pady=5
         )
 
         def test_connection():
             """Test the Google Sheets connection"""
-            status_label.config(text="Testing connection...", foreground="blue")
+            status_label.config(
+                text="Testing connection...", foreground=COLOR_INFO_BLUE
+            )
             google_frame.update()
 
             # Save current settings temporarily
@@ -1241,17 +1609,19 @@ class SettingsFrame(ttk.Frame):
 
             # Test connection
             try:
-                from google_sheets_integration import GoogleSheetsUploader
-
                 uploader = GoogleSheetsUploader(self.tracker.settings_file)
                 success, message = uploader.test_connection()
 
                 if success:
-                    status_label.config(text=f"✓ {message}", foreground="green")
+                    status_label.config(
+                        text=f"✓ {message}", foreground=COLOR_SUCCESS_GREEN
+                    )
                 else:
-                    status_label.config(text=f"✗ {message}", foreground="red")
-            except Exception as e:
-                status_label.config(text=f"✗ Error: {str(e)}", foreground="red")
+                    status_label.config(text=f"✗ {message}", foreground=COLOR_ERROR_RED)
+            except Exception as error:
+                status_label.config(
+                    text=f"✗ Error: {str(error)}", foreground=COLOR_ERROR_RED
+                )
 
             # Restore original settings
             self.tracker.settings["google_sheets"] = old_settings
@@ -1303,7 +1673,7 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(
             shortcuts_frame,
             text="Use these shortcuts anywhere to control Time Aligned:",
-            font=("Arial", 10),
+            font=FONT_NORMAL,
         ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
 
         # Shortcuts list
@@ -1321,14 +1691,12 @@ class SettingsFrame(ttk.Frame):
                 shortcuts_frame,
                 text=hotkey,
                 font=("Consolas", 10, "bold"),
-                foreground="#0066CC",
+                foreground=COLOR_LINK_BLUE,
             )
             hotkey_label.grid(row=row, column=0, sticky=tk.W, padx=(10, 20), pady=5)
 
             # Description
-            desc_label = ttk.Label(
-                shortcuts_frame, text=description, font=("Arial", 10)
-            )
+            desc_label = ttk.Label(shortcuts_frame, text=description, font=FONT_NORMAL)
             desc_label.grid(row=row, column=1, sticky=tk.W, pady=5)
 
             row += 1
@@ -1337,8 +1705,8 @@ class SettingsFrame(ttk.Frame):
         note_label = ttk.Label(
             shortcuts_frame,
             text="💡 Tip: These shortcuts work system-wide, even when the window is hidden!",
-            font=("Arial", 9, "italic"),
-            foreground="#666666",
+            font=FONT_SMALL_ITALIC,
+            foreground=COLOR_GRAY_TEXT,
         )
         note_label.grid(row=row, column=0, columnspan=2, pady=(10, 0), sticky=tk.W)
 
@@ -1367,7 +1735,7 @@ class SettingsFrame(ttk.Frame):
         ttk.Label(
             export_frame,
             text="Export all tracking data to CSV format for analysis in spreadsheet applications.",
-            font=("Arial", 10),
+            font=FONT_NORMAL,
             wraplength=500,
         ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
 
@@ -1386,8 +1754,6 @@ class SettingsFrame(ttk.Frame):
 
     def save_all_data_to_csv(self):
         """Export all tracking data to CSV file"""
-        from tkinter import filedialog
-
         try:
             # Load data from data.json
             data_file = self.tracker.data_file
@@ -1442,6 +1808,27 @@ class SettingsFrame(ttk.Frame):
                 # If there are active periods, create a row for each
                 if active_periods:
                     for active in active_periods:
+                        # Extract primary and secondary project information
+                        primary_project = ""
+                        secondary_project = ""
+                        secondary_comment = ""
+                        secondary_percentage = ""
+
+                        if active.get("project"):
+                            # Single project case
+                            primary_project = active.get("project", "")
+                        else:
+                            # Multiple projects case
+                            for project_item in active.get("projects", []):
+                                if project_item.get("project_primary", True):
+                                    primary_project = project_item.get("name", "")
+                                else:
+                                    secondary_project = project_item.get("name", "")
+                                    secondary_comment = project_item.get("comment", "")
+                                    secondary_percentage = project_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1452,12 +1839,16 @@ class SettingsFrame(ttk.Frame):
                             "session_active_duration": active_duration,
                             "session_break_duration": break_duration,
                             "type": "active",
-                            "project": active.get("project", ""),
+                            "project": primary_project,
+                            "secondary_project": secondary_project,
+                            "secondary_comment": secondary_comment,
+                            "secondary_percentage": secondary_percentage,
                             "activity_start": active.get("start", ""),
                             "activity_end": active.get("end", ""),
                             "activity_duration": active.get("duration", 0),
                             "activity_comment": active.get("comment", ""),
                             "break_action": "",
+                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1468,6 +1859,27 @@ class SettingsFrame(ttk.Frame):
                 # Process breaks
                 if breaks:
                     for brk in breaks:
+                        # Extract primary and secondary action information
+                        primary_action = ""
+                        secondary_action = ""
+                        secondary_comment = ""
+                        secondary_percentage = ""
+
+                        if brk.get("action"):
+                            # Single action case
+                            primary_action = brk.get("action", "")
+                        else:
+                            # Multiple actions case
+                            for action_item in brk.get("actions", []):
+                                if action_item.get("action_primary", True):
+                                    primary_action = action_item.get("name", "")
+                                else:
+                                    secondary_action = action_item.get("name", "")
+                                    secondary_comment = action_item.get("comment", "")
+                                    secondary_percentage = action_item.get(
+                                        "percentage", ""
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1479,11 +1891,15 @@ class SettingsFrame(ttk.Frame):
                             "session_break_duration": break_duration,
                             "type": "break",
                             "project": "",
+                            "secondary_project": "",
+                            "secondary_comment": secondary_comment,
+                            "secondary_percentage": secondary_percentage,
                             "activity_start": brk.get("start", ""),
                             "activity_end": "",
                             "activity_duration": brk.get("duration", 0),
                             "activity_comment": brk.get("comment", ""),
-                            "break_action": brk.get("action", ""),
+                            "break_action": primary_action,
+                            "secondary_action": secondary_action,
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1505,11 +1921,15 @@ class SettingsFrame(ttk.Frame):
                             "session_break_duration": break_duration,
                             "type": "idle",
                             "project": "",
+                            "secondary_project": "",
+                            "secondary_comment": "",
+                            "secondary_percentage": "",
                             "activity_start": idle.get("start", ""),
                             "activity_end": idle.get("end", ""),
                             "activity_duration": idle.get("duration", 0),
                             "activity_comment": "",
                             "break_action": "",
+                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1530,11 +1950,15 @@ class SettingsFrame(ttk.Frame):
                         "session_break_duration": break_duration,
                         "type": "session_summary",
                         "project": "",
+                        "secondary_project": "",
+                        "secondary_comment": "",
+                        "secondary_percentage": "",
                         "activity_start": "",
                         "activity_end": "",
                         "activity_duration": 0,
                         "activity_comment": "",
                         "break_action": "",
+                        "secondary_action": "",
                         "active_notes": active_notes,
                         "break_notes": break_notes,
                         "idle_notes": idle_notes,
@@ -1556,11 +1980,15 @@ class SettingsFrame(ttk.Frame):
                         "session_break_duration",
                         "type",
                         "project",
+                        "secondary_project",
+                        "secondary_comment",
+                        "secondary_percentage",
                         "activity_start",
                         "activity_end",
                         "activity_duration",
                         "activity_comment",
                         "break_action",
+                        "secondary_action",
                         "active_notes",
                         "break_notes",
                         "idle_notes",
@@ -1584,15 +2012,17 @@ class SettingsFrame(ttk.Frame):
                         subprocess.Popen(["open", directory])
                     else:  # Linux
                         subprocess.Popen(["xdg-open", directory])
-                except Exception as e:
+                except Exception as error:
                     # Silently fail if can't open directory
                     pass
 
             else:
                 messagebox.showwarning("No Data", "No data rows to export")
 
-        except Exception as e:
-            messagebox.showerror("Export Error", f"Failed to export data:\n{str(e)}")
+        except Exception as error:
+            messagebox.showerror(
+                "Export Error", f"Failed to export data:\n{str(error)}"
+            )
 
     def create_break_actions_list(self, parent):
         """Create break actions management list"""
@@ -1602,7 +2032,7 @@ class SettingsFrame(ttk.Frame):
         header_frame = ttk.Frame(parent)
         header_frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=tk.W)
 
-        ttk.Label(header_frame, text="Break Actions", font=("Arial", 14, "bold")).pack(
+        ttk.Label(header_frame, text="Break Actions", font=FONT_TIMER_SMALL).pack(
             side=tk.LEFT, padx=(0, 10)
         )
 
@@ -1652,6 +2082,8 @@ class SettingsFrame(ttk.Frame):
         filtered_actions = []
         default_action = None
 
+        # Filter break actions based on active/inactive/all filter selection
+        # Separate default action to display it first in the list
         for name, data in break_actions.items():
             include = False
             if filter_val == "active" and data.get("active", True):
@@ -1669,6 +2101,7 @@ class SettingsFrame(ttk.Frame):
 
         filtered_actions.sort(key=lambda x: x[0])
 
+        #default action at the top
         if default_action:
             filtered_actions.insert(0, default_action)
 
@@ -1715,7 +2148,7 @@ class SettingsFrame(ttk.Frame):
         frame.grid(row=row, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
 
         # Action name
-        ttk.Label(frame, text=action_name, font=("Arial", 10, "bold")).grid(
+        ttk.Label(frame, text=action_name, font=FONT_NORMAL_BOLD).grid(
             row=0, column=0, sticky=tk.W, padx=5
         )
 
