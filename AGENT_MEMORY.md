@@ -26,6 +26,53 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-18] - Pie Chart Card Layout v3: Colored Box Labels, col 0 = controls, col 1 = pie
+
+**Search Keywords**: pie chart layout, colored box label, tk.Label bg color, active label green, break label amber, column 0 always visible, non-maximized window, OutlinedLabel removed, create_card layout, rowspan pie canvas, PIE_LABEL_WIDTH removed, PIE_LABEL_HEIGHT removed
+
+**Context**:
+User reported: in a non-maximized window the cards were clipped — the pie chart and labels were cut off on the right. Outline text effect was also unwanted. Refactored card layout to put ALL controls in column 0 (always visible), pie chart in column 1 (safe to clip). Labels changed from `OutlinedLabel` canvas to plain `tk.Label` with a colored background box and black text.
+
+**Files changed**:
+- `src/constants.py` — removed `PIE_LABEL_WIDTH`, `PIE_LABEL_HEIGHT` (no longer needed)
+- `src/analysis_frame.py` — removed `PIE_LABEL_HEIGHT/WIDTH` from imports; removed `OutlinedLabel` class entirely; rewrote `create_card()`
+- `tests/test_analysis_pie_chart.py` — removed 9 OutlinedLabel/PIE_LABEL tests; added 6 new tk.Label tests; now 28 tests total
+
+**New layout in create_card()**:
+```
+Col 0 (weight=1, always visible):
+  Row 0: dropdown  (sticky="W")
+  Row 1: active_label — green bg, black text  (sticky="EW")
+  Row 2: break_label  — amber bg, black text  (sticky="EW")
+  Row 3: Show Timeline button  (sticky="W")
+Col 1 (no weight, may clip on small windows):
+  Rows 0–3: pie_canvas  (rowspan=4, padx=(8,0), sticky="NS")
+```
+- `card_frame.columnconfigure(0, weight=1)` — col 0 expands; col 1 stays fixed width
+- `sticky="EW"` on labels so they stretch to fill the column width
+
+**Label design**:
+- `tk.Label` with `bg=COLOR_TRAY_ACTIVE` / `bg=COLOR_TRAY_BREAK`
+- `fg="black"`, `font=("Arial", 14, "bold")`
+- `relief=tk.SOLID, borderwidth=1` — creates the visible box border
+- `padx=8, pady=4` — breathing room inside the box
+- `anchor="w"` — text left-aligned within the box
+
+**What Worked** ✅:
+- `tk.Label` with `bg=` and `relief=tk.SOLID` is the simplest way to get a colored box — no subclass needed
+- `columnconfigure(0, weight=1)` ensures col 0 always fills available space; col 1 gets clipped first on narrow windows
+- `rowspan=4` on pie_canvas aligns it with all 4 rows in col 0
+- `tk.Label.cget("background")` and `cget("foreground")` return plain strings (not Tcl_Obj) unlike `ttk.Label` — easier to test
+- `assertIn(fg, ("black", "#000000"))` pattern handles both representations of black
+
+**What Was Removed / What Didn't Work**:
+1. **OutlinedLabel** removed — outline effect (canvas with 4-offset text) was visually noisy and not requested going forward
+2. **PIE_LABEL_WIDTH / PIE_LABEL_HEIGHT** constants removed — they were only needed for the canvas-based OutlinedLabel sizing
+3. **Previous layout (v2)** had dropdown + labels in col 0 but button in col 0 with colspan 2, and pie in col 1 — the button spanning both columns caused layout issues on narrow windows
+4. **labels_frame ttk.Frame** intermediate container removed — labels grid directly into card_frame now
+
+---
+
 ### [2026-02-17] - Pie Chart Layout Refactor: Labels Left, Pie Right + Outlined Text
 
 **Search Keywords**: pie chart layout, labels left pie right, side by side card layout, OutlinedLabel, outlined text canvas, black outline text, columnspan dropdown button, create_card layout, PIE_LABEL_WIDTH, PIE_LABEL_HEIGHT, text stroke effect, configure alias, itemcget text fill

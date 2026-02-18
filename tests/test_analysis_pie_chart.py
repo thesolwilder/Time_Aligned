@@ -58,26 +58,6 @@ class TestPieChartImport(unittest.TestCase):
         self.assertIsInstance(PIE_TEXT_MIN_PERCENT, int)
         self.assertGreater(PIE_TEXT_MIN_PERCENT, 0)
 
-    def test_pie_label_width_constant_importable(self):
-        """PIE_LABEL_WIDTH constant must be importable from src.constants."""
-        from src.constants import PIE_LABEL_WIDTH
-
-        self.assertIsInstance(PIE_LABEL_WIDTH, int)
-        self.assertGreater(PIE_LABEL_WIDTH, 0)
-
-    def test_pie_label_height_constant_importable(self):
-        """PIE_LABEL_HEIGHT constant must be importable from src.constants."""
-        from src.constants import PIE_LABEL_HEIGHT
-
-        self.assertIsInstance(PIE_LABEL_HEIGHT, int)
-        self.assertGreater(PIE_LABEL_HEIGHT, 0)
-
-    def test_outlined_label_importable(self):
-        """OutlinedLabel class must be importable from src.analysis_frame."""
-        from src.analysis_frame import OutlinedLabel
-
-        self.assertIsNotNone(OutlinedLabel)
-
 
 # ---------------------------------------------------------------------------
 # 2. Unit tests for draw_pie_chart()
@@ -327,108 +307,79 @@ class TestPieChartIntegration(unittest.TestCase):
                     f"Card {index} pie_canvas height != PIE_CHART_SIZE",
                 )
 
-    def test_active_label_is_outlined_label(self):
-        """active_label on each card must be an OutlinedLabel (tk.Canvas subclass)."""
-        from src.analysis_frame import OutlinedLabel
-
+    def test_active_label_is_tk_label(self):
+        """active_label on each card must be a tk.Label instance."""
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
                 self.assertIsInstance(
                     card.active_label,
-                    OutlinedLabel,
-                    f"Card {index} active_label is not an OutlinedLabel",
+                    tk.Label,
+                    f"Card {index} active_label is not a tk.Label",
                 )
 
-    def test_break_label_is_outlined_label(self):
-        """break_label on each card must be an OutlinedLabel (tk.Canvas subclass)."""
-        from src.analysis_frame import OutlinedLabel
-
+    def test_break_label_is_tk_label(self):
+        """break_label on each card must be a tk.Label instance."""
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
                 self.assertIsInstance(
                     card.break_label,
-                    OutlinedLabel,
-                    f"Card {index} break_label is not an OutlinedLabel",
+                    tk.Label,
+                    f"Card {index} break_label is not a tk.Label",
                 )
 
-    def test_active_label_foreground_matches_tray_active(self):
-        """Active label canvas — topmost text item fill must match COLOR_TRAY_ACTIVE."""
+    def test_active_label_background_matches_tray_active(self):
+        """Active label background must match COLOR_TRAY_ACTIVE."""
         from src.constants import COLOR_TRAY_ACTIVE
 
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
-                text_items = [
-                    i
-                    for i in card.active_label.find_all()
-                    if card.active_label.type(i) == "text"
-                ]
-                self.assertGreater(
-                    len(text_items),
-                    0,
-                    f"Card {index} active_label has no text items",
-                )
-                # Last text item is the colored foreground (drawn after black outline offsets)
-                fill = card.active_label.itemcget(text_items[-1], "fill").lower()
+                bg = str(card.active_label.cget("background")).lower()
                 self.assertEqual(
-                    fill,
+                    bg,
                     COLOR_TRAY_ACTIVE.lower(),
-                    f"Card {index} active_label fill {fill!r} != {COLOR_TRAY_ACTIVE!r}",
+                    f"Card {index} active_label bg {bg!r} != {COLOR_TRAY_ACTIVE!r}",
                 )
 
-    def test_break_label_foreground_matches_tray_break(self):
-        """Break label canvas — topmost text item fill must match COLOR_TRAY_BREAK."""
+    def test_break_label_background_matches_tray_break(self):
+        """Break label background must match COLOR_TRAY_BREAK."""
         from src.constants import COLOR_TRAY_BREAK
 
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
-                text_items = [
-                    i
-                    for i in card.break_label.find_all()
-                    if card.break_label.type(i) == "text"
-                ]
-                self.assertGreater(
-                    len(text_items),
-                    0,
-                    f"Card {index} break_label has no text items",
-                )
-                fill = card.break_label.itemcget(text_items[-1], "fill").lower()
+                bg = str(card.break_label.cget("background")).lower()
                 self.assertEqual(
-                    fill,
+                    bg,
                     COLOR_TRAY_BREAK.lower(),
-                    f"Card {index} break_label fill {fill!r} != {COLOR_TRAY_BREAK!r}",
+                    f"Card {index} break_label bg {bg!r} != {COLOR_TRAY_BREAK!r}",
                 )
 
-    def test_active_label_has_outline_text_items(self):
-        """active_label must have 5 text items: 4 black outline offsets + 1 colored."""
+    def test_active_label_text_is_black(self):
+        """Active label text (foreground) must be black."""
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
-                text_items = [
-                    i
-                    for i in card.active_label.find_all()
-                    if card.active_label.type(i) == "text"
-                ]
-                self.assertEqual(
-                    len(text_items),
-                    5,
-                    f"Card {index} active_label expected 5 text items (4 outline + 1 color), got {len(text_items)}",
+                fg = str(card.active_label.cget("foreground")).lower()
+                self.assertIn(
+                    fg,
+                    ("black", "#000000"),
+                    f"Card {index} active_label foreground {fg!r} is not black",
                 )
 
-    def test_label_canvas_has_correct_size(self):
-        """active_label and break_label canvases must match PIE_LABEL_WIDTH/HEIGHT."""
-        from src.constants import PIE_LABEL_WIDTH, PIE_LABEL_HEIGHT
-
+    def test_break_label_text_is_black(self):
+        """Break label text (foreground) must be black."""
         frame = self._make_frame()
         for index, card in enumerate(frame.cards):
             with self.subTest(card=index):
-                self.assertEqual(int(card.active_label["width"]), PIE_LABEL_WIDTH)
-                self.assertEqual(int(card.active_label["height"]), PIE_LABEL_HEIGHT)
-                self.assertEqual(int(card.break_label["width"]), PIE_LABEL_WIDTH)
-                self.assertEqual(int(card.break_label["height"]), PIE_LABEL_HEIGHT)
+                fg = str(card.break_label.cget("foreground")).lower()
+                self.assertIn(
+                    fg,
+                    ("black", "#000000"),
+                    f"Card {index} break_label foreground {fg!r} is not black",
+                )
 
     def test_pie_canvas_has_chart_items_after_init(self):
         """After frame creation, each pie_canvas has at least one drawn item."""
