@@ -185,17 +185,17 @@ This codebase values **readability, maintainability, and test coverage**. Archit
 ## Files Overview
 
 ```
-time_tracker.py              # Application entry point
+time_tracker.py                  # Application entry point
 src/
-  analysis_frame.py          # Analysis and reporting UI
-  completion_frame.py        # Session completion interface
-  settings_frame.py          # Settings UI
-  google_sheets_integration.py  # Google Sheets upload handler
-  screenshot_capture.py      # Screenshot functionality
-  ui_helpers.py              # Shared UI utilities and sanitization
-  constants.py               # App-wide constants
-docs/                        # Full documentation
-tests/                       # Full test suite
+  analysis_frame.py              # Analysis and reporting UI
+  completion_frame.py            # Session completion interface
+  settings_frame.py              # Settings UI
+  google_sheets_integration.py   # Google Sheets upload handler
+  screenshot_capture.py          # Screenshot functionality
+  ui_helpers.py                  # Shared UI utilities and sanitization
+  constants.py                   # App-wide constants
+docs/                            # Full documentation
+tests/                           # Full test suite
 ```
 
 ## Documentation
