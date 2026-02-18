@@ -26,6 +26,39 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-18] - Pie Chart Card Layout v4: Fixed Label Width, Col 0 Protected from Compression
+
+**Search Keywords**: pie chart layout, fixed label width, columnconfigure weight, sticky EW removed, col 0 priority, non-maximized window, label compressed, single character label, create_card weight, grid overflow right, width=14 tk.Label
+
+**Context**:
+User screenshot showed Active/Break labels compressed to single characters ("A", "B") when window was not maximized. Root cause: `columnconfigure(0, weight=1)` caused col 0 to receive only the leftover space after col 1 (pie canvas, 120px fixed) claimed its minimum. With `weight=1`, col 0 was being shrunk to near-zero instead of being protected.
+
+**Root Cause Explained**:
+
+- `weight=1` on col 0 means: col 0 absorbs all excess space AND is the first to be compressed when space is short.
+- col 1 (pie canvas, `width=120`) has `weight=0` (default) so it holds its minimum size.
+- Result: in a narrow window each card gets ~189px, col 1 claims 120px + padding, col 0 gets ~60px → labels truncated.
+
+**Fix Applied**:
+
+- Removed `card_frame.columnconfigure(0, weight=1)` — both columns now use `weight=0` (default).
+- With `weight=0` on both: each column takes its **natural width** only. Neither can be compressed by the grid manager — the card frame simply overflows to the right. Since col 0 is on the **left**, it stays visible; col 1 (pie) is clipped first.
+- Added `width=14` to both labels — fixed character width ensures the colored box is always the same size regardless of window size or text content.
+- Changed `sticky="EW"` → `sticky="W"` on both labels — no longer stretch to fill the column.
+
+**Key Learning**:
+
+- `columnconfigure(weight=1)` gives a column BOTH the power to expand AND the obligation to compress when space is short — the OPPOSITE of what was needed.
+- `weight=0` on all grid columns = fixed natural sizes; parent overflow is clipped from the right. This is the correct pattern for "col 0 must always show".
+- `width=` on `tk.Label` is in **character units**, not pixels. `width=14` at Arial 14 bold ≈ 170px, enough for "Active: 1h 20m".
+- No test changes needed — tests check background/foreground/type, not grid options.
+
+**Files changed**:
+
+- `src/analysis_frame.py` — removed `columnconfigure(0, weight=1)`, added `width=14` to both labels, changed `sticky="EW"` to `sticky="W"` on both label grid calls
+
+---
+
 ### [2026-02-18] - Pie Chart Card Layout v3: Colored Box Labels, col 0 = controls, col 1 = pie
 
 **Search Keywords**: pie chart layout, colored box label, tk.Label bg color, active label green, break label amber, column 0 always visible, non-maximized window, OutlinedLabel removed, create_card layout, rowspan pie canvas, PIE_LABEL_WIDTH removed, PIE_LABEL_HEIGHT removed
@@ -34,11 +67,13 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 User reported: in a non-maximized window the cards were clipped — the pie chart and labels were cut off on the right. Outline text effect was also unwanted. Refactored card layout to put ALL controls in column 0 (always visible), pie chart in column 1 (safe to clip). Labels changed from `OutlinedLabel` canvas to plain `tk.Label` with a colored background box and black text.
 
 **Files changed**:
+
 - `src/constants.py` — removed `PIE_LABEL_WIDTH`, `PIE_LABEL_HEIGHT` (no longer needed)
 - `src/analysis_frame.py` — removed `PIE_LABEL_HEIGHT/WIDTH` from imports; removed `OutlinedLabel` class entirely; rewrote `create_card()`
 - `tests/test_analysis_pie_chart.py` — removed 9 OutlinedLabel/PIE_LABEL tests; added 6 new tk.Label tests; now 28 tests total
 
 **New layout in create_card()**:
+
 ```
 Col 0 (weight=1, always visible):
   Row 0: dropdown  (sticky="W")
@@ -48,10 +83,12 @@ Col 0 (weight=1, always visible):
 Col 1 (no weight, may clip on small windows):
   Rows 0–3: pie_canvas  (rowspan=4, padx=(8,0), sticky="NS")
 ```
+
 - `card_frame.columnconfigure(0, weight=1)` — col 0 expands; col 1 stays fixed width
 - `sticky="EW"` on labels so they stretch to fill the column width
 
 **Label design**:
+
 - `tk.Label` with `bg=COLOR_TRAY_ACTIVE` / `bg=COLOR_TRAY_BREAK`
 - `fg="black"`, `font=("Arial", 14, "bold")`
 - `relief=tk.SOLID, borderwidth=1` — creates the visible box border
@@ -59,6 +96,7 @@ Col 1 (no weight, may clip on small windows):
 - `anchor="w"` — text left-aligned within the box
 
 **What Worked** ✅:
+
 - `tk.Label` with `bg=` and `relief=tk.SOLID` is the simplest way to get a colored box — no subclass needed
 - `columnconfigure(0, weight=1)` ensures col 0 always fills available space; col 1 gets clipped first on narrow windows
 - `rowspan=4` on pie_canvas aligns it with all 4 rows in col 0
@@ -66,6 +104,7 @@ Col 1 (no weight, may clip on small windows):
 - `assertIn(fg, ("black", "#000000"))` pattern handles both representations of black
 
 **What Was Removed / What Didn't Work**:
+
 1. **OutlinedLabel** removed — outline effect (canvas with 4-offset text) was visually noisy and not requested going forward
 2. **PIE_LABEL_WIDTH / PIE_LABEL_HEIGHT** constants removed — they were only needed for the canvas-based OutlinedLabel sizing
 3. **Previous layout (v2)** had dropdown + labels in col 0 but button in col 0 with colspan 2, and pie in col 1 — the button spanning both columns caused layout issues on narrow windows

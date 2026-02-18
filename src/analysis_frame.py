@@ -461,10 +461,9 @@ class AnalysisFrame(ttk.Frame):
         card_frame = ttk.LabelFrame(parent, relief=tk.RIDGE, borderwidth=2, padding=10)
         frame_bg = get_frame_background()
 
-        # Col 0 holds all interactive/informational widgets so they remain
-        # visible when the window is narrower than fully maximised.
-        # Col 1 holds only the pie chart; it can be clipped without data loss.
-        card_frame.columnconfigure(0, weight=1)
+        # Col 0: all interactive/informational widgets — sized to natural width,
+        # never compressed. Col 1: pie chart only — clips first on narrow windows
+        # because both columns use weight=0 (default) and Tkinter overflows right.
 
         # Row 0, col 0: date range dropdown
         range_var = tk.StringVar(master=self.root, value=self.card_ranges[index])
@@ -483,7 +482,7 @@ class AnalysisFrame(ttk.Frame):
             ),
         )
 
-        # Row 1, col 0: active time — green box, black text
+        # Row 1, col 0: active time — green box, fixed width, black text
         active_label = tk.Label(
             card_frame,
             text="Active: --",
@@ -495,10 +494,11 @@ class AnalysisFrame(ttk.Frame):
             padx=8,
             pady=4,
             anchor="w",
+            width=14,
         )
-        active_label.grid(row=1, column=0, pady=(5, 2), sticky="EW")
+        active_label.grid(row=1, column=0, pady=(5, 2), sticky="W")
 
-        # Row 2, col 0: break/idle time — amber box, black text
+        # Row 2, col 0: break/idle time — amber box, fixed width, black text
         break_label = tk.Label(
             card_frame,
             text="Break: --",
@@ -510,8 +510,9 @@ class AnalysisFrame(ttk.Frame):
             padx=8,
             pady=4,
             anchor="w",
+            width=14,
         )
-        break_label.grid(row=2, column=0, pady=(2, 5), sticky="EW")
+        break_label.grid(row=2, column=0, pady=(2, 5), sticky="W")
 
         # Row 3, col 0: Show Timeline button
         select_btn = ttk.Button(
