@@ -131,6 +131,10 @@ Access settings to configure:
 | ----------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
 | ![Settings Spheres](docs/demo_screenshots/Settings%20Spheres.png) | ![Settings Shortcuts](docs/demo_screenshots/Settings%20Keyboard%20Shortcuts.png) | ![Settings Google Sheets](docs/demo_screenshots/Settings%20Google%20Sheets.png) |
 
+| Idle Detection                                                 | Break Actions                                                                   | Screenshot Settings                                                       | Data Export                                                                         |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| ![Settings Idle](docs/demo_screenshots/Settings%20Idle%20.png) | ![Settings Break Actions](docs/demo_screenshots/Settings%20Break%20Actions.png) | ![Settings Screenshots](docs/demo_screenshots/Settings%20Screenshots.png) | ![Settings Data Export](docs/demo_screenshots/Settings%20Total%20Data%20Export.png) |
+
 ## Data Storage
 
 - **Local**: All data is stored in `data.json`
@@ -200,7 +204,6 @@ tests/                       # Full test suite
 - [Screenshot Feature Guide](docs/SCREENSHOT_FEATURE.md) - Screenshot feature details
 - [System Tray Guide](docs/SYSTEM_TRAY_GUIDE.md) - Using the system tray icon
 - [Testing Guide](docs/TESTING_GUIDE.md) - Running tests
-- [Debugging Guide](docs/DEBUGGING_GUIDE.md) - Troubleshooting
 
 ## Requirements
 
