@@ -96,6 +96,8 @@ TRAY_ICON_OUTLINE_WIDTH = 2  # Circle outline thickness
 PIE_CHART_SIZE = 120  # Canvas width and height in pixels
 PIE_CHART_MARGIN = 6  # Gap between canvas edge and arc bounding box
 PIE_TEXT_MIN_PERCENT = 10  # Minimum slice size (%) to render percentage text inside
+PIE_LABEL_WIDTH = 200  # Width of each OutlinedLabel canvas (px)
+PIE_LABEL_HEIGHT = 30  # Height of each OutlinedLabel canvas (px)
 
 # =============================================================================
 # Default File Paths

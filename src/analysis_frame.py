@@ -19,8 +19,63 @@ from src.constants import (
     FONT_TIMER_SMALL,
     PIE_CHART_MARGIN,
     PIE_CHART_SIZE,
+    PIE_LABEL_HEIGHT,
+    PIE_LABEL_WIDTH,
     PIE_TEXT_MIN_PERCENT,
 )
+
+
+class OutlinedLabel(tk.Canvas):
+    """Canvas-based label that renders colored text with a 1px black outline.
+
+    Provides the same .config(text=...) / .configure(text=...) interface as
+    ttk.Label so it can replace it without changing call sites.
+
+    The outline is achieved by drawing the text four times offset by 1px in
+    each diagonal direction in black, then once more in the foreground color
+    centered on top.
+    """
+
+    _OUTLINE_OFFSETS = ((-1, -1), (1, -1), (-1, 1), (1, 1))
+
+    def __init__(self, parent, color, font, **kwargs):
+        super().__init__(parent, highlightthickness=0, **kwargs)
+        self._color = color
+        self._font = font
+        self._text = ""
+
+    def config(self, text=None, **kwargs):
+        """Update the displayed text and redraw, forwarding any other options."""
+        if text is not None:
+            self._text = text
+            self._redraw()
+        if kwargs:
+            super().config(**kwargs)
+
+    configure = config  # standard Tkinter alias
+
+    def _redraw(self):
+        """Clear canvas and redraw outlined text centered on the canvas."""
+        self.delete("all")
+        cx = int(self["width"]) // 2
+        cy = int(self["height"]) // 2
+        for dx, dy in self._OUTLINE_OFFSETS:
+            self.create_text(
+                cx + dx,
+                cy + dy,
+                text=self._text,
+                fill="black",
+                font=self._font,
+                anchor="center",
+            )
+        self.create_text(
+            cx,
+            cy,
+            text=self._text,
+            fill=self._color,
+            font=self._font,
+            anchor="center",
+        )
 
 
 def draw_pie_chart(canvas, active_secs, break_secs):
@@ -459,8 +514,9 @@ class AnalysisFrame(ttk.Frame):
     def create_card(self, parent, index):
         """Create a single analysis card"""
         card_frame = ttk.LabelFrame(parent, relief=tk.RIDGE, borderwidth=2, padding=10)
+        frame_bg = get_frame_background()
 
-        # Date range dropdown
+        # Row 0: date range dropdown spanning both columns
         range_var = tk.StringVar(master=self.root, value=self.card_ranges[index])
         range_dropdown = ttk.Combobox(
             card_frame,
@@ -469,7 +525,7 @@ class AnalysisFrame(ttk.Frame):
             state="readonly",
             width=15,
         )
-        range_dropdown.grid(row=0, column=0, pady=5)
+        range_dropdown.grid(row=0, column=0, columnspan=2, pady=5)
         range_dropdown.bind(
             "<<ComboboxSelected>>",
             lambda e, card_index=index: self.on_range_changed(
@@ -477,8 +533,31 @@ class AnalysisFrame(ttk.Frame):
             ),
         )
 
-        # Pie chart canvas — active (green) vs break/idle (amber)
-        frame_bg = get_frame_background()
+        # Row 1 col 0: stacked active + break labels with black outline
+        labels_frame = ttk.Frame(card_frame)
+        labels_frame.grid(row=1, column=0, pady=5, padx=(0, 8), sticky="NS")
+
+        active_label = OutlinedLabel(
+            labels_frame,
+            color=COLOR_TRAY_ACTIVE,
+            font=("Arial", 16, "bold"),
+            width=PIE_LABEL_WIDTH,
+            height=PIE_LABEL_HEIGHT,
+            bg=frame_bg,
+        )
+        active_label.pack(pady=4)
+
+        break_label = OutlinedLabel(
+            labels_frame,
+            color=COLOR_TRAY_BREAK,
+            font=("Arial", 16, "bold"),
+            width=PIE_LABEL_WIDTH,
+            height=PIE_LABEL_HEIGHT,
+            bg=frame_bg,
+        )
+        break_label.pack(pady=4)
+
+        # Row 1 col 1: pie chart canvas — active (green) vs break/idle (amber)
         pie_canvas = tk.Canvas(
             card_frame,
             width=PIE_CHART_SIZE,
@@ -486,33 +565,15 @@ class AnalysisFrame(ttk.Frame):
             bg=frame_bg,
             highlightthickness=0,
         )
-        pie_canvas.grid(row=1, column=0, pady=5)
+        pie_canvas.grid(row=1, column=1, pady=5)
 
-        # Active time label — green matches active pie slice (implicit key)
-        active_label = ttk.Label(
-            card_frame,
-            text="Active: --",
-            font=("Arial", 14),
-            foreground=COLOR_TRAY_ACTIVE,
-        )
-        active_label.grid(row=2, column=0, pady=5)
-
-        # Break time label — amber matches break/idle pie slice (implicit key)
-        break_label = ttk.Label(
-            card_frame,
-            text="Break: --",
-            font=("Arial", 14),
-            foreground=COLOR_TRAY_BREAK,
-        )
-        break_label.grid(row=3, column=0, pady=5)
-
-        # Select button
+        # Row 2: Show Timeline button spanning both columns
         select_btn = ttk.Button(
             card_frame,
             text="Show Timeline",
             command=lambda card_index=index: self.select_card(card_index),
         )
-        select_btn.grid(row=4, column=0, pady=10)
+        select_btn.grid(row=2, column=0, columnspan=2, pady=10)
 
         # Store references
         card_frame.range_var = range_var

@@ -26,6 +26,63 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-17] - Pie Chart Layout Refactor: Labels Left, Pie Right + Outlined Text
+
+**Search Keywords**: pie chart layout, labels left pie right, side by side card layout, OutlinedLabel, outlined text canvas, black outline text, columnspan dropdown button, create_card layout, PIE_LABEL_WIDTH, PIE_LABEL_HEIGHT, text stroke effect, configure alias, itemcget text fill
+
+**Context**:
+Refactored analysis frame card layout so the Active/Break labels sit on the LEFT (column 0) and the pie chart sits on the RIGHT (column 1). Labels were also changed from `ttk.Label` to a new `OutlinedLabel(tk.Canvas)` widget that draws colored text with a 1px black outline (for readability on gray backgrounds). Font increased to Arial 16 bold.
+
+**Files changed**:
+
+- `src/constants.py` — added `PIE_LABEL_WIDTH = 200`, `PIE_LABEL_HEIGHT = 30`
+- `src/analysis_frame.py` — added `PIE_LABEL_HEIGHT`, `PIE_LABEL_WIDTH` to imports; new `OutlinedLabel` class (before `draw_pie_chart`); rewrote `create_card()` layout
+- `tests/test_analysis_pie_chart.py` — added 7 new tests; replaced foreground `.cget()` tests with `itemcget()` canvas text fill tests; now 31 tests total
+
+**What Worked** ✅:
+
+**OutlinedLabel pattern** (module-level class before `AnalysisFrame`):
+
+- Inherits `tk.Canvas`, `highlightthickness=0` to remove default border
+- `config(text=..., **kwargs)` method: sets `_text`, calls `_redraw()`, forwards other kwargs to `super().config()`
+- `configure = config` class-level alias — required for Tkinter compatibility
+- `_redraw()`: calls `canvas.delete("all")`, draws text 4× offset by ±1px in black, then once in `_color` centered on top
+- `_OUTLINE_OFFSETS = ((-1,-1), (1,-1), (-1,1), (1,1))` — 4 diagonal offsets → clean thin outline
+
+**Layout in create_card()**:
+
+```
+Row 0: dropdown (column=0, columnspan=2)
+Row 1: labels_frame (column=0) | pie_canvas (column=1)
+Row 2: button (column=0, columnspan=2)
+```
+
+- `labels_frame = ttk.Frame(card_frame)`, grid row=1 col=0, `sticky="NS"`
+- `active_label` and `break_label` are `OutlinedLabel` instances, `pack()` inside labels_frame
+- `pie_canvas` still at row=1, now col=1
+- Dropdown and button use `columnspan=2` to span both columns
+
+**Testing OutlinedLabel**:
+
+- Cannot use `.cget("foreground")` — `tk.Canvas` doesn't support that option
+- Instead: `card.active_label.find_all()` → filter `type == "text"` → `itemcget(last_item, "fill")` → last text item is the colored one
+- Test for 5 text items total: 4 black outline offsets + 1 colored foreground → `len(text_items) == 5`
+- Test label canvas size: `int(card.active_label["width"]) == PIE_LABEL_WIDTH`
+
+**What Didn't Work / Key Learnings**:
+
+1. **`ttk.Label` doesn't support text outline** — must use `tk.Canvas` with multi-offset text drawing trick. The 4-corner diagonal offset approach (+/- 1px in both axes) is the standard Tkinter technique for an outline effect.
+
+2. **`configure = config` must be a class-level assignment** — assigning it inside `__init__` won't work because Tkinter internally calls `self.configure(...)` during widget initialization before `__init__` body fully runs.
+
+3. **`tk.Canvas.config()` shadows our override** — calling `super().config(**kwargs)` correctly forwards canvas-specific options (like `bg`) while our override handles `text=`.
+
+4. **`_text = ""` initial state** — `_redraw()` is not called until `.config(text=...)` is first called (from `update_card()` → `refresh_all()`). Canvas is blank until then. Tests that check text items must ensure `refresh_all()` has run (it does automatically in `AnalysisFrame.__init__` → `create_widgets()`).
+
+5. **No existing tests broke** — previous foreground tests used `.cget("foreground")` which would now error on `tk.Canvas`. Replaced with `itemcget(last_text_item, "fill")` pattern.
+
+---
+
 ### [2026-02-17] - Pie Chart Added to Analysis Frame Cards
 
 **Search Keywords**: pie chart, draw_pie_chart, analysis_frame cards, active break pie, PIE_CHART_SIZE, PIE_CHART_MARGIN, PIE_TEXT_MIN_PERCENT, COLOR_TRAY_ACTIVE, COLOR_TRAY_BREAK, tray colors, implicit key, percentage in slice, arc create_arc, PIESLICE, math.cos math.sin, Tcl_Obj cget foreground
