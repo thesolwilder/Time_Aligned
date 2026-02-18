@@ -26,6 +26,95 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-18] - Analysis Calculation Bug Fix: Multi-Project Period Duration Splitting
+
+**Search Keywords**: calculate_totals, project_filter, multi-project period, spinbox split, percentage allocation, projects list, duration split, primary_project, secondary_project, project_dict duration, partial duration, analysis frame filtering, total wrong, 50 percent
+
+**Context**:
+User reported bug: A session with one 10s active period split 50/50 between Project A and Project B showed 10s for BOTH projects when filtered individually in the analysis frame. Correct behavior: each project should show only its allocated 5s.
+
+**Root Cause**:
+In `calculate_totals()` (`src/analysis_frame.py`), multi-project periods store each project's allocated duration inside the `projects` list (`period["projects"][i]["duration"]`). The old code correctly identified whether a project matched the filter, but then always added the **full period duration** (`period.get("duration", 0)`) regardless:
+
+```python
+# BUG: found the project in the multi-project list but still adds full period duration
+found = False
+for project_dict in period.get("projects", []):
+    if project_dict.get("name") == project_filter:
+        found = True
+        break
+if not found:
+    continue
+
+total_active += period.get("duration", 0)  # ← adds 10s, not 5s!
+```
+
+**Data Structure (multi-project period)**:
+```json
+{
+  "duration": 10,
+  "projects": [
+    {"name": "Project A", "percentage": 50, "duration": 5, "project_primary": true},
+    {"name": "Project B", "percentage": 50, "duration": 5, "project_primary": false}
+  ]
+}
+```
+
+**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+
+Rewrote the active-period accumulation block with three distinct cases:
+
+```python
+for period in session_data.get("active", []):
+    if project_filter == "All Projects":
+        total_active += period.get("duration", 0)
+        continue
+
+    # Single-project period: direct "project" field matches filter
+    period_project = period.get("project", "")
+    if period_project == project_filter:
+        total_active += period.get("duration", 0)
+        continue
+
+    # Multi-project period: add only this project's allocated duration
+    for project_dict in period.get("projects", []):
+        if project_dict.get("name") == project_filter:
+            total_active += project_dict.get("duration", 0)
+            break
+```
+
+**TDD Process**:
+1. Wrote failing test `test_project_filter_multi_project_period_allocates_partial_duration` in `tests/test_analysis_timeline.py` → `TestAnalysisFrameProjectFiltering` class.
+2. Confirmed RED: Project A returned 10s, expected 5s.
+3. Applied fix.
+4. Confirmed GREEN: Project A = 5s, Project B = 5s, All Projects = 10s.
+
+**Test Data Pattern** (for multi-project period tests):
+```python
+"active": [
+    {
+        "duration": 10,
+        "projects": [
+            {"name": "Project A", "percentage": 50, "duration": 5, "project_primary": True},
+            {"name": "Project B", "percentage": 50, "duration": 5, "project_primary": False},
+        ],
+    }
+]
+```
+
+**Key Learnings**:
+1. Multi-project periods store per-project duration in `period["projects"][i]["duration"]` — NOT in `period["duration"]`.
+2. `period["duration"]` = total period time; `project_dict["duration"]` = this project's share.
+3. Old code found the matching project dict but then fell through to `period.get("duration")` — the continue/break was never placed correctly.
+4. New pattern uses `continue` after each case so only ONE branch executes per period.
+5. Backward compatible: single-project periods (no `projects` list, only `"project"` field) still use full duration.
+
+**Files Changed**:
+- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~15 lines replaced with ~16 cleaner lines)
+- `tests/test_analysis_timeline.py` — added `test_project_filter_multi_project_period_allocates_partial_duration` to `TestAnalysisFrameProjectFiltering` class
+
+---
+
 ### [2026-02-18] - Pie Chart Card Layout v4: Fixed Label Width, Col 0 Protected from Compression
 
 **Search Keywords**: pie chart layout, fixed label width, columnconfigure weight, sticky EW removed, col 0 priority, non-maximized window, label compressed, single character label, create_card weight, grid overflow right, width=14 tk.Label

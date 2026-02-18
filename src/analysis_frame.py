@@ -900,20 +900,21 @@ class AnalysisFrame(ttk.Frame):
 
             # Calculate active time
             for period in session_data.get("active", []):
-                # Check project filter
-                if project_filter != "All Projects":
-                    period_project = period.get("project", "")
-                    if period_project != project_filter:
-                        # Check if it's in projects list (for multi-project periods)
-                        found = False
-                        for project_dict in period.get("projects", []):
-                            if project_dict.get("name") == project_filter:
-                                found = True
-                                break
-                        if not found:
-                            continue
+                if project_filter == "All Projects":
+                    total_active += period.get("duration", 0)
+                    continue
 
-                total_active += period.get("duration", 0)
+                # Single-project period: direct "project" field matches filter
+                period_project = period.get("project", "")
+                if period_project == project_filter:
+                    total_active += period.get("duration", 0)
+                    continue
+
+                # Multi-project period: add only this project's allocated duration
+                for project_dict in period.get("projects", []):
+                    if project_dict.get("name") == project_filter:
+                        total_active += project_dict.get("duration", 0)
+                        break
 
             # Calculate break time (only for sessions with at least one matching active period)
             if session_has_matching_project:
