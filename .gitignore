@@ -29,7 +29,11 @@ tests/test_config.json
 *.pkl
 *.pickle
 *.bak
+*.backup_*
 backups/
+
+# Generated test output
+tests/sample_export_with_secondary.csv
 
 # Coverage reports
 .coverage

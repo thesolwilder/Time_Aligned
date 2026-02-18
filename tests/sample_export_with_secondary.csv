@@ -1,5 +1,0 @@
-session_id,date,sphere,session_start_time,session_end_time,session_total_duration,session_active_duration,session_break_duration,type,project,secondary_project,secondary_comment,secondary_percentage,activity_start,activity_end,activity_duration,activity_comment,break_action,secondary_action,active_notes,break_notes,idle_notes,session_notes
-2026-01-28_1000000000,2026-01-28,Coding,10:00:00,11:10:00,4200.0,3600,600,active,learning_to_code,documentation,Writing docs for the project,30,10:00:00,11:00:00,3600,,,,Very productive session,Needed the stretch,,Good progress on the Python project
-2026-01-28_1000000000,2026-01-28,Coding,10:00:00,11:10:00,4200.0,3600,600,break,,,Some stretching exercises,40,11:00:00,,600,,bathroom,stretching,Very productive session,Needed the stretch,,Good progress on the Python project
-2026-01-28_2000000000,2026-01-28,Personal,14:00:00,15:05:00,3900.0,3600,300,active,reading,,,,14:00:00,15:00:00,3600,Reading a novel,,,,,,Relaxing afternoon
-2026-01-28_2000000000,2026-01-28,Personal,14:00:00,15:05:00,3900.0,3600,300,break,,,,,15:00:00,,300,Quick snack break,snack,,,,,Relaxing afternoon
