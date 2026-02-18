@@ -1,24 +1,47 @@
 # Time Aligned - Time Tracker
 
-A comprehensive time tracking application with advanced features for tracking work sessions, breaks, and productivity.
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python) ![tkinter](https://img.shields.io/badge/GUI-tkinter-informational) ![Google Sheets](https://img.shields.io/badge/Integration-Google%20Sheets-34A853?logo=google-sheets) ![pytest](https://img.shields.io/badge/Tests-pytest%2083%25%20coverage-brightgreen?logo=pytest) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey)
+
+A comprehensive time tracking desktop application built with Python — featuring session tracking, idle detection, Google Sheets integration, screenshot capture, and a full analysis suite.
+
+| Home                                    | Active Session                                               |
+| --------------------------------------- | ------------------------------------------------------------ |
+| ![Home](docs/demo_screenshots/Home.png) | ![Active Session](docs/demo_screenshots/Start%20Session.png) |
 
 ## Features
 
 ### Core Tracking
 
 - **Session Tracking**: Start, pause, and end work sessions
+- **Editable History**: Edit past sessions — update sphere, project, action, and other fields at any time
+- **Secondary Projects**: Tag any period (active, break, or idle) with a secondary project/action and a time percentage for more accurate tracking
 - **Break Management**: Track breaks separately from active work time
-- **Idle Detection**: Automatically detect when you're away from your computer
+- **Idle Detection**: Automatically detect when you're away from your computer — optional, with a configurable threshold; automatically starts a break after a customizable idle duration
 - **Multiple Spheres & Projects**: Organize your work into categories and projects
+- **Note Taking**: Add notes on both individual periods and overall sessions
+- **Global Hotkeys**: Hide the window to the system tray and use hotkeys to start, take a break, or end a session — operate fully headless
+- **Auto Backup**: Continuously saves to the data file during a session; creates a backup JSON file when deleting a session
+
+### Customizable Settings
+
+- Manage, archive, and set defaults for spheres, projects, and break actions — auto-populated in session and analysis frames
+- Record goals for projects and notes for actions
+- Configure idle detection thresholds
+- Opt in for screenshot capture
+- Connect to Google Sheets by extracting your spreadsheet ID and credentials for automatic upload
+- Export all data to CSV for local storage
 
 ### Screenshot Capture
 
 - Optional screenshot capture during sessions
-- Captures on window focus changes
+- Captures on window focus changes and at configurable time intervals
 - Helps you remember what you were working on
-- Configurable capture intervals
 
-### Google Sheets Integration ✨ NEW
+| Screenshot During Session                                                     | Captured Screenshot Folders                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ![Screenshot Button](docs/demo_screenshots/Session%20Screenshot%20Button.png) | ![Screenshot Folders](docs/demo_screenshots/Screenshot%20Folders.png) |
+
+### Google Sheets Integration
 
 - Automatically upload session data to Google Sheets
 - All sessions append to the same spreadsheet
@@ -30,9 +53,24 @@ A comprehensive time tracking application with advanced features for tracking wo
 - View session history and statistics
 - Analyze time spent across different projects
 - Review screenshots from past sessions
-- Export data for further analysis
-- **Dynamic text wrapping** - All comments display with proper word wrapping
-- **Paginated loading** - Loads 50 periods at a time for optimal performance
+- **Sortable columns** — Sort session history by any header
+- Export filtered data for focused analysis — narrow down by date, sphere, project, or action
+- **Dynamic text wrapping** — All comments display with proper word wrapping
+- **Paginated loading** — Loads 50 periods at a time for optimal performance
+- **Efficiency pie chart** — Visual breakdown of active vs break time for the current filter
+
+| Analysis Overview                                             | Filtered with Secondary Data                                          |
+| ------------------------------------------------------------- | --------------------------------------------------------------------- |
+| ![Analysis Frame](docs/demo_screenshots/Analysis%20Frame.png) | ![Analysis Secondary](docs/demo_screenshots/Analysis%20Secondary.png) |
+
+### Security Measures
+
+- **Input sanitization** — All sphere, project, and action names are sanitized to strip dangerous characters (path traversal, injection attempts, control characters)
+- **Path traversal prevention** — Folder paths are validated to block directory traversal patterns (`../`, `%APPDATA%`, `${HOME}`, etc.)
+- **Formula injection prevention** — Data escaped before Google Sheets upload to prevent spreadsheet formula execution
+- **Google API input validation** — Spreadsheet IDs and sheet names are validated before any API call; malicious values are rejected
+- **Credential file path validation** — Credential file paths are checked for traversal attempts before use
+- **Sensitive files protected** — `credentials.json`, `token.pickle`, `settings.json`, and `data.json` are gitignored and never committed
 
 ## Installation
 
@@ -50,7 +88,7 @@ A comprehensive time tracking application with advanced features for tracking wo
 
 To enable automatic upload to Google Sheets:
 
-1. Follow the detailed setup guide in [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md)
+1. Follow the detailed setup guide in [GOOGLE_SHEETS_SETUP.md](docs/GOOGLE_SHEETS_SETUP.md)
 2. Download credentials from Google Cloud Console
 3. Configure settings in the app
 4. Start tracking and your data will automatically upload!
@@ -59,9 +97,8 @@ To enable automatic upload to Google Sheets:
 
 ### Starting a Session
 
-1. Select a sphere (category) and project
-2. Click "Start Session"
-3. Work on your task
+1. Click "Start Session"
+2. Work on your task
 
 ### Taking Breaks
 
@@ -71,10 +108,14 @@ To enable automatic upload to Google Sheets:
 
 ### Ending a Session
 
-1. Click "End Session"
+1. Click "End Session" — defaults are automatically applied to the session data
 2. Review and label your activities
 3. Add notes about what you accomplished
-4. Data automatically saves and uploads (if Google Sheets is enabled)
+4. Click "Save" to confirm changes and trigger a Google Sheets upload (if enabled)
+
+| Session Completion                                                | Secondary Project Tagging                                           |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------- |
+| ![Session Comments](docs/demo_screenshots/Session%20Comments.png) | ![Secondary Project](docs/demo_screenshots/Session%20Secondary.png) |
 
 ### Settings
 
@@ -85,6 +126,10 @@ Access settings to configure:
 - Google Sheets integration
 - Spheres and projects
 - Break actions
+
+| Spheres & Projects                                                | Keyboard Shortcuts                                                               | Google Sheets                                                                   |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| ![Settings Spheres](docs/demo_screenshots/Settings%20Spheres.png) | ![Settings Shortcuts](docs/demo_screenshots/Settings%20Keyboard%20Shortcuts.png) | ![Settings Google Sheets](docs/demo_screenshots/Settings%20Google%20Sheets.png) |
 
 ## Data Storage
 
@@ -115,13 +160,16 @@ This is a deliberate engineering decision prioritizing **data quality and usabil
 
 ### Code Design Philosophy
 
-This codebase prioritizes **working, tested code** over dogmatic adherence to arbitrary metrics:
+This codebase values **readability, maintainability, and test coverage**. Architecture decisions prioritise clear, linear logic for sequential workflows and pragmatic refactoring — improving code where it has meaningful impact rather than for its own sake.
 
-- **Function length**: Some methods (like `export_to_csv()` at 280 lines) are intentionally longer when they handle sequential workflows with similar-but-different logic. Linear structure can be clearer than jumping between many small helper methods.
-- **Pragmatic refactoring**: Code with full test coverage and clear logic is left as-is rather than refactored for the sake of refactoring. Development effort focuses on improvements with meaningful ROI.
-- **"Do better next time"**: Rather than gold-plating existing working code, write smaller functions going forward.
+## Roadmap
 
-This approach values **readability, maintainability, and test coverage** over rigid adherence to style guide maximums.
+- 🔧 **Timeline redesign** _(priority)_ — Replace tkinter-based timeline with a more capable technology to overcome widget limitations
+- 🎨 **UI refresh** — Update the front-end visual design
+- 🎯 **Goal tracking** — Add goal tracking within the analysis frame
+- 🤖 **LLM analysis** _(optional)_ — AI-assisted analysis of session data
+- 👤 **Multi-user support** — Different user logins
+- 📱 **Mobile-friendly** — Cross-platform / mobile support
 
 ## Privacy & Security
 
@@ -132,22 +180,27 @@ This approach values **readability, maintainability, and test coverage** over ri
 
 ## Files Overview
 
-- `time_tracker.py` - Main application
-- `settings_frame.py` - Settings UI
-- `analysis_frame.py` - Analysis and reporting
-- `frames/completion_frame.py` - Session completion interface
-- `google_sheets_integration.py` - Google Sheets upload handler
-- `screenshot_capture.py` - Screenshot functionality
-- `settings.json` - User settings
-- `data.json` - Session data database
+```
+time_tracker.py              # Application entry point
+src/
+  analysis_frame.py          # Analysis and reporting UI
+  completion_frame.py        # Session completion interface
+  settings_frame.py          # Settings UI
+  google_sheets_integration.py  # Google Sheets upload handler
+  screenshot_capture.py      # Screenshot functionality
+  ui_helpers.py              # Shared UI utilities and sanitization
+  constants.py               # App-wide constants
+docs/                        # Full documentation
+tests/                       # Full test suite
+```
 
 ## Documentation
 
-- [Google Sheets Setup Guide](GOOGLE_SHEETS_SETUP.md) - Complete setup instructions
-- [Screenshot Feature Guide](SCREENSHOT_FEATURE.md) - Screenshot feature details
-- [System Tray Guide](SYSTEM_TRAY_GUIDE.md) - Using the system tray icon
-- [Testing Guide](TESTING_GUIDE.md) - Running tests
-- [Debugging Guide](DEBUGGING_GUIDE.md) - Troubleshooting
+- [Google Sheets Setup Guide](docs/GOOGLE_SHEETS_SETUP.md) - Complete setup instructions
+- [Screenshot Feature Guide](docs/SCREENSHOT_FEATURE.md) - Screenshot feature details
+- [System Tray Guide](docs/SYSTEM_TRAY_GUIDE.md) - Using the system tray icon
+- [Testing Guide](docs/TESTING_GUIDE.md) - Running tests
+- [Debugging Guide](docs/DEBUGGING_GUIDE.md) - Troubleshooting
 
 ## Requirements
 
@@ -160,17 +213,22 @@ This approach values **readability, maintainability, and test coverage** over ri
 Contributions are welcome! Please see:
 
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development standards and testing procedures
-- **[docs/AGENT_STANDING_ORDERS.md](docs/AGENT_STANDING_ORDERS.md)** - Guide for AI-assisted development
 
 This project follows **Test-Driven Development (TDD)**:
 
 1. Import test → 2. Unit tests → 3. Integration tests → 4. E2E tests
 
-All contributions must include appropriate tests. See DEVELOPMENT.md for details.
+The test suite has **83% code coverage** across the core application. All contributions must include appropriate tests. See DEVELOPMENT.md for details.
 
 ## License
 
-[Add your license information here]
+This project is licensed under the **Creative Commons Attribution-NonCommercial 4.0 International (CC BY-NC 4.0)** license.
+
+- ✅ Free to use for personal, non-commercial purposes
+- ✅ Free to modify and share with attribution
+- ❌ Commercial use is not permitted without explicit written permission
+
+See the [LICENSE](LICENSE) file for full details, or visit [creativecommons.org/licenses/by-nc/4.0](https://creativecommons.org/licenses/by-nc/4.0/).
 
 ## Changelog
 
@@ -179,4 +237,10 @@ All contributions must include appropriate tests. See DEVELOPMENT.md for details
 - ✨ Added Google Sheets integration for automatic session upload
 - 📊 Sessions automatically append to the same spreadsheet
 - 🔐 Secure OAuth 2.0 authentication with Google
-- 📝 Comprehensive setup documentation
+- 🏷️ Secondary project tagging — assign a secondary project/action and time percentage to any period
+- ✏️ Editable history — update sphere, project, action, and fields on past sessions
+- ⌨️ Global hotkeys — start, break, and end sessions without opening the window; system tray support for headless operation
+- 💾 Auto backup — continuous saves during sessions; backup file created on session deletion
+- 📁 CSV export — download all session data for local storage and analysis
+- 📈 Analysis improvements — sortable columns, active vs break pie chart, paginated loading, and filter-scoped exports
+- 🛡️ Security hardening — input sanitization, path traversal prevention, and formula injection protection
