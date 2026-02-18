@@ -26,6 +26,60 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-17] - Pie Chart Added to Analysis Frame Cards
+
+**Search Keywords**: pie chart, draw_pie_chart, analysis_frame cards, active break pie, PIE_CHART_SIZE, PIE_CHART_MARGIN, PIE_TEXT_MIN_PERCENT, COLOR_TRAY_ACTIVE, COLOR_TRAY_BREAK, tray colors, implicit key, percentage in slice, arc create_arc, PIESLICE, math.cos math.sin, Tcl_Obj cget foreground
+
+**Context**:
+Added a pure-Tkinter two-section pie chart to each of the 3 analysis summary cards.
+Active (green) vs Break/Idle (amber) — colors matching the system tray icons.
+Active/Break text labels use the same colors as their pie slice (implicit key — no legend needed).
+Percentage labels are rendered inside each slice when the slice is >= 10%.
+
+**Files changed**:
+
+- `src/constants.py` — added `PIE_CHART_SIZE`, `PIE_CHART_MARGIN`, `PIE_TEXT_MIN_PERCENT`
+- `src/analysis_frame.py` — added `import math`, new constants to import, `draw_pie_chart()` module-level function, modified `create_card()` and `update_card()`
+- `tests/test_analysis_pie_chart.py` — new TDD test file (24 tests: import, unit, integration)
+
+**What Worked** ✅:
+
+**TDD approach — write tests first, then implement:**
+
+1. Created `tests/test_analysis_pie_chart.py` first — all tests errored with `ImportError` (expected RED phase).
+2. Added constants to `src/constants.py`.
+3. Added `draw_pie_chart()` function before `AnalysisFrame` class (module-level, not a method) — allows independent import for testing.
+4. Modified `create_card()`: added `tk.Canvas` at row=1, shifted active_label to row=2, break_label to row=3, button to row=4. Added `foreground=COLOR_TRAY_ACTIVE/COLOR_TRAY_BREAK` to labels.
+5. Modified `update_card()`: added `draw_pie_chart(card.pie_canvas, active_time, break_time)` call.
+6. All 24 tests pass GREEN.
+
+**Pie chart design details**:
+
+- Canvas: `PIE_CHART_SIZE=120` px, `PIE_CHART_MARGIN=6` px, `highlightthickness=0`
+- Canvas `bg=get_frame_background()` to blend with ttk.LabelFrame background
+- Starts at 12 o'clock (`start=90`), clockwise via negative `extent`
+- Full-circle arcs use `extent=359.9` (not 360 — Tkinter renders 360° as nothing)
+- Text radius = 55% of arc radius, placed at slice midpoint via `math.cos/sin`
+- `PIE_TEXT_MIN_PERCENT=10` suppresses text for very thin slices
+
+**What Didn't Work / Key Learnings**:
+
+1. **`ttk.Label.cget("foreground")` returns `_tkinter.Tcl_Obj` on Python 3.13**, not a string.
+   - Fix: wrap in `str()` → `str(label.cget("foreground")).lower()`
+   - This affects any test that reads back ttk widget color options as strings.
+
+2. **`create_arc()` with `extent=360` renders nothing** — Tkinter special-cases a full 360° arc as "no arc". Always use `359.9` for full circles.
+
+3. **Tkinter angle convention**: `start` is degrees counterclockwise from 3 o'clock (east). To start at 12 o'clock use `start=90`. Negative `extent` = clockwise direction.
+
+4. **`draw_pie_chart` as module-level function** (not a method): allows unit testing without creating a full `AnalysisFrame` instance. Import as `from src.analysis_frame import draw_pie_chart`.
+
+5. **No existing tests broke**: no test in the suite referenced card widget structure (row positions, widget types inside cards). Adding the pie canvas row was safe.
+
+6. **Colors chosen**: `COLOR_TRAY_ACTIVE = "#4CAF50"` (green) and `COLOR_TRAY_BREAK = "#FFC107"` (amber) — these match the system tray icons exactly.
+
+---
+
 ### [2026-02-17] - Integration Test for Completion Frame Rename Bug (Test Only - No Fix Yet)
 
 **Search Keywords**: completion_frame rename bug, TclError combobox set None, default_action_menu, default_break_action stale, renamed settings crash, get_active_break_actions None, test_completion_frame_rename_bug

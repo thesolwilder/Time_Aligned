@@ -1,3 +1,4 @@
+import math
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
 import json
@@ -10,11 +11,171 @@ from src.constants import (
     COLOR_BREAK_LIGHT_ORANGE,
     COLOR_GRAY_BACKGROUND,
     COLOR_LINK_BLUE,
+    COLOR_TRAY_ACTIVE,
+    COLOR_TRAY_BREAK,
     FONT_BODY,
     FONT_HEADING,
     FONT_LINK,
     FONT_TIMER_SMALL,
+    PIE_CHART_MARGIN,
+    PIE_CHART_SIZE,
+    PIE_TEXT_MIN_PERCENT,
 )
+
+
+def draw_pie_chart(canvas, active_secs, break_secs):
+    """Draw a two-section pie chart on a tk.Canvas showing active vs break/idle.
+
+    Active slice uses COLOR_TRAY_ACTIVE (green); break/idle uses COLOR_TRAY_BREAK
+    (amber). Percentage labels are rendered inside each slice when the slice is
+    >= PIE_TEXT_MIN_PERCENT percent. If both values are zero, a grey 'No data'
+    placeholder circle is drawn instead.
+
+    The chart starts at 12 o'clock and proceeds clockwise so the active (usually
+    larger) slice fills from the top.
+
+    Args:
+        canvas: tk.Canvas widget to draw on (must have width and height set).
+        active_secs: Total active time in seconds (>= 0).
+        break_secs: Total break/idle time in seconds (>= 0).
+    """
+    canvas.delete("all")
+    size = int(canvas["width"])
+    margin = PIE_CHART_MARGIN
+    x0, y0 = margin, margin
+    x1, y1 = size - margin, size - margin
+    cx = size / 2
+    cy = size / 2
+    # Radius used for placing percentage text at 55% of the arc radius
+    text_radius = (size - 2 * margin) / 2 * 0.55
+
+    total = active_secs + break_secs
+
+    if total == 0:
+        canvas.create_arc(
+            x0,
+            y0,
+            x1,
+            y1,
+            start=0,
+            extent=359.9,
+            fill="#BDBDBD",
+            outline="",
+            style=tk.PIESLICE,
+        )
+        canvas.create_text(
+            cx,
+            cy,
+            text="No data",
+            fill="#FFFFFF",
+            font=("Arial", 9, "bold"),
+        )
+        return
+
+    active_frac = active_secs / total
+    break_frac = break_secs / total
+    active_pct = round(active_frac * 100)
+    break_pct = 100 - active_pct
+
+    # --- Full-circle edge cases ---
+    if break_secs == 0:
+        canvas.create_arc(
+            x0,
+            y0,
+            x1,
+            y1,
+            start=0,
+            extent=359.9,
+            fill=COLOR_TRAY_ACTIVE,
+            outline="",
+            style=tk.PIESLICE,
+        )
+        canvas.create_text(
+            cx,
+            cy,
+            text="100%",
+            fill="#FFFFFF",
+            font=("Arial", 9, "bold"),
+        )
+        return
+
+    if active_secs == 0:
+        canvas.create_arc(
+            x0,
+            y0,
+            x1,
+            y1,
+            start=0,
+            extent=359.9,
+            fill=COLOR_TRAY_BREAK,
+            outline="",
+            style=tk.PIESLICE,
+        )
+        canvas.create_text(
+            cx,
+            cy,
+            text="100%",
+            fill="#FFFFFF",
+            font=("Arial", 9, "bold"),
+        )
+        return
+
+    # --- Two-section chart ---
+    # Angles: Tkinter measures counterclockwise from 3 o'clock.
+    # start=90 places the origin at 12 o'clock; negative extent = clockwise.
+    start_angle = 90
+    active_extent = -(active_frac * 360)
+    break_start = start_angle + active_extent
+    break_extent = -(break_frac * 360)
+
+    canvas.create_arc(
+        x0,
+        y0,
+        x1,
+        y1,
+        start=start_angle,
+        extent=active_extent,
+        fill=COLOR_TRAY_ACTIVE,
+        outline="",
+        style=tk.PIESLICE,
+    )
+    canvas.create_arc(
+        x0,
+        y0,
+        x1,
+        y1,
+        start=break_start,
+        extent=break_extent,
+        fill=COLOR_TRAY_BREAK,
+        outline="",
+        style=tk.PIESLICE,
+    )
+
+    # --- Percentage labels at midpoint of each slice ---
+    active_mid_rad = math.radians(start_angle + active_extent / 2)
+    break_mid_rad = math.radians(break_start + break_extent / 2)
+
+    if active_pct >= PIE_TEXT_MIN_PERCENT:
+        ax = cx + text_radius * math.cos(active_mid_rad)
+        ay = cy - text_radius * math.sin(active_mid_rad)
+        canvas.create_text(
+            ax,
+            ay,
+            text=f"{active_pct}%",
+            fill="#FFFFFF",
+            font=("Arial", 9, "bold"),
+        )
+
+    if break_pct >= PIE_TEXT_MIN_PERCENT:
+        bx = cx + text_radius * math.cos(break_mid_rad)
+        by = cy - text_radius * math.sin(break_mid_rad)
+        canvas.create_text(
+            bx,
+            by,
+            text=f"{break_pct}%",
+            fill="#FFFFFF",
+            font=("Arial", 9, "bold"),
+        )
 
 
 class AnalysisFrame(ttk.Frame):
@@ -146,7 +307,9 @@ class AnalysisFrame(ttk.Frame):
 
         # Apply header font style to filter comboboxes
         filter_combo_style = ttk.Style()
-        filter_combo_style.configure("Filter.TCombobox", font=FONT_HEADING, padding=[4, 4])
+        filter_combo_style.configure(
+            "Filter.TCombobox", font=FONT_HEADING, padding=[4, 4]
+        )
         filter_combo_style.configure("Filter.TRadiobutton", font=FONT_BODY)
 
         # Sphere label and dropdown
@@ -314,13 +477,34 @@ class AnalysisFrame(ttk.Frame):
             ),
         )
 
-        # Active time label
-        active_label = ttk.Label(card_frame, text="Active: --", font=("Arial", 14))
-        active_label.grid(row=1, column=0, pady=5)
+        # Pie chart canvas — active (green) vs break/idle (amber)
+        frame_bg = get_frame_background()
+        pie_canvas = tk.Canvas(
+            card_frame,
+            width=PIE_CHART_SIZE,
+            height=PIE_CHART_SIZE,
+            bg=frame_bg,
+            highlightthickness=0,
+        )
+        pie_canvas.grid(row=1, column=0, pady=5)
 
-        # Break time label
-        break_label = ttk.Label(card_frame, text="Break: --", font=("Arial", 14))
-        break_label.grid(row=2, column=0, pady=5)
+        # Active time label — green matches active pie slice (implicit key)
+        active_label = ttk.Label(
+            card_frame,
+            text="Active: --",
+            font=("Arial", 14),
+            foreground=COLOR_TRAY_ACTIVE,
+        )
+        active_label.grid(row=2, column=0, pady=5)
+
+        # Break time label — amber matches break/idle pie slice (implicit key)
+        break_label = ttk.Label(
+            card_frame,
+            text="Break: --",
+            font=("Arial", 14),
+            foreground=COLOR_TRAY_BREAK,
+        )
+        break_label.grid(row=3, column=0, pady=5)
 
         # Select button
         select_btn = ttk.Button(
@@ -328,10 +512,11 @@ class AnalysisFrame(ttk.Frame):
             text="Show Timeline",
             command=lambda card_index=index: self.select_card(card_index),
         )
-        select_btn.grid(row=3, column=0, pady=10)
+        select_btn.grid(row=4, column=0, pady=10)
 
         # Store references
         card_frame.range_var = range_var
+        card_frame.pie_canvas = pie_canvas
         card_frame.active_label = active_label
         card_frame.break_label = break_label
         card_frame.select_btn = select_btn
@@ -792,6 +977,7 @@ class AnalysisFrame(ttk.Frame):
 
         card.active_label.config(text=f"Active: {self.format_duration(active_time)}")
         card.break_label.config(text=f"Break: {self.format_duration(break_time)}")
+        draw_pie_chart(card.pie_canvas, active_time, break_time)
 
     def get_timeline_data(self, range_name):
         """

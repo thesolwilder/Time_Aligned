@@ -92,6 +92,11 @@ TRAY_ICON_SIZE = 64  # Icon size in pixels
 TRAY_ICON_MARGIN = 8  # Margin around circle
 TRAY_ICON_OUTLINE_WIDTH = 2  # Circle outline thickness
 
+# Pie chart dimensions (analysis frame cards)
+PIE_CHART_SIZE = 120  # Canvas width and height in pixels
+PIE_CHART_MARGIN = 6  # Gap between canvas edge and arc bounding box
+PIE_TEXT_MIN_PERCENT = 10  # Minimum slice size (%) to render percentage text inside
+
 # =============================================================================
 # Default File Paths
 # =============================================================================
