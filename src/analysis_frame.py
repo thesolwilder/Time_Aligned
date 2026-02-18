@@ -482,35 +482,33 @@ class AnalysisFrame(ttk.Frame):
             ),
         )
 
-        # Row 1, col 0: active time — green box, fixed width, black text
+        # Row 1, col 0: active time — green box, auto-width, black text
         active_label = tk.Label(
             card_frame,
             text="Active: --",
             bg=COLOR_TRAY_ACTIVE,
             fg="black",
-            font=("Arial", 14, "bold"),
+            font=FONT_TIMER_SMALL,
             relief=tk.SOLID,
             borderwidth=1,
             padx=8,
             pady=4,
-            anchor="w",
-            width=14,
+            anchor="center",
         )
         active_label.grid(row=1, column=0, pady=(5, 2), sticky="W")
 
-        # Row 2, col 0: break/idle time — amber box, fixed width, black text
+        # Row 2, col 0: break/idle time — amber box, auto-width, black text
         break_label = tk.Label(
             card_frame,
             text="Break: --",
             bg=COLOR_TRAY_BREAK,
             fg="black",
-            font=("Arial", 14, "bold"),
+            font=FONT_TIMER_SMALL,
             relief=tk.SOLID,
             borderwidth=1,
             padx=8,
             pady=4,
-            anchor="w",
-            width=14,
+            anchor="center",
         )
         break_label.grid(row=2, column=0, pady=(2, 5), sticky="W")
 
@@ -530,7 +528,10 @@ class AnalysisFrame(ttk.Frame):
             bg=frame_bg,
             highlightthickness=0,
         )
-        pie_canvas.grid(row=0, column=1, rowspan=4, padx=(8, 0), sticky="NS")
+        pie_canvas.grid(row=0, column=1, rowspan=5, padx=(8, 8), sticky="NS")
+
+        # Col 1 expands to fill remaining card width so pie floats centered
+        card_frame.columnconfigure(1, weight=1)
 
         # Store references
         card_frame.range_var = range_var
