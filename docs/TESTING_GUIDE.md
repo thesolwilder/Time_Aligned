@@ -2,6 +2,8 @@
 
 This document explains how to run tests and what each test suite validates.
 
+**Test coverage: 83% across core application modules.**
+
 ## Quick Start
 
 ### Run All Tests
@@ -39,52 +41,44 @@ python tests/run_all_tests.py --help
    - MockScreenshot: Mock screenshot capture
 
 2. **test_time_tracking.py** - Time recording accuracy
-   - ✓ Session start creates accurate timestamp
-   - ✓ Active period duration calculations
-   - ✓ Break period duration calculations
-   - ✓ Multiple active periods recorded separately
-   - ✓ Timestamp chronological ordering
-   - ✓ Session data structure validation
-   - ✓ Edge cases (very short/long sessions)
-
-3. **test_backup.py** - Backup save functionality
-   - ✓ Backup saves occur every 600 iterations (60 seconds)
-   - ✓ Backup preserves all session data
-   - ✓ Backup updates duration fields
-   - ✓ Crash recovery from backup
-   - ✓ Backup handles sessions with breaks
-   - ✓ Multiple backups don't corrupt data
-
-4. **test_analysis.py** - Analysis filtering accuracy
-   - ✓ Date range filters (Last 7/14/30 days, This Week, etc.)
-   - ✓ Sphere filtering
-   - ✓ Project filtering within sphere
-   - ✓ Aggregate totals calculation
-   - ✓ Sessions outside date range excluded
-   - ✓ "All Time" includes all sessions
-
-5. **test_screenshots.py** - Screenshot timing
-   - ✓ min_seconds_between_captures enforced
-   - ✓ Screenshot on window change
-   - ✓ No screenshot on same window
-   - ✓ Process change triggers screenshot
-   - ✓ Screenshot folder structure correct
-   - ✓ Metadata includes timestamp
-   - ✓ Settings can disable screenshots
-
-6. **test_settings.py** - Default sphere and projects
-   - ✓ Get default sphere
-   - ✓ Fallback to first active sphere
-   - ✓ Set default sphere
-   - ✓ Get default project for sphere
-   - ✓ Projects filtered by sphere
-   - ✓ Settings persistence
-   - ✓ Only active spheres shown
-
-7. **test_idle_tracking.py** - Idle detection
-   - ✓ Idle period recorded on activity before auto-break
-   - ✓ Multiple idle periods tracked
-   - ✓ Idle data structure validation
+3. **test_backup.py** - Backup save and crash recovery
+4. **test_analysis.py** - Analysis filtering and aggregation
+5. **test_analysis_calculations.py** - Duration calculation accuracy
+6. **test_analysis_card_filters.py** - Filter card behaviour
+7. **test_analysis_navigation_bug.py** - Navigation regression tests
+8. **test_analysis_performance.py** - Performance benchmarks
+9. **test_analysis_pie_chart.py** - Pie chart data accuracy
+10. **test_analysis_priority.py** - Priority sort logic
+11. **test_analysis_timeline.py** - Timeline rendering
+12. **test_analysis_load_more.py** - Paginated loading
+13. **test_screenshots.py** - Screenshot timing and capture
+14. **test_settings.py** - Settings persistence and defaults
+15. **test_settings_frame.py** - Settings UI behaviour
+16. **test_idle_tracking.py** - Idle detection and period recording
+17. **test_active_after_idle.py** - State transitions after idle
+18. **test_breaks.py** - Break period tracking
+19. **test_button_navigation.py** - UI navigation
+20. **test_completion_frame.py** - Session completion interface
+21. **test_completion_frame_comprehensive.py** - Full completion frame coverage
+22. **test_completion_frame_rename_bug.py** - Rename regression test
+23. **test_completion_dropdowns.py** - Dropdown population and selection
+24. **test_completion_comments_populate.py** - Comment field population
+25. **test_completion_priority.py** - Priority field in completion
+26. **test_completion_skip_bug.py** - Skip behaviour regression
+27. **test_csv_export.py** - CSV export correctness
+28. **test_csv_export_integration.py** - CSV export integration
+29. **test_csv_export_imports.py** - CSV import handling
+30. **test_sanitization.py** - Input sanitization and security
+31. **test_ui_helpers.py** - UI utility functions and security helpers
+32. **test_google_sheets.py** - Google Sheets integration and validation
+33. **test_data_integrity.py** - Data structure validation
+34. **test_error_handling.py** - Error and edge case handling
+35. **test_navigation.py** - Frame navigation
+36. **test_secondary_project_bug.py** - Secondary project regression
+37. **test_inactive_project_completion.py** - Archived project handling
+38. **test_interleaved_periods_secondary_dropdown.py** - Secondary dropdown in interleaved periods
+39. **test_spreadsheet_url_extraction.py** - Spreadsheet ID extraction
+40. **test_inactive_project_completion.py** - Inactive project edge cases
 
 ## Data Accuracy Priorities
 
@@ -217,25 +211,44 @@ When tests fail, you'll see:
 ## Adding New Tests
 
 1. Create test file in `tests/` directory (must start with `test_`)
-2. Import unittest and test_helpers
-3. Create TestCase class
-4. Add setUp() for test fixtures
-5. Add tearDown() for cleanup
-6. Write test methods (must start with `test_`)
-7. Use assertions to verify behavior
+2. Import `unittest`, `tkinter`, and `test_helpers`
+3. Add `sys.path.insert` to ensure imports resolve from the project root
+4. Create TestCase class
+5. Add `setUp()` — create `tk.Tk()` root + `TestFileManager`, register `addCleanup`
+6. Add `tearDown()` — call `safe_teardown_tk_root` **then** `file_manager.cleanup()`
+7. Write test methods (must start with `test_`)
+8. Use assertions to verify behavior
+
+> ⚠️ **Tkinter note**: Always use `safe_teardown_tk_root()` to destroy the tk root. Never use `self.addCleanup(self.root.destroy)` — it causes crashes in the test suite.
 
 Example:
 
 ```python
 import unittest
-from test_helpers import TestFileManager
+import tkinter as tk
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from test_helpers import TestFileManager, TestDataGenerator, safe_teardown_tk_root
+
 
 class TestNewFeature(unittest.TestCase):
     def setUp(self):
+        self.root = tk.Tk()
         self.file_manager = TestFileManager()
-        # Setup code
+        self.addCleanup(self.file_manager.cleanup)
+        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_settings.json", settings
+        )
+        self.test_data_file = self.file_manager.create_test_file("test_data.json")
 
     def tearDown(self):
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     def test_feature_works(self):
@@ -243,6 +256,10 @@ class TestNewFeature(unittest.TestCase):
         # Act
         # Assert
         self.assertEqual(expected, actual)
+
+
+if __name__ == "__main__":
+    unittest.main()
 ```
 
 ## Continuous Testing

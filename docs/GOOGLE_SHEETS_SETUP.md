@@ -83,22 +83,35 @@ The first time a session is uploaded:
 
 ## What Gets Uploaded
 
-For each session, the following data is uploaded to your spreadsheet:
+Each session uploads **one row per period** (active, break, or idle). All periods share the same session-level fields.
+
+**Session-level fields** (same on every row for the session):
 
 - Session ID
 - Date
-- Start Time
-- End Time
 - Sphere
-- Project
-- Total Duration (minutes)
-- Active Duration (minutes)
-- Break Duration (minutes)
-- Total Actions count
-- Break Actions count
-- Notes
+- Start Time / End Time
+- Total Duration, Active Duration, Break Duration (minutes)
+- Active Notes, Break Notes, Idle Notes, Session Notes
 
-## Troubleshooting
+**Period-level fields** (unique per row):
+
+- Period Type (`active`, `break`, or `idle`)
+- Period Start / End time
+- Period Duration (minutes)
+- Primary Project (active periods) or Primary Action (break/idle periods)
+- Primary Comment
+- Secondary Project or Action (if tagged)
+- Secondary Comment
+- Secondary Percentage
+
+## Data Format
+
+The spreadsheet columns are:
+
+| Session ID | Date | Sphere | Start Time | End Time | Total Duration (min) | Active Duration (min) | Break Duration (min) | Type | Primary Project/Action | Primary Comment | Secondary Project/Action | Secondary Comment | Secondary % | Period Start | Period End | Period Duration (min) | Break Action | Secondary Action | Active Notes | Break Notes | Idle Notes | Session Notes |
+
+Each row represents one period. A 4-hour session with 3 active periods and 2 breaks will produce 5 rows.
 
 ### "Credentials file not found"
 
@@ -119,13 +132,6 @@ For each session, the following data is uploaded to your spreadsheet:
 
 - The authenticated account doesn't have edit access to the spreadsheet
 - Share the spreadsheet with your Google account with Editor permissions
-
-## Data Format
-
-The spreadsheet will have the following columns:
-| Session ID | Date | Start Time | End Time | Sphere | Project | Total Duration (min) | Active Duration (min) | Break Duration (min) | Total Actions | Break Actions | Notes |
-
-Each session is appended as a new row to the sheet.
 
 ## Privacy & Security
 

@@ -25,9 +25,10 @@ Time Aligned now runs with a system tray icon, allowing you to control your time
 
 The tray icon changes color based on your current state:
 
-- **Gray** - Idle (no active session)
+- **Blue-gray** - No active session / idle (no session running)
 - **Green** - Active session running
 - **Yellow/Amber** - On break
+- **Yellow** - Idle detected during an active session
 
 ### Quick Access Menu
 
