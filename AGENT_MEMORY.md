@@ -26,6 +26,121 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-19] - Test Update: test_multi_project_periods Used Incomplete Project Dicts
+
+**Search Keywords**: test_analysis_calculations, TestAnalysisEdgeCases, test_multi_project_periods, projects array no duration, missing duration field, 0 != 1000, incomplete test data, project dict structure
+
+**Context**:
+After the Feb 19 `calculate_totals` fix (projects array takes priority), `test_multi_project_periods` in `tests/test_analysis_calculations.py` failed with `AssertionError: 0 != 1000`.
+
+**Root Cause (NOT a regression — bad test data)**:
+The test's `"projects"` array entries had only `"name"` — no `"duration"` or `"percentage"` field:
+
+```python
+# OLD (incomplete/unrealistic test data):
+"projects": [
+    {"name": "Project A"},   # ← no "duration" key
+    {"name": "Project B"},   # ← no "duration" key
+]
+```
+
+After the fix, `calculate_totals()` correctly calls `project_dict.get("duration", 0)` which returns **0** because the key is absent. The test got `0` — the correct result for incomplete data.
+
+Real app data **always** includes `"duration"` and `"percentage"` in every project dict (the spinbox split UI sets them). The test was written before the fix with simplified, unrealistic data.
+
+**Fix**: Updated test data to be realistic (add `"duration"`, `"percentage"`, `"project_primary"`), and expanded the test to also assert Project A (500), Project B (500), and All Projects (1000):
+
+```python
+# NEW (realistic test data):
+"projects": [
+    {"name": "Project A", "percentage": 50, "duration": 500, "project_primary": True},
+    {"name": "Project B", "percentage": 50, "duration": 500, "project_primary": False},
+]
+# Assertions:
+# Project A filter → 500
+# Project B filter → 500
+# All Projects → 1000 (full period, no split)
+```
+
+**Key Learning**: Multi-project period test data MUST include `"duration"` in each project dict — without it, `calculate_totals()` correctly returns 0 because there is no allocation to sum.
+
+**Required fields for realistic multi-project test data**:
+- `"name"`: project name string
+- `"duration"`: allocated seconds (float/int)
+- `"percentage"`: integer 0-100
+- `"project_primary"`: True for primary, False for secondary
+
+**Files Changed**:
+- `tests/test_analysis_calculations.py` — updated `test_multi_project_periods` test data and assertions
+
+---
+
+### [2026-02-19] - calculate_totals Fix Refinement: "projects" Array Takes Priority Over "project" Field
+
+**Search Keywords**: calculate_totals, project_filter, multi-project, projects array priority, "project" field, partial duration, primary project full duration, inconsistent behavior, test_analysis_priority, TestAnalysisMultipleSecondaryProjects, test_secondary_projects_aggregated_correctly, test_multiple_periods_with_different_splits
+
+**Context**:
+After the Feb 18 fix, two tests in `test_analysis_priority.py` started failing:
+- `test_secondary_projects_aggregated_correctly`: `400 != 1000`
+- `test_multiple_periods_with_different_splits`: `1600 != 3000`
+
+These were NOT regressions. Both tests had explicit comments (`# Note: Current implementation counts full period duration...` and `# This test documents current behavior`) indicating they were **snapshots of old buggy behavior**, not correctness assertions.
+
+**Root Cause of Feb 18 Fix Inconsistency**:
+The Feb 18 fix checked `"project"` field BEFORE `"projects"` array. When a period has BOTH:
+- Primary project (matches `"project"` field) → got FULL period duration (wrong)
+- Secondary project (only in `"projects"` list) → got ALLOCATED duration (correct)
+
+This is inconsistent. Real data from the app never saves a `"project"` field alongside a `"projects"` array (multi-project periods only have `"projects"`), but the old tests artificially had both for "compatibility".
+
+**Correct Rule**:
+> When `"projects"` array is present, it is the authoritative allocation data for **all** projects — including the primary. Only fall back to `"project"` field if no `"projects"` array exists.
+
+**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+
+```python
+for period in session_data.get("active", []):
+    if project_filter == "All Projects":
+        total_active += period.get("duration", 0)
+        continue
+
+    period_projects = period.get("projects", [])
+    if period_projects:
+        # Multi-project period: "projects" array holds each project's
+        # allocated duration — always use it for all projects.
+        for project_dict in period_projects:
+            if project_dict.get("name") == project_filter:
+                total_active += project_dict.get("duration", 0)
+                break
+    elif period.get("project", "") == project_filter:
+        # Single-project period: no allocation split, full duration.
+        total_active += period.get("duration", 0)
+```
+
+**Tests Updated** (correct expected values with the proper fix):
+
+`test_secondary_projects_aggregated_correctly` — period duration=1000, split 60/40:
+- Project A: **600** (was 1000 — old code gave full via `"project"` field match)
+- Project B: **400** (unchanged)
+- All Projects: 1000 (unchanged)
+
+`test_multiple_periods_with_different_splits`:
+- Project A: **1400** (70% of period 1, was 2000 full)
+- Project B: **1100** (600 from period 1 + 500 from period 2, was 3000 full)
+- Project C: **500** (50% of period 2, was 1000 full)
+
+**Key Learnings**:
+1. **`"projects"` array > `"project"` field**: If a period has been split, `"projects"` contains the authoritative per-project allocation. Never use `"project"` as a shortcut when `"projects"` is present.
+2. **"Documents current behavior" comments = tests to update**: Tests with that comment are behavior snapshots of bugs, not correctness contracts. Update them when the bug is fixed.
+3. **Inconsistency is a code smell**: If primary and secondary projects of the same period use different duration sources, the logic is wrong.
+4. **Real data never has both fields**: The app saves multi-project periods with only `"projects"` array — no top-level `"project"` field. The test data having both was an artifact.
+
+**Files Changed**:
+- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~16 lines)
+- `tests/test_analysis_priority.py` — updated assertions in `test_secondary_projects_aggregated_correctly` and `test_multiple_periods_with_different_splits`
+
+---
+
 ### [2026-02-18] - Analysis Calculation Bug Fix: Multi-Project Period Duration Splitting
 
 **Search Keywords**: calculate_totals, project_filter, multi-project period, spinbox split, percentage allocation, projects list, duration split, primary_project, secondary_project, project_dict duration, partial duration, analysis frame filtering, total wrong, 50 percent
@@ -50,12 +165,23 @@ total_active += period.get("duration", 0)  # ← adds 10s, not 5s!
 ```
 
 **Data Structure (multi-project period)**:
+
 ```json
 {
   "duration": 10,
   "projects": [
-    {"name": "Project A", "percentage": 50, "duration": 5, "project_primary": true},
-    {"name": "Project B", "percentage": 50, "duration": 5, "project_primary": false}
+    {
+      "name": "Project A",
+      "percentage": 50,
+      "duration": 5,
+      "project_primary": true
+    },
+    {
+      "name": "Project B",
+      "percentage": 50,
+      "duration": 5,
+      "project_primary": false
+    }
   ]
 }
 ```
@@ -84,12 +210,14 @@ for period in session_data.get("active", []):
 ```
 
 **TDD Process**:
+
 1. Wrote failing test `test_project_filter_multi_project_period_allocates_partial_duration` in `tests/test_analysis_timeline.py` → `TestAnalysisFrameProjectFiltering` class.
 2. Confirmed RED: Project A returned 10s, expected 5s.
 3. Applied fix.
 4. Confirmed GREEN: Project A = 5s, Project B = 5s, All Projects = 10s.
 
 **Test Data Pattern** (for multi-project period tests):
+
 ```python
 "active": [
     {
@@ -103,6 +231,7 @@ for period in session_data.get("active", []):
 ```
 
 **Key Learnings**:
+
 1. Multi-project periods store per-project duration in `period["projects"][i]["duration"]` — NOT in `period["duration"]`.
 2. `period["duration"]` = total period time; `project_dict["duration"]` = this project's share.
 3. Old code found the matching project dict but then fell through to `period.get("duration")` — the continue/break was never placed correctly.
@@ -110,6 +239,7 @@ for period in session_data.get("active", []):
 5. Backward compatible: single-project periods (no `projects` list, only `"project"` field) still use full duration.
 
 **Files Changed**:
+
 - `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~15 lines replaced with ~16 cleaner lines)
 - `tests/test_analysis_timeline.py` — added `test_project_filter_multi_project_period_allocates_partial_duration` to `TestAnalysisFrameProjectFiltering` class
 

@@ -600,7 +600,11 @@ class TestAnalysisEdgeCases(unittest.TestCase):
         self.assertEqual(breaks, 0)
 
     def test_multi_project_periods(self):
-        """Test that periods with multiple projects can be filtered correctly"""
+        """Test that periods with multiple projects return each project's allocated duration.
+
+        Each project dict in the 'projects' array must include a 'duration' field
+        (set by the spinbox split UI). The filter returns only that project's share.
+        """
         today = datetime.now().strftime("%Y-%m-%d")
         test_data = {
             f"{today}_session": {
@@ -609,10 +613,19 @@ class TestAnalysisEdgeCases(unittest.TestCase):
                 "active": [
                     {
                         "duration": 1000,
-                        "project": "Project A",
                         "projects": [
-                            {"name": "Project A"},
-                            {"name": "Project B"},
+                            {
+                                "name": "Project A",
+                                "percentage": 50,
+                                "duration": 500,
+                                "project_primary": True,
+                            },
+                            {
+                                "name": "Project B",
+                                "percentage": 50,
+                                "duration": 500,
+                                "project_primary": False,
+                            },
                         ],
                     }
                 ],
@@ -630,8 +643,17 @@ class TestAnalysisEdgeCases(unittest.TestCase):
         analysis = AnalysisFrame(self.content_frame(), tracker, self.root)
         analysis.sphere_var.set("All Spheres")
 
-        # When filtering by Project B, should find it in the projects list
+        # Each project gets its allocated share (50% of 1000 = 500)
+        analysis.project_var.set("Project A")
+        active, _ = analysis.calculate_totals("All Time")
+        self.assertEqual(active, 500)
+
         analysis.project_var.set("Project B")
+        active, _ = analysis.calculate_totals("All Time")
+        self.assertEqual(active, 500)
+
+        # All Projects gets the full undivided period duration
+        analysis.project_var.set("All Projects")
         active, _ = analysis.calculate_totals("All Time")
         self.assertEqual(active, 1000)
 

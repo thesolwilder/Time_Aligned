@@ -407,17 +407,17 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
         analysis = AnalysisFrame(self.content_frame(), tracker, self.root)
         analysis.sphere_var.set("All Spheres")
 
-        # Note: Current implementation counts full period duration if project is found in projects array
-        # This test documents current behavior
+        # Multi-project period: each project receives its allocated portion only.
+        # "projects" array takes priority over the top-level "project" field.
         analysis.project_var.set("Project A")
         active, _ = analysis.calculate_totals("All Time")
-        self.assertEqual(active, 1000)  # Gets full duration
+        self.assertEqual(active, 600)  # 60% of 1000s allocated to Project A
 
         analysis.project_var.set("Project B")
         active, _ = analysis.calculate_totals("All Time")
-        self.assertEqual(active, 1000)  # Gets full duration
+        self.assertEqual(active, 400)  # 40% of 1000s allocated to Project B
 
-        # All Projects should get 1000 seconds total
+        # All Projects should get 1000 seconds total (full period, no split)
         analysis.project_var.set("All Projects")
         active, _ = analysis.calculate_totals("All Time")
         self.assertEqual(active, 1000)
@@ -483,20 +483,21 @@ class TestAnalysisMultipleSecondaryProjects(unittest.TestCase):
         analysis = AnalysisFrame(self.content_frame(), tracker, self.root)
         analysis.sphere_var.set("All Spheres")
 
-        # Current behavior: counts full duration of periods where project is found
+        # Multi-project periods: each project receives its allocated portion only.
+        # "projects" array takes priority; primary project gets its slice, not full duration.
         analysis.project_var.set("Project A")
         active, _ = analysis.calculate_totals("All Time")
-        self.assertEqual(active, 2000)  # Full duration of first period
+        self.assertEqual(active, 1400)  # 70% of 2000s in period 1
 
-        # Project B: in both periods
+        # Project B: 30% of period 1 (600) + 50% of period 2 (500)
         analysis.project_var.set("Project B")
         active, _ = analysis.calculate_totals("All Time")
-        self.assertEqual(active, 3000)  # Both periods (2000 + 1000)
+        self.assertEqual(active, 1100)  # 600 + 500
 
-        # Project C: in second period
+        # Project C: 50% of period 2 only
         analysis.project_var.set("Project C")
         active, _ = analysis.calculate_totals("All Time")
-        self.assertEqual(active, 1000)  # Full duration of second period
+        self.assertEqual(active, 500)  # 50% of 1000s in period 2
 
     def content_frame(self):
         """Create a simple frame for testing"""

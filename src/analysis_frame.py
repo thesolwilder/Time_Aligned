@@ -904,17 +904,17 @@ class AnalysisFrame(ttk.Frame):
                     total_active += period.get("duration", 0)
                     continue
 
-                # Single-project period: direct "project" field matches filter
-                period_project = period.get("project", "")
-                if period_project == project_filter:
+                period_projects = period.get("projects", [])
+                if period_projects:
+                    # Multi-project period: "projects" array holds each project's
+                    # allocated duration — always use it for all projects.
+                    for project_dict in period_projects:
+                        if project_dict.get("name") == project_filter:
+                            total_active += project_dict.get("duration", 0)
+                            break
+                elif period.get("project", "") == project_filter:
+                    # Single-project period: no allocation split, full duration.
                     total_active += period.get("duration", 0)
-                    continue
-
-                # Multi-project period: add only this project's allocated duration
-                for project_dict in period.get("projects", []):
-                    if project_dict.get("name") == project_filter:
-                        total_active += project_dict.get("duration", 0)
-                        break
 
             # Calculate break time (only for sessions with at least one matching active period)
             if session_has_matching_project:
