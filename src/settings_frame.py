@@ -341,12 +341,12 @@ class SettingsFrame(ttk.Frame):
         Side effects:
             - Updates sphere_dropdown combobox values
             - Selects first sphere if list non-empty
-            - Clears selection if list empty
-            - Calls on_sphere_selected() to update management UI
+            - Selects "Create New Sphere..." and clears management frame if list empty
+            - Calls refresh_project_section() to keep project list in sync
 
         Note:
-            Always calls on_sphere_selected() after refresh to ensure
-            management frame displays correct sphere or clears if none selected.
+            Always updates sphere_var and redraws dependent UI (management
+            buttons and project list) whether or not matching spheres exist.
         """
         filter_val = self.sphere_filter.get()
         spheres = self.tracker.settings.get("spheres", {})
@@ -374,6 +374,15 @@ class SettingsFrame(ttk.Frame):
             self.load_selected_sphere()
             # Update project list to reflect the newly selected sphere
             # Only call if projects_list_frame exists (it's created after sphere section)
+            if hasattr(self, "projects_list_frame"):
+                self.refresh_project_section()
+        else:
+            # No spheres match the filter — select the only available option
+            self.sphere_var.set("Create New Sphere...")
+            # Clear sphere management buttons (no real sphere is selected)
+            for widget in self.sphere_mgmt_frame.winfo_children():
+                widget.destroy()
+            # Refresh project list (will be empty — no sphere is active)
             if hasattr(self, "projects_list_frame"):
                 self.refresh_project_section()
 
@@ -1389,7 +1398,9 @@ class SettingsFrame(ttk.Frame):
         min_seconds_spin = ttk.Spinbox(
             screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=3
         )
-        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W)
+        min_seconds_spin.grid(
+            row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W
+        )
         screenshot_row += 1
 
         # Define nested save function with closure over widget variables
@@ -2101,7 +2112,7 @@ class SettingsFrame(ttk.Frame):
 
         filtered_actions.sort(key=lambda x: x[0])
 
-        #default action at the top
+        # default action at the top
         if default_action:
             filtered_actions.insert(0, default_action)
 

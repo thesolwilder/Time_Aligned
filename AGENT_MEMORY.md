@@ -26,6 +26,54 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-19] - Bug Fix: Settings Sphere Radio Button — Archived Filter With No Archived Spheres Does Nothing
+
+**Search Keywords**: settings_frame, refresh_sphere_dropdown, sphere_filter inactive, archived radio button, no archived spheres, sphere_var stale, sphere_mgmt_frame stale, project list stale, empty filter result, else branch missing, TestSphereFilterEmptyResult
+
+**Bug Reported**: Starting from the default first-run project, opening Settings and clicking the "Archived" radio button for sphere filter did nothing — the sphere dropdown, sphere management buttons, and project list all stayed the same.
+
+**Root Cause**: `refresh_sphere_dropdown()` in `src/settings_frame.py` had no `else` branch for when `filtered_spheres` is empty. When no spheres match the selected filter:
+
+1. `sphere_dropdown["values"]` was set to `["Create New Sphere..."]` ✓ (correct)
+2. `sphere_var` was **NOT** updated → still showed the previous active sphere name
+3. `sphere_mgmt_frame` was **NOT** cleared → old management buttons remained
+4. `refresh_project_section()` was **NOT** called → old project list persisted
+
+**Fix Applied** — Added `else` branch to `refresh_sphere_dropdown()`:
+
+```python
+else:
+    # No spheres match the filter — select the only available option
+    self.sphere_var.set("Create New Sphere...")
+    # Clear sphere management buttons (no real sphere is selected)
+    for widget in self.sphere_mgmt_frame.winfo_children():
+        widget.destroy()
+    # Refresh project list (will be empty — no sphere is active)
+    if hasattr(self, "projects_list_frame"):
+        self.refresh_project_section()
+```
+
+This ensures:
+- `sphere_var` always reflects the current dropdown selection
+- `sphere_mgmt_frame` is cleared (no real sphere → no management buttons)
+- Project list is refreshed (`sphere_var == "Create New Sphere..."` matches no project's sphere field → list is empty)
+
+**Key Learning — Filter result branches must always be complete:**
+Any method that conditionally handles a filter result MUST include an `else` for the empty case. Without it, the UI stays stale when no items match. The `refresh_project_section()` call already handles the empty case correctly (`data.get("sphere") == "Create New Sphere..."` matches nothing), so only the `sphere_var` and `sphere_mgmt_frame` updates were missing.
+
+**Tests Written** (`tests/test_settings_frame.py` — new class `TestSphereFilterEmptyResult`):
+- `test_archived_filter_with_no_archived_spheres_selects_create_new` — sphere_var == "Create New Sphere..."
+- `test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons` — sphere_mgmt_frame empty
+- `test_archived_filter_with_no_archived_spheres_empties_project_list` — projects_list_frame empty
+
+All 3 tests: FAIL before fix → PASS after fix.
+
+**Files Changed**:
+- [src/settings_frame.py](src/settings_frame.py) — `refresh_sphere_dropdown()`: added `else` branch + updated docstring
+- [tests/test_settings_frame.py](tests/test_settings_frame.py) — added `TestSphereFilterEmptyResult` class (3 tests)
+
+---
+
 ### [2026-02-19] - Bug Fix: Regression + Stale Test from Bug 3 session_considered_active Fix
 
 **Search Keywords**: test_sessions_without_active_periods, pure break session, no active periods, session_considered_active, sphere_active fallback, stale test, test_active_filter_excludes_archived_project_break_time
@@ -13751,3 +13799,87 @@ User accepted this behavior with the reasoning:
 **Files affected**: [src/analysis_frame.py](src/analysis_frame.py) — `_render_timeline_period()` method, `add_column()` inner function with `use_text_widget=True`
 
 ---
+
+---
+
+### [2026-02-19] - CRITICAL: TclError in Agent Env is NOT a Real Test Failure
+
+**Search Keywords**: TclError agent env, tcl_findLibrary, pytest suite TclError, agent tcl error, init.tcl, TclError invalid command, test teardown tcl, test failure agent environment, pytest TclError fail
+
+**Context**:
+When agent runs Tkinter tests via pytest (full suite or multiple classes in one session), intermittent TclError crashes 1-2 tests even though the tests themselves are correct and pass when run properly.
+
+**Symptom**:
+```
+TclError: invalid command name "tcl_findLibrary"
+TclError: Can't find a usable init.tcl
+```
+This appears as a FAILED test in pytest output  **it is NOT a real failure**.
+
+**Root Cause**: Agent environment pytest session isolation artifact. Multiple `tk.Tk()` instances across test classes in one pytest session causes Tcl interpreter state corruption between classes.
+
+**DO NOT**:
+-  Modify the teardown pattern (it is already correct with `safe_teardown_tk_root`)
+-  Switch to `setUpClass`/`tearDownClass` (tried and abandoned  makes things worse)
+-  Add `addCleanup` patterns (FORBIDDEN pattern)
+-  Treat it as a real test failure requiring code fixes
+-  Waste time debugging or "fixing" it  the user does not want to be reminded of this
+
+**CORRECT VERIFICATION**:
+```bash
+# Option 1: Run as script (most reliable):
+python tests/test_analysis_csv_percentage.py
+
+# Option 2: Run one class at a time via pytest:
+pytest tests/test_your_file.py::TestClassName -v
+```
+
+User confirmed: `Ran 21 tests in 24.270s OK` when run as script.
+
+**What Worked** :
+- `safe_teardown_tk_root(self.root)` in `tearDown()`  correct teardown
+- Running test file as a Python script directly
+- Running individual test classes via pytest
+
+**What Did NOT Work** :
+- `setUpClass`/`tearDownClass`  tried and abandoned, worse behavior
+- Running full test file via pytest in agent env  intermittent TclError
+
+---
+
+### [2026-02-19] - CSV Export Percentage/Duration Columns (COMPLETED )
+
+**Search Keywords**: CSV export, percentage, primary percentage, secondary percentage, primary duration, secondary duration, export_to_csv, analysis_frame, multi-project, projects array, actions array, analysis timeline csv
+
+**Context**:
+Added 4 new columns to `export_to_csv()` in `src/analysis_frame.py`:
+- `Primary Percentage`  100 for single project/action, stored % for multi
+- `Primary Duration`  formatted full duration for single, formatted split duration for multi
+- `Secondary Percentage`  "" for single, stored secondary % for multi
+- `Secondary Duration`  "" for single, formatted secondary duration for multi
+
+Columns appear in CSV ONLY (not in the timeline UI).
+
+**Implementation** (`src/analysis_frame.py`  `export_to_csv()`):
+All three period types updated (active, break, idle):
+- Active: reads from `period["projects"]` array using `project_primary: True/False`
+- Break: reads from `period["actions"]` array using `break_primary: True/False`
+- Idle: reads from `period["actions"]` array using `idle_primary: True/False`
+- Single-item format (no array): `primary_percentage=100`, `secondary_percentage=""`
+- `secondary_period_duration` sentinel is `""` (not 0)  check `!= ""` before calling `format_duration()`
+
+`fieldnames` updated: 14  18 columns. Order:
+`Primary Action, Primary Percentage, Primary Duration, Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration, Secondary Comment`
+
+**Tests** (`tests/test_analysis_csv_percentage.py`):
+- 21 tests across 6 classes  all pass via `python tests/test_analysis_csv_percentage.py`
+- Uses `safe_teardown_tk_root` + `TestFileManager` correctly
+- TDD: wrote failing tests first (20 failed), then implemented to pass
+
+**Key Technical Details**:
+- `secondary_period_duration != ""` guard needed  `""` is sentinel for "no secondary", cannot call `format_duration("")`
+- `format_duration()` takes seconds (float/int), returns string like `"30m 0s"`, `"11m 40s"`
+- Multi-project stored duration in data.json: `int(total_duration * percentage / 100)`
+- Used `csv.reader` for header test (not `split(",")` which breaks multi-word headers)
+
+**Branch**: `percentage`

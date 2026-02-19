@@ -1913,8 +1913,12 @@ class AnalysisFrame(ttk.Frame):
                 # Get primary and secondary project data
                 primary_project = ""
                 primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = period.get("duration", 0)
                 secondary_project = ""
                 secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
 
                 if period.get("project"):
                     # Single project case
@@ -1926,9 +1930,13 @@ class AnalysisFrame(ttk.Frame):
                         if project_item.get("project_primary", True):
                             primary_project = project_item.get("name", "")
                             primary_comment = project_item.get("comment", "")
+                            primary_percentage = project_item.get("percentage", 100)
+                            primary_period_duration = project_item.get("duration", 0)
                         else:
                             secondary_project = project_item.get("name", "")
                             secondary_comment = project_item.get("comment", "")
+                            secondary_percentage = project_item.get("percentage", 0)
+                            secondary_period_duration = project_item.get("duration", 0)
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
@@ -1939,19 +1947,24 @@ class AnalysisFrame(ttk.Frame):
                     {
                         "Date": session_data.get("date"),
                         "Start": period.get("start", ""),
-                        # add title period duration
                         "Duration": self.format_duration(period.get("duration", 0)),
                         "Sphere": session_sphere,
                         "Sphere Active": "Yes" if sphere_active else "No",
                         "Project Active": "Yes" if project_active else "No",
                         "Type": "Active",
                         "Primary Action": primary_project,
-                        # add primary percentage, 100 if only one project,
-                        # add primary duration, same as period duration if 1 project
+                        "Primary Percentage": primary_percentage,
+                        "Primary Duration": self.format_duration(
+                            primary_period_duration
+                        ),
                         "Primary Comment": primary_comment,
                         "Secondary Action": secondary_project,
-                        # add secondary percentage, 0 if only one project,
-                        # add secondary duration, 0 if only one project
+                        "Secondary Percentage": secondary_percentage,
+                        "Secondary Duration": (
+                            self.format_duration(secondary_period_duration)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
                         "Secondary Comment": secondary_comment,
                         "Active Comments": session_active_comments,
                         "Break Comments": "",
@@ -1973,8 +1986,12 @@ class AnalysisFrame(ttk.Frame):
                 # Get primary and secondary action data
                 primary_action = ""
                 primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = period.get("duration", 0)
                 secondary_action = ""
                 secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
 
                 if period.get("action"):
                     # Single action case
@@ -1986,9 +2003,13 @@ class AnalysisFrame(ttk.Frame):
                         if action_item.get("break_primary", True):
                             primary_action = action_item.get("name", "")
                             primary_comment = action_item.get("comment", "")
+                            primary_percentage = action_item.get("percentage", 100)
+                            primary_period_duration = action_item.get("duration", 0)
                         else:
                             secondary_action = action_item.get("name", "")
                             secondary_comment = action_item.get("comment", "")
+                            secondary_percentage = action_item.get("percentage", 0)
+                            secondary_period_duration = action_item.get("duration", 0)
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
@@ -2005,8 +2026,18 @@ class AnalysisFrame(ttk.Frame):
                         "Project Active": "N/A",
                         "Type": "Break",
                         "Primary Action": primary_action,
+                        "Primary Percentage": primary_percentage,
+                        "Primary Duration": self.format_duration(
+                            primary_period_duration
+                        ),
                         "Primary Comment": primary_comment,
                         "Secondary Action": secondary_action,
+                        "Secondary Percentage": secondary_percentage,
+                        "Secondary Duration": (
+                            self.format_duration(secondary_period_duration)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
                         "Secondary Comment": secondary_comment,
                         "Active Comments": "",
                         "Break Comments": break_notes,
@@ -2029,8 +2060,12 @@ class AnalysisFrame(ttk.Frame):
                 # Get primary and secondary action data
                 primary_action = ""
                 primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = period.get("duration", 0)
                 secondary_action = ""
                 secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
 
                 if period.get("action"):
                     # Single action case
@@ -2042,9 +2077,13 @@ class AnalysisFrame(ttk.Frame):
                         if action_item.get("idle_primary", True):
                             primary_action = action_item.get("name", "")
                             primary_comment = action_item.get("comment", "")
+                            primary_percentage = action_item.get("percentage", 100)
+                            primary_period_duration = action_item.get("duration", 0)
                         else:
                             secondary_action = action_item.get("name", "")
                             secondary_comment = action_item.get("comment", "")
+                            secondary_percentage = action_item.get("percentage", 0)
+                            secondary_period_duration = action_item.get("duration", 0)
 
                 # Get session-level comments
                 session_comments_dict = session_data.get("session_comments", {})
@@ -2061,8 +2100,18 @@ class AnalysisFrame(ttk.Frame):
                         "Project Active": "N/A",
                         "Type": "Idle",
                         "Primary Action": primary_action,
+                        "Primary Percentage": primary_percentage,
+                        "Primary Duration": self.format_duration(
+                            primary_period_duration
+                        ),
                         "Primary Comment": primary_comment,
                         "Secondary Action": secondary_action,
+                        "Secondary Percentage": secondary_percentage,
+                        "Secondary Duration": (
+                            self.format_duration(secondary_period_duration)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
                         "Secondary Comment": secondary_comment,
                         "Active Comments": "",
                         "Break Comments": idle_notes,
@@ -2096,8 +2145,12 @@ class AnalysisFrame(ttk.Frame):
                     "Project Active",
                     "Type",
                     "Primary Action",
+                    "Primary Percentage",
+                    "Primary Duration",
                     "Primary Comment",
                     "Secondary Action",
+                    "Secondary Percentage",
+                    "Secondary Duration",
                     "Secondary Comment",
                     "Active Comments",
                     "Break Comments",

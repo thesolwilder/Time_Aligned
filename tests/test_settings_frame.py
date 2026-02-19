@@ -388,6 +388,92 @@ class TestSettingsFrameFilters(unittest.TestCase):
         self.assertTrue(found_archived)
 
 
+class TestSphereFilterEmptyResult(unittest.TestCase):
+    """Test sphere radio button filter when no spheres match the selected filter.
+
+    Reproduces the bug: selecting 'Archived' radio when there are no archived
+    spheres caused nothing to update — sphere_var, sphere_mgmt_frame, and the
+    project list all remained stale.
+    """
+
+    def setUp(self):
+        """Set up with only active spheres — no archived spheres exist."""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "DefaultSphere": {"is_default": True, "active": True},
+            },
+            "projects": {
+                "DefaultProject": {
+                    "sphere": "DefaultSphere",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "DefaultBreak": {"is_default": True, "active": True, "notes": ""},
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_filter_empty.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_archived_filter_with_no_archived_spheres_selects_create_new(self):
+        """Selecting Archived radio with no archived spheres must select 'Create New Sphere...'.
+
+        Bug: sphere_var remained stale (still showed the previously selected
+        active sphere), so the UI appeared completely unchanged.
+        """
+        # Confirm initial state: active sphere is selected
+        self.assertEqual(self.frame.sphere_var.get(), "DefaultSphere")
+
+        # Switch to archived filter — no archived spheres exist
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        # sphere_var must change to the only available option
+        self.assertEqual(self.frame.sphere_var.get(), "Create New Sphere...")
+
+    def test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons(self):
+        """Selecting Archived radio with no archived spheres must clear sphere management buttons."""
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        children = self.frame.sphere_mgmt_frame.winfo_children()
+        self.assertEqual(
+            len(children),
+            0,
+            "sphere_mgmt_frame must be empty when no sphere is selected",
+        )
+
+    def test_archived_filter_with_no_archived_spheres_empties_project_list(self):
+        """Selecting Archived radio with no archived spheres must clear the project list."""
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        children = self.frame.projects_list_frame.winfo_children()
+        self.assertEqual(
+            len(children),
+            0,
+            "projects_list_frame must be empty when no sphere is selected",
+        )
+
+
 class TestSettingsFrameAddSphere(unittest.TestCase):
     """Test adding new spheres and recording to settings file"""
 
@@ -2364,7 +2450,10 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
         """Test successful Google Sheets connection test"""
         # Mock successful connection
         mock_instance = Mock()
-        mock_instance.test_connection.return_value = (True, "Connected to spreadsheet: Test Sheet")
+        mock_instance.test_connection.return_value = (
+            True,
+            "Connected to spreadsheet: Test Sheet",
+        )
         mock_uploader.return_value = mock_instance
 
         # Set valid spreadsheet ID
@@ -2395,7 +2484,7 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
 
         # Button should be found
         self.assertIsNotNone(found_test_btn, "Test Connection button not found")
-        
+
         # Invoke the button
         found_test_btn.invoke()
 

@@ -131,6 +131,7 @@ def test_function_name_expected_behavior():
 | `self.addCleanup(self.root.destroy)`         | `tearDown()` with `safe_teardown_tk_root(self.root)` |
 | `self.root.destroy()` called directly        | `safe_teardown_tk_root(self.root)` in `tearDown()`   |
 | Inline import `from test_helpers import ...` | Top-level `from tests.test_helpers import ...`       |
+| Running full pytest suite in agent env       | Run as `python test_file.py` OR one class at a time  |
 
 > **WHY**: `self.addCleanup(self.root.destroy)` does NOT cancel pending `after()` callbacks
 > before destroying the root. This leaves the Tcl interpreter in a corrupted state.
@@ -139,6 +140,44 @@ def test_function_name_expected_behavior():
 >
 > **This has caused repeated failures across this codebase.** The user has had to
 > correct this pattern multiple times. DO NOT USE `self.addCleanup(self.root.destroy)`.
+
+---
+
+> ⚠️ **AGENT ENVIRONMENT TCLERROR — DO NOT TRY TO FIX THIS**
+>
+> **Search keywords: TclError agent env, tcl_findLibrary, pytest suite TclError, agent tcl error, TclError invalid command, pytest TclError fail**
+>
+> When running Tkinter tests via **pytest** in the agent/CI environment with many test
+> classes, you may see 1–2 tests FAIL with:
+>
+> ```
+> TclError: invalid command name "tcl_findLibrary"
+> TclError: Can't find a usable init.tcl
+> ```
+>
+> **THIS IS NOT A REAL TEST FAILURE.** It is a pytest session isolation artifact caused
+> by multiple `tk.Tk()` instances across many test classes in one session.
+>
+> **DO NOT:**
+>
+> - ❌ Modify the teardown pattern — it is already correct with `safe_teardown_tk_root`
+> - ❌ Switch to `setUpClass`/`tearDownClass` — tried and abandoned, makes things worse
+> - ❌ Add `addCleanup` patterns — FORBIDDEN (see above)
+> - ❌ Treat it as a real test failure requiring code fixes
+> - ❌ Waste time "debugging" it
+>
+> **CORRECT VERIFICATION — always use one of these two methods:**
+>
+> ```bash
+> # Option 1: Run file as a script (most reliable):
+> python tests/test_your_file.py
+>
+> # Option 2: Run one class at a time via pytest:
+> pytest tests/test_your_file.py::TestClassName -v
+> ```
+>
+> User confirmed: running as a script gives `OK` for all tests even when pytest shows failures.
+> The user does not want to be reminded of this again — **check the script output first**.
 
 ---
 

@@ -589,15 +589,23 @@ class GoogleSheetsUploader:
                         break_duration,
                         "active",
                         primary_project,
+                        #primary percentage, 100 if single project 
+                        #primary duration per period, the total period duration if single project
+                        #then comment
                         escape_for_sheets(
                             active.get("comment", "")
                         ),  # primary project comment
                         secondary_project,
+                        #put the secondary percentage here, 0 if single project
+                        #secondary duration per period, 0 if single project
                         secondary_comment,
                         secondary_percentage,
                         active.get("start", ""),
                         active.get("end", ""),
+                        #isn't this already in a colum at active duration?
                         round(active.get("duration", 0) / 60, 2),
+                        #aren't the break action and secondary action supposed to be up in project col
+                        #remove these columns and put the break action in the project comment column
                         "",  # break_action
                         "",  # secondary_action
                         active_notes,
