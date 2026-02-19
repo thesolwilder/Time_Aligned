@@ -3440,6 +3440,98 @@ class TestAnalysisFrameStatusFilterIntegration(unittest.TestCase):
         )
         self.assertEqual(breaks, 300)
 
+    def test_all_projects_active_filter_excludes_inactive_project_breaks_cards(self):
+        """Bug 3: active sphere + inactive project, All Projects + Active radio → breaks = 0 in cards.
+
+        When every active period in a session belongs to an inactive project the
+        session is "archived". Its break time must NOT appear when the Active
+        radio button is selected, even with All Projects in the project dropdown.
+        """
+        date = "2026-02-02"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "ActiveSphere",
+                "date": date,
+                "total_duration": 2400,
+                "active_duration": 2000,
+                "break_duration": 400,
+                "active": [{"duration": 2000, "project": "InactiveProject"}],
+                "breaks": [{"duration": 400}],
+                "idle_periods": [],
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        frame.status_filter.set("active")
+        frame.refresh_dropdowns()
+        frame.sphere_var.set("ActiveSphere")
+        frame.project_var.set("All Projects")
+
+        active, breaks = frame.calculate_totals("All Time")
+
+        self.assertEqual(
+            active,
+            0,
+            "Inactive project time should not appear in active filter cards",
+        )
+        self.assertEqual(
+            breaks,
+            0,
+            "Break time for inactive-project session should not appear in active filter cards",
+        )
+
+    def test_all_projects_active_filter_excludes_inactive_project_breaks_timeline(self):
+        """Bug 3: active sphere + inactive project, All Projects + Active radio → no break rows in timeline.
+
+        When every active period in a session belongs to an inactive project the
+        session is "archived". Its break rows must NOT appear in the timeline
+        when the Active radio button is selected with All Projects.
+        """
+        date = "2026-02-02"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "ActiveSphere",
+                "date": date,
+                "total_duration": 2400,
+                "active_duration": 2000,
+                "break_duration": 400,
+                "active": [{"duration": 2000, "project": "InactiveProject"}],
+                "breaks": [{"duration": 400, "start": "14:00:00", "action": "Resting"}],
+                "idle_periods": [],
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        frame.status_filter.set("active")
+        frame.refresh_dropdowns()
+        frame.sphere_var.set("ActiveSphere")
+        frame.project_var.set("All Projects")
+
+        timeline_data = frame.get_timeline_data("All Time")
+
+        break_rows = [row for row in timeline_data if row["type"] == "Break"]
+        self.assertEqual(
+            len(break_rows),
+            0,
+            "Break rows for inactive-project session should not appear in active filter timeline",
+        )
+
 
 class TestAnalysisFrameTimelineColumns(unittest.TestCase):
     """

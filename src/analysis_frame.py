@@ -867,6 +867,7 @@ class AnalysisFrame(ttk.Frame):
 
         sphere_filter = self.sphere_var.get()
         project_filter = self.project_var.get()
+        status_filter = self.status_filter.get()  # active / all / archived radio button
 
         for _, session_data in all_data.items():
             # Check if session is in date range
@@ -880,6 +881,13 @@ class AnalysisFrame(ttk.Frame):
             session_sphere = session_data.get("sphere", "")
             if sphere_filter != "All Spheres" and session_sphere != sphere_filter:
                 continue
+
+            # Get sphere active status — used by status_filter checks below
+            sphere_active = (
+                self.tracker.settings.get("spheres", {})
+                .get(session_sphere, {})
+                .get("active", True)
+            )
 
             # Determine whether any active period in this session matches the project filter.
             # Break/idle totals are session-contextual: only counted when the session has at
@@ -901,6 +909,26 @@ class AnalysisFrame(ttk.Frame):
             # Calculate active time
             for period in session_data.get("active", []):
                 if project_filter == "All Projects":
+                    # Determine primary project for status filtering
+                    primary_project = period.get("project", "")
+                    if not primary_project:
+                        for project_item in period.get("projects", []):
+                            if project_item.get("project_primary", True):
+                                primary_project = project_item.get("name", "")
+                                break
+                    project_active = (
+                        self.tracker.settings.get("projects", {})
+                        .get(primary_project, {})
+                        .get("active", True)
+                    )
+                    if status_filter == "active" and not (
+                        sphere_active and project_active
+                    ):
+                        continue  # skip inactive combinations
+                    elif status_filter == "archived" and (
+                        sphere_active and project_active
+                    ):
+                        continue  # skip fully active combinations
                     total_active += period.get("duration", 0)
                     continue
 
@@ -910,20 +938,94 @@ class AnalysisFrame(ttk.Frame):
                     # allocated duration — always use it for all projects.
                     for project_dict in period_projects:
                         if project_dict.get("name") == project_filter:
+                            project_active = (
+                                self.tracker.settings.get("projects", {})
+                                .get(project_filter, {})
+                                .get("active", True)
+                            )
+                            if status_filter == "active" and not (
+                                sphere_active and project_active
+                            ):
+                                break  # skip — inactive combination
+                            if status_filter == "archived" and (
+                                sphere_active and project_active
+                            ):
+                                break  # skip — fully active combination
                             total_active += project_dict.get("duration", 0)
                             break
-                elif period.get("project", "") == project_filter:
-                    # Single-project period: no allocation split, full duration.
-                    total_active += period.get("duration", 0)
+                else:
+                    if period.get("project", "") == project_filter:
+                        # Single-project period: no allocation split, full duration.
+                        project_active = (
+                            self.tracker.settings.get("projects", {})
+                            .get(project_filter, {})
+                            .get("active", True)
+                        )
+                        if status_filter == "active" and not (
+                            sphere_active and project_active
+                        ):
+                            continue  # skip — inactive combination
+                        elif status_filter == "archived" and (
+                            sphere_active and project_active
+                        ):
+                            continue  # skip — fully active combination
+                        total_active += period.get("duration", 0)
 
             # Calculate break time (only for sessions with at least one matching active period)
+            # Break actions have no project-level active status, but when a specific project
+            # is selected we use that project's active flag alongside sphere_active to decide
+            # whether this session counts as active or archived for break filtering.
             if session_has_matching_project:
+                if project_filter != "All Projects":
+                    break_project_active = (
+                        self.tracker.settings.get("projects", {})
+                        .get(project_filter, {})
+                        .get("active", True)
+                    )
+                    session_considered_active = sphere_active and break_project_active
+                else:
+                    # For "All Projects", a session is "active" only if it has at
+                    # least one active period where sphere AND project are both active.
+                    # If every active period belongs to an inactive project the session
+                    # is "archived" and its breaks must not count in the active filter.
+                    # Exception: sessions with NO active periods (pure break/idle sessions)
+                    # are treated as active when their sphere is active — there is no
+                    # project to be inactive.
+                    active_periods_list = session_data.get("active", [])
+                    if not active_periods_list:
+                        session_considered_active = sphere_active
+                    else:
+                        session_considered_active = False
+                        for active_period in active_periods_list:
+                            primary_project = active_period.get("project", "")
+                            if not primary_project:
+                                for project_item in active_period.get("projects", []):
+                                    if project_item.get("project_primary", True):
+                                        primary_project = project_item.get("name", "")
+                                        break
+                            proj_active = (
+                                self.tracker.settings.get("projects", {})
+                                .get(primary_project, {})
+                                .get("active", True)
+                            )
+                            if sphere_active and proj_active:
+                                session_considered_active = True
+                                break
+
                 for period in session_data.get("breaks", []):
+                    if status_filter == "active" and not session_considered_active:
+                        continue  # skip breaks in inactive sessions
+                    elif status_filter == "archived" and session_considered_active:
+                        continue  # skip breaks in fully active sessions
                     total_break += period.get("duration", 0)
 
                 # Calculate idle time (only for sessions with at least one matching active period)
                 for period in session_data.get("idle_periods", []):
                     if period.get("end_timestamp"):
+                        if status_filter == "active" and not session_considered_active:
+                            continue
+                        elif status_filter == "archived" and session_considered_active:
+                            continue
                         total_break += period.get("duration", 0)
 
         return total_active, total_break
@@ -1078,6 +1180,39 @@ class AnalysisFrame(ttk.Frame):
                     for period in active_periods
                 )
 
+            # Determine if the session is "considered active" for break/idle filtering.
+            # A session is active only if it has at least one active period where both
+            # sphere AND project are active. Used to gate break/idle rows in the timeline.
+            if project_filter != "All Projects":
+                break_proj_active = (
+                    self.tracker.settings.get("projects", {})
+                    .get(project_filter, {})
+                    .get("active", True)
+                )
+                session_considered_active = sphere_active and break_proj_active
+            else:
+                # Sessions with NO active periods (pure break/idle) are treated as
+                # active when their sphere is active — no project to be inactive.
+                if not active_periods:
+                    session_considered_active = sphere_active
+                else:
+                    session_considered_active = False
+                    for period in active_periods:
+                        primary_project = period.get("project", "")
+                        if not primary_project:
+                            for project_item in period.get("projects", []):
+                                if project_item.get("project_primary", True):
+                                    primary_project = project_item.get("name", "")
+                                    break
+                        proj_active = (
+                            self.tracker.settings.get("projects", {})
+                            .get(primary_project, {})
+                            .get("active", True)
+                        )
+                        if sphere_active and proj_active:
+                            session_considered_active = True
+                            break
+
             # Add active periods
             for period in session_data.get("active", []):
                 # Determine primary and secondary projects
@@ -1173,14 +1308,12 @@ class AnalysisFrame(ttk.Frame):
                             secondary_action = action_item.get("name", "")
                             secondary_comment = action_item.get("comment", "")
 
-                # Apply status filter for break periods
-                # Since break actions don't have active status, filter based on sphere only
-                if status_filter == "active":
-                    if not sphere_active:
-                        continue  # Skip if sphere is inactive
-                elif status_filter == "archived":
-                    if sphere_active:
-                        continue  # Archived filter only shows inactive spheres for breaks
+                # Apply status filter for break periods using session_considered_active.
+                # A session is "active" only if sphere AND at least one project are active.
+                if status_filter == "active" and not session_considered_active:
+                    continue  # Skip breaks in archived/inactive sessions
+                elif status_filter == "archived" and session_considered_active:
+                    continue  # Skip breaks in fully active sessions
                 # For "all", don't skip anything
 
                 timeline_data.append(
@@ -1230,14 +1363,11 @@ class AnalysisFrame(ttk.Frame):
                                 secondary_action = action_item.get("name", "")
                                 secondary_comment = action_item.get("comment", "")
 
-                    # Apply status filter for idle periods
-                    # Since idle actions don't have active status, filter based on sphere only
-                    if status_filter == "active":
-                        if not sphere_active:
-                            continue  # Skip if sphere is inactive
-                    elif status_filter == "archived":
-                        if sphere_active:
-                            continue  # Archived filter only shows inactive spheres for idle
+                    # Apply status filter for idle periods using session_considered_active.
+                    if status_filter == "active" and not session_considered_active:
+                        continue  # Skip idle in archived/inactive sessions
+                    elif status_filter == "archived" and session_considered_active:
+                        continue  # Skip idle in fully active sessions
                     # For "all", don't skip anything
 
                     timeline_data.append(
@@ -1809,14 +1939,19 @@ class AnalysisFrame(ttk.Frame):
                     {
                         "Date": session_data.get("date"),
                         "Start": period.get("start", ""),
+                        # add title period duration
                         "Duration": self.format_duration(period.get("duration", 0)),
                         "Sphere": session_sphere,
                         "Sphere Active": "Yes" if sphere_active else "No",
                         "Project Active": "Yes" if project_active else "No",
                         "Type": "Active",
                         "Primary Action": primary_project,
+                        # add primary percentage, 100 if only one project,
+                        # add primary duration, same as period duration if 1 project
                         "Primary Comment": primary_comment,
                         "Secondary Action": secondary_project,
+                        # add secondary percentage, 0 if only one project,
+                        # add secondary duration, 0 if only one project
                         "Secondary Comment": secondary_comment,
                         "Active Comments": session_active_comments,
                         "Break Comments": "",

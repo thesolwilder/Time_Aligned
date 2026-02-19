@@ -26,6 +26,145 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-19] - Bug Fix: Regression + Stale Test from Bug 3 session_considered_active Fix
+
+**Search Keywords**: test_sessions_without_active_periods, pure break session, no active periods, session_considered_active, sphere_active fallback, stale test, test_active_filter_excludes_archived_project_break_time
+
+**Two failures from previous session's Bug 3 fix:**
+
+**Failure 1 — Regression** (`test_sessions_without_active_periods`):
+
+- Session had `active: []` (no active periods at all, only breaks)
+- `session_considered_active` loop started `False`, never iterated → breaks skipped under "active" filter
+- Fix: added `if not active_periods_list: session_considered_active = sphere_active` before the loop in **both** `calculate_totals()` and `get_timeline_data()`. A pure break/idle session with an active sphere IS an active session — there is no project to be inactive.
+
+**Failure 2 — Stale test** (`test_active_filter_excludes_archived_project_break_time`):
+
+- Test was written to capture the old sphere-level-only break behavior (break_time expected = 60)
+- Bug 3 intentionally changed this: sessions where all active periods are for inactive projects are "archived" — their breaks should be 0 under the active filter
+- Fix: updated test docstring + assertEqual to expect `break_time = 0`
+
+**Key Learning — Edge case must accompany session_considered_active loops:**
+Any loop that computes `session_considered_active` by iterating active periods MUST include a guard for the empty-periods case. Without it, pure break sessions are misclassified as archived. Pattern:
+
+```python
+if not active_periods_list:
+    session_considered_active = sphere_active  # pure break session
+else:
+    session_considered_active = False
+    for period in active_periods_list:
+        ...  # check sphere+project active
+```
+
+**Files Changed:**
+
+- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` else branch
+- [tests/test_analysis_card_status_filter.py](tests/test_analysis_card_status_filter.py) — updated stale test docstring + expected value
+
+---
+
+### [2026-02-19] - Bug Fix: Break Time Shows on Active Filter When Session's Only Project Is Inactive (Bug 3)
+
+**Search Keywords**: calculate_totals, get_timeline_data, All Projects filter, status_filter active, session_considered_active, inactive project breaks, active sphere all projects, timeline break rows, sphere_active only
+
+**Bugs Fixed (both cards and timeline):**
+
+- Cards: `calculate_totals()` returned non-zero break time for a session whose only active period was for an inactive project, when `project_filter = "All Projects"` + `status_filter = "active"`.
+- Timeline: `get_timeline_data()` included break rows for the same session under the same filter combo.
+
+**Root Cause:** Both `calculate_totals()` and `get_timeline_data()` shared the same flaw: the `else` branch for `project_filter == "All Projects"` set `session_considered_active = sphere_active`. For an active sphere with an inactive project, `sphere_active=True` → `session_considered_active=True` → breaks were NOT skipped on the active filter (and were incorrectly skipped on the archived filter).
+
+**Fix Applied — Both methods:** Replaced `session_considered_active = sphere_active` with a loop over the session's active periods to compute the correct value:
+
+- `session_considered_active = True` only if at least one active period has both `sphere_active AND proj_active`
+- If every active period has an inactive project → `session_considered_active = False` → breaks correctly excluded on active filter, included on archived filter.
+
+**Also fixed `get_timeline_data` break + idle filter:**
+The break and idle period filters were using `if not sphere_active` / `if sphere_active` directly instead of `session_considered_active`. Replaced both with the single flag, so all three period types (active, break, idle) now use consistent filtering logic.
+
+**Files Changed:**
+
+- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` `session_considered_active` block + break filter + idle filter
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) — 2 new tests in `TestAnalysisFrameStatusFilterIntegration`
+
+**Tests:**
+
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_cards` — PASSES ✅
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_timeline` — PASSES ✅ (must run in isolation due to pre-existing TclError teardown issue in this class)
+
+**Pre-existing TclError in `TestAnalysisFrameStatusFilterIntegration`:** This class uses per-test `setUp`/`tearDown` with `tk.Tk()`. In Python 3.13 the Tcl state is left corrupted after `safe_teardown_tk_root`, so tests after the first few may fail with TclError when run consecutively. Run tests in isolation to verify logic. See AGENT_MEMORY for the module-level singleton fix.
+
+---
+
+### [2026-02-19] - Bug Fix: Break Time Not Shown for Active Sphere + Inactive Project on Archived Filter
+
+**Search Keywords**: calculate_totals, breaks archived filter, inactive project breaks, active sphere breaks, session_considered_active, break_project_active, status_filter breaks
+
+**Bug Fixed:**
+`test_active_sphere_inactive_project_shows_on_archived_filter` failed with `breaks=0` (expected 400).
+Active time was counted correctly for active sphere + inactive project on "archived" filter, but breaks returned 0.
+
+**Root Cause:** The break/idle time filtering in `calculate_totals()` only checked `sphere_active`. For the case of active sphere + inactive project, `sphere_active=True` triggered `elif status_filter == "archived" and sphere_active: continue`, skipping ALL breaks even though the session is "archived" due to the inactive project.
+
+**Fix Applied:** In `calculate_totals()` [src/analysis_frame.py], compute `session_considered_active` before the break loop:
+
+- If a specific project is selected: `session_considered_active = sphere_active AND break_project_active`
+- If "All Projects": `session_considered_active = sphere_active`
+  Then apply `session_considered_active` in both the breaks loop and idle_periods loop. This mirrors how active periods already handle the combination.
+
+**Key Learning:** When filtering breaks, the "archived" determination must mirror the active-period logic: a session is archived if EITHER the sphere OR the selected project is inactive. The original implementation only checked sphere status for breaks, creating an inconsistency.
+
+**Test:** `tests/test_analysis_timeline.py::TestAnalysisFrameStatusFilterIntegration::test_active_sphere_inactive_project_shows_on_archived_filter` — now PASSES.
+
+---
+
+### [2026-02-19] - Bug Fix: Analysis Card Status Filter Ignoring Active/Archived Radio Buttons
+
+**Search Keywords**: calculate_totals, status_filter, active radio, archived radio, analysis frame cards, inactive project card, archived sphere card, card calculation bug, setUpClass tearDownClass module root singleton TclError bind_all
+
+**Bugs Fixed:**
+
+- Bug 1: Archived projects' time was calculated in analysis cards even when "Active" radio selected
+- Bug 2: Projects in archived spheres had their time calculated in cards even when "Active" selected
+
+**Root Cause:** `calculate_totals()` in `src/analysis_frame.py` read `sphere_var` and `project_var` but never read `status_filter`. All periods were counted regardless of the radio button selection.
+
+**Fix Applied:** Added `status_filter = self.status_filter.get()` and `sphere_active` / `project_active` flag checks to all three period-counting paths inside `calculate_totals()`. Break time is filtered at sphere-level only (break actions have no project active/inactive status).
+
+**Test File:** `tests/test_analysis_card_status_filter.py` — 10 tests, all pass.
+
+**Test Isolation Issue Discovered — Module-Level Singleton Root Pattern:**
+Tests that create `AnalysisFrame` (which contains `ScrollableFrame`) CANNOT use per-test `setUp`/`tearDown` with `tk.Tk()` create/destroy in Python 3.13. Even with `safe_teardown_tk_root`, the Tcl interpreter state is left corrupted — the next class's `setUpClass` calling `tk.Tk()` raises `TclError: invalid command name "tcl_findLibrary"`.
+
+**Correct pattern for multi-class test files using AnalysisFrame:**
+
+```python
+_MODULE_ROOT: tk.Tk | None = None
+
+def _get_module_root() -> tk.Tk:
+    global _MODULE_ROOT
+    if _MODULE_ROOT is None:
+        _MODULE_ROOT = tk.Tk()
+        _MODULE_ROOT.withdraw()
+    return _MODULE_ROOT
+
+class TestSomething(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = _get_module_root()  # shared, never destroyed between classes
+        cls.file_manager = TestFileManager()
+        ...
+
+    @classmethod
+    def tearDownClass(cls):
+        # Do NOT call safe_teardown_tk_root here — root is the shared module root
+        cls.file_manager.cleanup()
+```
+
+Also use `root.update_idletasks()` instead of `root.update()` in frame-creation helpers to avoid triggering `<Map>` events that register `bind_all("<MouseWheel>")` bindings.
+
+---
+
 ### [2026-02-19] - ⛔ RECURRING BUG: Forbidden Tkinter Teardown Pattern Keeps Being Used
 
 **Search Keywords**: forbidden pattern, addCleanup root destroy, safe_teardown_tk_root, TclError init.tcl, Tcl_AsyncDelete, wrong thread, tearDown, tkinter test cleanup, setUp tk.Tk fails
@@ -44,7 +183,7 @@ self.root.destroy()                  # called directly in tearDown
 **Why it breaks**: `root.destroy()` does NOT cancel pending `root.after()` callbacks.
 Tkinter fires them anyway against the destroyed root → Tcl interpreter corruption → the
 **next test's** `tk.Tk()` fails with `TclError: Can't find a usable init.tcl`. The test
-that caused the problem *passes*. The *next* test *fails*. This makes the cause hard to spot.
+that caused the problem _passes_. The _next_ test _fails_. This makes the cause hard to spot.
 
 **The Required Pattern (ALWAYS USE):**
 
@@ -65,13 +204,14 @@ def tearDown(self):
 This leaves Tcl in a clean state for the next test.
 
 **History of corrections**:
+
 - This session (2026-02-19): test_add_project_duplicate_bug.py fixed
-- Previous session (2026-02-19): test_analysis_card_filters.py fixed  
+- Previous session (2026-02-19): test_analysis_card_filters.py fixed
 - Documented in DEVELOPMENT.md 🚫 FORBIDDEN PATTERNS section
 - Documented in COPILOT_INSTRUCTIONS.md Bug Fix and Add Tests workflows
 
 **IMPORTANT**: If you ever see `TclError: Can't find a usable init.tcl` in a test that
-calls `tk.Tk()` in `setUp`, look at the *previous* test class — it almost certainly
+calls `tk.Tk()` in `setUp`, look at the _previous_ test class — it almost certainly
 uses the forbidden `self.addCleanup(self.root.destroy)` pattern.
 
 ---
@@ -123,7 +263,7 @@ In the `else` branch:
 
 **What Didn't Work** ❌:
 
-1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** — was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in *subsequent* tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` — that was wrong. `addCleanup(root.destroy)` was the cause.**
+1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** — was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in _subsequent_ tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` — that was wrong. `addCleanup(root.destroy)` was the cause.**
 
 **Key Learnings**:
 

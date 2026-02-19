@@ -126,11 +126,11 @@ def test_function_name_expected_behavior():
 
 **Search keywords: forbidden pattern, addCleanup root destroy, Tcl_AsyncDelete, TclError init.tcl, wrong thread**
 
-| ❌ FORBIDDEN | ✅ REQUIRED REPLACEMENT |
-|---|---|
-| `self.addCleanup(self.root.destroy)` | `tearDown()` with `safe_teardown_tk_root(self.root)` |
-| `self.root.destroy()` called directly | `safe_teardown_tk_root(self.root)` in `tearDown()` |
-| Inline import `from test_helpers import ...` | Top-level `from tests.test_helpers import ...` |
+| ❌ FORBIDDEN                                 | ✅ REQUIRED REPLACEMENT                              |
+| -------------------------------------------- | ---------------------------------------------------- |
+| `self.addCleanup(self.root.destroy)`         | `tearDown()` with `safe_teardown_tk_root(self.root)` |
+| `self.root.destroy()` called directly        | `safe_teardown_tk_root(self.root)` in `tearDown()`   |
+| Inline import `from test_helpers import ...` | Top-level `from tests.test_helpers import ...`       |
 
 > **WHY**: `self.addCleanup(self.root.destroy)` does NOT cancel pending `after()` callbacks
 > before destroying the root. This leaves the Tcl interpreter in a corrupted state.
