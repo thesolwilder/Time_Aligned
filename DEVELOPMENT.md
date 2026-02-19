@@ -122,7 +122,27 @@ def test_function_name_expected_behavior():
 - Full data export workflow
 - Settings changes affecting behavior
 
-## 📋 TDD Test Template (USE THIS FOR ALL NEW TESTS)
+## � FORBIDDEN PATTERNS — NEVER USE THESE IN TKINTER TESTS
+
+**Search keywords: forbidden pattern, addCleanup root destroy, Tcl_AsyncDelete, TclError init.tcl, wrong thread**
+
+| ❌ FORBIDDEN | ✅ REQUIRED REPLACEMENT |
+|---|---|
+| `self.addCleanup(self.root.destroy)` | `tearDown()` with `safe_teardown_tk_root(self.root)` |
+| `self.root.destroy()` called directly | `safe_teardown_tk_root(self.root)` in `tearDown()` |
+| Inline import `from test_helpers import ...` | Top-level `from tests.test_helpers import ...` |
+
+> **WHY**: `self.addCleanup(self.root.destroy)` does NOT cancel pending `after()` callbacks
+> before destroying the root. This leaves the Tcl interpreter in a corrupted state.
+> The **next** test's `tk.Tk()` then fails with `TclError: Can't find a usable init.tcl`.
+> `safe_teardown_tk_root` cancels all callbacks first, then quits and destroys cleanly.
+>
+> **This has caused repeated failures across this codebase.** The user has had to
+> correct this pattern multiple times. DO NOT USE `self.addCleanup(self.root.destroy)`.
+
+---
+
+## �📋 TDD Test Template (USE THIS FOR ALL NEW TESTS)
 
 **⚠️ CRITICAL: Use this exact template when creating new Tkinter UI tests**
 
@@ -170,7 +190,7 @@ class TestYourFeature(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests"""
-        from test_helpers import safe_teardown_tk_root
+        from tests.test_helpers import safe_teardown_tk_root
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 

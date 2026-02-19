@@ -26,6 +26,114 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-19] - ⛔ RECURRING BUG: Forbidden Tkinter Teardown Pattern Keeps Being Used
+
+**Search Keywords**: forbidden pattern, addCleanup root destroy, safe_teardown_tk_root, TclError init.tcl, Tcl_AsyncDelete, wrong thread, tearDown, tkinter test cleanup, setUp tk.Tk fails
+
+**This has been corrected MULTIPLE TIMES. Every new Tkinter test must use the pattern below.**
+
+**The Forbidden Pattern (NEVER USE):**
+
+```python
+# ❌ FORBIDDEN — DO NOT USE IN ANY TEST
+self.addCleanup(self.root.destroy)   # in setUp
+# or
+self.root.destroy()                  # called directly in tearDown
+```
+
+**Why it breaks**: `root.destroy()` does NOT cancel pending `root.after()` callbacks.
+Tkinter fires them anyway against the destroyed root → Tcl interpreter corruption → the
+**next test's** `tk.Tk()` fails with `TclError: Can't find a usable init.tcl`. The test
+that caused the problem *passes*. The *next* test *fails*. This makes the cause hard to spot.
+
+**The Required Pattern (ALWAYS USE):**
+
+```python
+# In setUp — only this addCleanup:
+self.addCleanup(self.file_manager.cleanup)
+# ❌ DO NOT ADD: self.addCleanup(self.root.destroy)
+
+# Required tearDown in EVERY Tkinter test class:
+def tearDown(self):
+    from tests.test_helpers import safe_teardown_tk_root
+    safe_teardown_tk_root(self.root)  # cancels all after() callbacks, then destroys
+    self.file_manager.cleanup()
+```
+
+**Why `safe_teardown_tk_root` is safe**: It calls `cancel_tkinter_callbacks()` first
+(iterates pending after() IDs and cancels them), then `root.quit()`, then `root.destroy()`.
+This leaves Tcl in a clean state for the next test.
+
+**History of corrections**:
+- This session (2026-02-19): test_add_project_duplicate_bug.py fixed
+- Previous session (2026-02-19): test_analysis_card_filters.py fixed  
+- Documented in DEVELOPMENT.md 🚫 FORBIDDEN PATTERNS section
+- Documented in COPILOT_INSTRUCTIONS.md Bug Fix and Add Tests workflows
+
+**IMPORTANT**: If you ever see `TclError: Can't find a usable init.tcl` in a test that
+calls `tk.Tk()` in `setUp`, look at the *previous* test class — it almost certainly
+uses the forbidden `self.addCleanup(self.root.destroy)` pattern.
+
+---
+
+### [2026-02-19] - Bug Fix: Add New Project Duplicate Name Silently Accepted Across Spheres
+
+**Search Keywords**: add new project, duplicate project name, \_save_new_project, completion frame, sphere project creation, project name conflict, cross-sphere duplicate, project dropdown bug
+
+**Bug Description**:
+
+When adding a new project via the "Add New Project..." dropdown in the Completion Frame, if the user typed a name that already existed in **another sphere**, two bugs occurred:
+
+1. **Bug 1 (UI)** — The combobox silently accepted the name and displayed it as if it was added — no warning shown to the user.
+2. **Bug 2 (Data)** — No project was saved to `settings.json` for the new sphere (because `if new_project not in self.tracker.settings["projects"]` was False — the project already existed globally, so the else branch ran instead of saving).
+
+**Root Cause** (in `src/completion_frame.py`, `_save_new_project()`):
+
+The `else` branch (triggered when the project name already exists in the global `settings["projects"]` dict) only did:
+
+```python
+# Already exists
+combobox.config(state="readonly")
+combobox.set(new_project)  # ← silently shows the name, looks like it was added!
+```
+
+This gave no warning and left the combobox showing "Project A" (the duplicate) as if it was valid.
+
+**Fix Applied**:
+
+In the `else` branch:
+
+1. **Unbind `<Return>` and `<FocusOut>` BEFORE showing messagebox** — prevents FocusOut from triggering `_cancel_new_project` a second time when the messagebox steals focus.
+2. **Show `messagebox.showwarning`** — alerts user "Project names must be unique across all spheres."
+3. **Call `_cancel_new_project(None, combobox)`** — properly reverts combobox to readonly with a fallback value ("Select Project").
+4. **Return early** — bindings already cleaned up, no double-unbind needed.
+
+**File Changed**: `src/completion_frame.py`, `_save_new_project()` method (~line 1407)
+
+**Tests Added**: `tests/test_add_project_duplicate_bug.py` (7 tests)
+
+**Test Results**: 5/7 pass (2 fail with pre-existing TclError unrelated to the fix — same TclError pattern existed before this fix was applied)
+
+**What Worked** ✅:
+
+1. **TDD approach** — wrote failing tests first, confirmed bugs reproduced, fixed, tests now pass.
+2. **Unbind-before-messagebox pattern** — critical to prevent FocusOut double-trigger. messagebox steals focus → FocusOut fires → \_cancel_new_project called. Unbinding first prevents this.
+3. **`_cancel_new_project(None, combobox)` call** — reusable existing method handles the combobox revert cleanly; passing `None` for event is safe since event param is unused.
+4. **`return` early** — avoids running the `# Cleanup bindings` block at the bottom of the function (already cleaned up in the else branch).
+
+**What Didn't Work** ❌:
+
+1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** — was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in *subsequent* tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` — that was wrong. `addCleanup(root.destroy)` was the cause.**
+
+**Key Learnings**:
+
+- ✅ Project names are stored globally in `settings["projects"]` dict — they CANNOT repeat across spheres by design (the key is the project name itself). This is why the duplicate check uses `if new_project not in self.tracker.settings["projects"]`.
+- ✅ Always unbind Tkinter events before showing a messagebox if those events reference cleanup functions — focus-stealing triggers FocusOut.
+- ✅ ALWAYS use `safe_teardown_tk_root(self.root)` in `tearDown()`. NEVER use `self.addCleanup(self.root.destroy)`. See 🚫 FORBIDDEN PATTERNS in DEVELOPMENT.md and the dedicated entry at the top of Recent Changes (2026-02-19).
+- ✅ `messagebox.showwarning` is patched via `patch("tkinter.messagebox.showwarning")` since `completion_frame.py` does `from tkinter import messagebox`.
+
+---
+
 ### [2026-02-19] - Code Quality Fix: test_analysis_card_filters.py Forbidden Tkinter Pattern and PEP 8 Violations
 
 **Search Keywords**: addCleanup root.destroy, forbidden tkinter pattern, PEP 8 imports, inline imports, safe_teardown_tk_root, test_analysis_card_filters, tearDown, TestCardDateFilterFunctions, TestCardFilterUI, TestCardFilterIntegration

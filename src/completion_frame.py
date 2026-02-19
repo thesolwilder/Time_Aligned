@@ -1361,7 +1361,14 @@ class CompletionFrame(ttk.Frame):
           - update_all=False if period-specific menu (only that period's dropdowns)
         - Returns combobox to readonly state
 
-        On duplicate or empty:
+        On duplicate name (name exists in ANY sphere):
+        - Unbinds <Return> and <FocusOut> before showing messagebox (prevents
+          FocusOut double-trigger)
+        - Shows showwarning dialog: "Project names must be unique across all spheres"
+        - Calls _cancel_new_project() to revert combobox
+        - Returns early
+
+        On empty:
         - Calls _cancel_new_project() to revert
 
         Args:
@@ -1412,9 +1419,18 @@ class CompletionFrame(ttk.Frame):
                     # Period-specific menu: update only that period's dropdowns
                     self._update_project_dropdowns()
             else:
-                # Already exists
-                combobox.config(state="readonly")
-                combobox.set(new_project)
+                # Project name already exists (possibly in a different sphere).
+                # Unbind events BEFORE showing messagebox to prevent FocusOut
+                # from triggering _cancel_new_project a second time.
+                combobox.unbind("<Return>")
+                combobox.unbind("<FocusOut>")
+                messagebox.showwarning(
+                    "Duplicate Project Name",
+                    f"'{new_project}' already exists.\n"
+                    "Project names must be unique across all spheres.",
+                )
+                self._cancel_new_project(None, combobox)
+                return  # Bindings already cleaned up above
         else:
             # Empty input, cancel
             self._cancel_new_project(event, combobox)
