@@ -26,6 +26,188 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-19] - Code Quality Fix: test_analysis_card_filters.py Forbidden Tkinter Pattern and PEP 8 Violations
+
+**Search Keywords**: addCleanup root.destroy, forbidden tkinter pattern, PEP 8 imports, inline imports, safe_teardown_tk_root, test_analysis_card_filters, tearDown, TestCardDateFilterFunctions, TestCardFilterUI, TestCardFilterIntegration
+
+**Problems Found (Code Review)**:
+
+1. **Forbidden Tkinter pattern** — All 3 test classes used `self.addCleanup(self.root.destroy)`, which is explicitly documented as ❌ Wrong Pattern #1 in DEVELOPMENT.md and AGENT_MEMORY.md. Causes `Tcl_AsyncDelete: async handler deleted by wrong thread` crashes.
+
+2. **PEP 8 import violations** — `from src.analysis_frame import AnalysisFrame`, `from tests.test_helpers import MockTime, TestFileManager`, and `from tests.test_helpers import TestDataGenerator` were placed **inside setUp() and individual test methods**. PEP 8 requires all imports at the top of the file.
+
+**Fixes Applied** (`tests/test_analysis_card_filters.py`):
+
+1. Added top-level imports:
+
+```python
+from src.analysis_frame import AnalysisFrame
+from tests.test_helpers import (
+    TestFileManager,
+    TestDataGenerator,
+    MockTime,
+    safe_teardown_tk_root,
+)
+```
+
+2. Replaced `self.addCleanup(self.root.destroy)` in all 3 setUp methods with proper `tearDown()`:
+
+```python
+def tearDown(self):
+    """Clean up after tests"""
+    safe_teardown_tk_root(self.root)
+    self.file_manager.cleanup()
+```
+
+3. Removed 12 inline import statements from setUp and test method bodies.
+
+**Note on Intermittent Failure**:
+`TestCardDateFilterFunctions` tests that use `patch("src.analysis_frame.datetime")` flake intermittently (`_tkinter.TclError: invalid command name "tcl_findLibrary"`) when Tkinter initializes multiple windows in rapid succession across the test suite. They always pass in isolation. This is a pre-existing Tkinter issue, not caused by our changes.
+
+**Key Learning**:
+
+- When doing code review (`r` shortcut), always check every setUp for `addCleanup(self.root.destroy)` — this is the most common forbidden pattern in test files
+- PEP 8: no imports inside functions/methods unless genuinely conditional (e.g., optional dependency handling)
+- The correct teardown sequence is always: `safe_teardown_tk_root(self.root)` → `self.file_manager.cleanup()`
+
+---
+
+### [2026-02-19] - Bug Fix: test_analysis_card_filters.py Created test_settings.json in Project Root
+
+**Search Keywords**: test_settings.json, root directory, temp file, test file cleanup, TestFileManager, settings_file, save_card_ranges, mock_tracker, analysis_card_filters
+
+**Problem**:
+Running the full test suite (or `test_analysis_card_filters.py` alone) left a stale `test_settings.json` in the project **root** directory. It appeared ~30 seconds into the full suite run.
+
+**Root Cause**:
+`AnalysisFrame.save_card_ranges()` writes `tracker.settings` to `tracker.settings_file`. All 9 tests in `test_analysis_card_filters.py` set `mock_tracker.settings_file = "test_settings.json"` (a bare relative path). When pytest runs from the project root, Python resolves this to `<root>/test_settings.json`. No cleanup was ever registered for it because the mock tracker was not managed by `TestFileManager`.
+
+**Fix Applied** (`tests/test_analysis_card_filters.py`):
+Replaced all 9 occurrences of:
+
+```python
+mock_tracker.settings_file = "test_settings.json"
+```
+
+with:
+
+```python
+mock_tracker.settings_file = self.file_manager.create_test_file("test_settings.json", mock_tracker.settings)
+```
+
+`TestFileManager.create_test_file()` creates the file in `tests/test_data/` (absolute path), tracks it in `self.test_files`, and the existing `self.addCleanup(self.file_manager.cleanup)` removes it after each test.
+
+**What Worked**:
+
+- Use `file_manager.create_test_file(name, content)` whenever pointing a mock tracker at a settings/data file — it returns the absolute path AND registers cleanup automatically.
+- All 11 tests pass; root-level stale file no longer created.
+
+**Key Learning**:
+Any time a test sets `tracker.settings_file` or `tracker.data_file` to a **bare filename string** (not an absolute path), it will write to whatever the current working directory is when pytest runs (usually the project root). Always use `TestFileManager.create_test_file()` or `os.path.join(self.file_manager.test_data_dir, filename)` to get an absolute, tracked path.
+
+---
+
+### [2026-02-19] - Test Update: test_delete_session_from_session_view_reloads Renamed to Reflect New Behaviour
+
+**Search Keywords**: test_delete_session_from_session_view_reloads, test_button_navigation, TestButtonNavigation, navigate home after delete, session_view_frame None after delete, assertIsNotNone session_view_frame failed
+
+**Context**:
+After the Feb 19 `_delete_session` fix (always navigate home), the test `test_delete_session_from_session_view_reloads` in `tests/test_button_navigation.py` failed:
+
+```
+AssertionError: unexpectedly None  (self.assertIsNotNone(self.tracker.session_view_frame))
+```
+
+**Root Cause (expected failure — test documented old buggy behaviour)**:
+The test asserted the old incorrect contract: "after deleting a session from session view, the session view reloads with a different session". The fix changed this to "always navigate home", which is the correct behaviour.
+
+**Fix**: Renamed and rewrote the test to assert the new correct contract:
+
+- `session_view_frame` is `None` after deletion
+- `session_view_container` is `None` after deletion
+- `main_frame_container` is visible (home frame shown)
+
+Old name: `test_delete_session_from_session_view_reloads`
+New name: `test_delete_session_from_session_view_navigates_home`
+
+**Key Learning**: After fixing a bug whose old behaviour was explicitly tested, search for tests asserting the old (wrong) behaviour and update them. The pattern `# Should still be in session view` or `assertIsNotNone(session_view_frame)` after deletion are red flags if the new contract navigates away.
+
+**Files Changed**:
+
+- `tests/test_button_navigation.py` — renamed + rewrote `test_delete_session_from_session_view_reloads`
+
+---
+
+### [2026-02-19] - Bug Fix: Delete Session Did Not Delete, Navigated Home or Reloaded Session Frame
+
+**Search Keywords**: \_delete_session, delete session, session_view_frame, save_data empty dict, last session, navigate home, session_view reload, completion_frame delete, json.dump empty, merge=False safety check, session still in data.json
+
+**Context**:
+User reported three bugs when clicking "Delete Session" from the Session Frame (either the post-session completion frame or the "Session View"):
+
+1. **First time (from completion frame)**: session not deleted, just navigated home
+2. **Every time (from session view)**: session not deleted, session view reloaded with same/next session
+3. **Session still in data.json** after deletion attempt
+
+**Root Cause 1 — Empty dict safety check in `save_data`**:
+`save_data(all_data, merge=False)` in `time_tracker.py` has a guard:
+
+```python
+if not session_data:
+    return  # silently skips writing
+```
+
+When the LAST session was deleted, `del all_data[self.session_name]` left `all_data = {}`. Calling `save_data({}, merge=False)` hit that guard and returned without writing the file. The session remained in `data.json`. The rest of `_delete_session` ran (showed "deleted" dialog, navigated home), but the file was unchanged.
+
+**Root Cause 2 — Session view reloaded instead of navigating home**:
+After deletion, `_delete_session` checked `if self.tracker.session_view_frame == self` and, when True, reloaded the session view with the next most-recent session. This meant the user could never actually leave — deletion always just swapped to a different session. Even when there was only 1 session, the failed save (Root Cause 1) caused the same session to reload.
+
+**Fix Applied** (`src/completion_frame.py` — `_delete_session`):
+
+1. **Replaced `save_data(all_data, merge=False)` with direct `json.dump`** to bypass the empty-dict guard:
+
+```python
+del all_data[self.session_name]
+
+# Write directly so an empty dict is saved correctly.
+# save_data(merge=False) has a safety guard that skips writing
+# when the dict is empty, which would leave the deleted session
+# in data.json when it was the last one.
+try:
+    with open(self.tracker.data_file, "w") as f:
+        json.dump(all_data, f, indent=2)
+except Exception as e:
+    messagebox.showerror("Save Error", ...)
+    return
+```
+
+2. **Removed the session_view reload logic — always navigate home**:
+
+```python
+# Always navigate home after deletion
+self.tracker.show_main_frame()
+```
+
+`show_main_frame()` properly destroys `session_view_container` and clears both `session_view_frame` and `session_view_container` references.
+
+**Key Learnings**:
+
+- `save_data(merge=False)` must NOT be used when you intentionally want to write an empty dict (e.g., deleting the last session). Use direct `json.dump` for explicit overwrites.
+- The "reload with next session" UX after deletion is confusing. Always navigate home: it's predictable, safe, and matches user expectation.
+- `show_main_frame()` properly handles cleanup of session_view_container even when called from within a child CompletionFrame — no need for `self.destroy()` beforehand.
+
+**Tests Added** (`tests/test_completion_frame.py` — `TestCompletionFrameSaveSkipDelete`):
+
+- `test_delete_last_session_removes_from_file`: deleting the only session writes `{}` to disk
+- `test_delete_session_from_session_view_navigates_home`: deletion from session view clears `session_view_frame` and `session_view_container` (i.e., navigates home)
+
+**Files Changed**:
+
+- `src/completion_frame.py` — rewrote deletion + navigation in `_delete_session`
+- `tests/test_completion_frame.py` — added 2 regression tests
+
+---
+
 ### [2026-02-19] - Test Update: test_multi_project_periods Used Incomplete Project Dicts
 
 **Search Keywords**: test_analysis_calculations, TestAnalysisEdgeCases, test_multi_project_periods, projects array no duration, missing duration field, 0 != 1000, incomplete test data, project dict structure
@@ -65,12 +247,14 @@ Real app data **always** includes `"duration"` and `"percentage"` in every proje
 **Key Learning**: Multi-project period test data MUST include `"duration"` in each project dict — without it, `calculate_totals()` correctly returns 0 because there is no allocation to sum.
 
 **Required fields for realistic multi-project test data**:
+
 - `"name"`: project name string
 - `"duration"`: allocated seconds (float/int)
 - `"percentage"`: integer 0-100
 - `"project_primary"`: True for primary, False for secondary
 
 **Files Changed**:
+
 - `tests/test_analysis_calculations.py` — updated `test_multi_project_periods` test data and assertions
 
 ---
@@ -81,6 +265,7 @@ Real app data **always** includes `"duration"` and `"percentage"` in every proje
 
 **Context**:
 After the Feb 18 fix, two tests in `test_analysis_priority.py` started failing:
+
 - `test_secondary_projects_aggregated_correctly`: `400 != 1000`
 - `test_multiple_periods_with_different_splits`: `1600 != 3000`
 
@@ -88,12 +273,14 @@ These were NOT regressions. Both tests had explicit comments (`# Note: Current i
 
 **Root Cause of Feb 18 Fix Inconsistency**:
 The Feb 18 fix checked `"project"` field BEFORE `"projects"` array. When a period has BOTH:
+
 - Primary project (matches `"project"` field) → got FULL period duration (wrong)
 - Secondary project (only in `"projects"` list) → got ALLOCATED duration (correct)
 
 This is inconsistent. Real data from the app never saves a `"project"` field alongside a `"projects"` array (multi-project periods only have `"projects"`), but the old tests artificially had both for "compatibility".
 
 **Correct Rule**:
+
 > When `"projects"` array is present, it is the authoritative allocation data for **all** projects — including the primary. Only fall back to `"project"` field if no `"projects"` array exists.
 
 **Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
@@ -120,22 +307,26 @@ for period in session_data.get("active", []):
 **Tests Updated** (correct expected values with the proper fix):
 
 `test_secondary_projects_aggregated_correctly` — period duration=1000, split 60/40:
+
 - Project A: **600** (was 1000 — old code gave full via `"project"` field match)
 - Project B: **400** (unchanged)
 - All Projects: 1000 (unchanged)
 
 `test_multiple_periods_with_different_splits`:
+
 - Project A: **1400** (70% of period 1, was 2000 full)
 - Project B: **1100** (600 from period 1 + 500 from period 2, was 3000 full)
 - Project C: **500** (50% of period 2, was 1000 full)
 
 **Key Learnings**:
+
 1. **`"projects"` array > `"project"` field**: If a period has been split, `"projects"` contains the authoritative per-project allocation. Never use `"project"` as a shortcut when `"projects"` is present.
 2. **"Documents current behavior" comments = tests to update**: Tests with that comment are behavior snapshots of bugs, not correctness contracts. Update them when the bug is fixed.
 3. **Inconsistency is a code smell**: If primary and secondary projects of the same period use different duration sources, the logic is wrong.
 4. **Real data never has both fields**: The app saves multi-project periods with only `"projects"` array — no top-level `"project"` field. The test data having both was an artifact.
 
 **Files Changed**:
+
 - `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~16 lines)
 - `tests/test_analysis_priority.py` — updated assertions in `test_secondary_projects_aggregated_correctly` and `test_multiple_periods_with_different_splits`
 

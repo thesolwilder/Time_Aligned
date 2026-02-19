@@ -2144,7 +2144,20 @@ class CompletionFrame(ttk.Frame):
                     return
 
                 del all_data[self.session_name]
-                self.tracker.save_data(all_data, merge=False)
+
+                # Write directly so an empty dict is saved correctly.
+                # save_data(merge=False) has a safety guard that skips writing
+                # when the dict is empty, which would leave the deleted session
+                # in data.json when it was the last one.
+                try:
+                    with open(self.tracker.data_file, "w") as f:
+                        json.dump(all_data, f, indent=2)
+                except Exception as e:
+                    messagebox.showerror(
+                        "Save Error",
+                        f"Failed to save after deletion: {e}\n\nDeletion may not have persisted.",
+                    )
+                    return
 
                 # Show success message
                 messagebox.showinfo(
@@ -2152,29 +2165,5 @@ class CompletionFrame(ttk.Frame):
                     f"Session '{self.session_name}' has been deleted successfully.",
                 )
 
-                # If we're in session view (from analysis), reload with next session
-                if (
-                    hasattr(self.tracker, "session_view_frame")
-                    and self.tracker.session_view_frame == self
-                ):
-                    # Get the next most recent session
-                    all_data = self.tracker.load_data()
-                    if all_data:
-                        # Reload session view with most recent session
-                        self.session_name = max(all_data.keys())
-                        self.destroy()
-
-                        # Recreate session view with new session
-                        session_view_parent = (
-                            self.tracker.session_view_container.get_content_frame()
-                        )
-                        self.tracker.session_view_frame = CompletionFrame(
-                            session_view_parent, self.tracker, None
-                        )
-                        self.tracker.session_view_frame.pack(fill="both", expand=True)
-                    else:
-                        # No more sessions, go back to main
-                        self.tracker.show_main_frame()
-                else:
-                    # Return to main frame (called from end session flow)
-                    self.tracker.show_main_frame()
+                # Always navigate home after deletion
+                self.tracker.show_main_frame()
