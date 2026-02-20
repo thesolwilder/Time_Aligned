@@ -1,0 +1,12 @@
+# Development and build tools — not required to run the application
+#
+# Install with:
+#   pip install -r requirements-dev.txt
+
+# Testing
+pytest>=7.0.0
+coverage>=7.0.0
+
+# Packaging — build the Windows .exe distribution
+# Usage: pyinstaller time_tracker.spec
+pyinstaller>=6.0.0

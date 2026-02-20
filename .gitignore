@@ -50,6 +50,10 @@ client_secret*.json
 #scaffold
 scaffold_project.py
 
+# PyInstaller build output
+dist/
+build/
+
 # Temporary debugging and test files
 check_*.py
 fix_*.py
