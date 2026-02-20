@@ -23,7 +23,7 @@ from unittest.mock import Mock, MagicMock, patch
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from test_helpers import TestDataGenerator, TestFileManager
+from test_helpers import TestDataGenerator, TestFileManager, safe_teardown_tk_root
 from src.settings_frame import SettingsFrame
 from src.ui_helpers import sanitize_name
 
@@ -62,6 +62,14 @@ class MockTracker:
                 return name
         return None
 
+    def load_data(self):
+        """Mock load data - returns empty dict by default"""
+        return {}
+
+    def save_data(self, session_data, merge=True):
+        """Mock save data - no-op by default"""
+        pass
+
     def close_settings(self):
         """Mock close settings"""
         pass
@@ -89,7 +97,6 @@ class TestSettingsFrameDefaults(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -162,7 +169,6 @@ class TestSettingsFrameFilters(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -428,7 +434,6 @@ class TestSphereFilterEmptyResult(unittest.TestCase):
         self.frame = SettingsFrame(self.root, self.tracker, self.root)
 
     def tearDown(self):
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -492,7 +497,6 @@ class TestSettingsFrameAddSphere(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -624,7 +628,6 @@ class TestSettingsFrameDefaultOrdering(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -727,7 +730,6 @@ class TestSettingsFrameOnlyOneDefault(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -861,7 +863,6 @@ class TestSettingsFrameArchiveActivate(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -951,7 +952,6 @@ class TestSettingsFrameComboboxScroll(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -984,7 +984,6 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1082,9 +1081,12 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
             "goal": "",
         }
 
-        # Mock the dialog
-        with patch("tkinter.simpledialog.askstring") as mock_ask:
+        # Mock the dialog and confirmation popup
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm:
             mock_ask.return_value = new_name
+            mock_confirm.return_value = True
             self.frame.edit_sphere_name(old_name)
 
         # Check that project's sphere reference was updated
@@ -1182,6 +1184,143 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
         )
 
 
+class TestSphereRenameSessionUpdate(unittest.TestCase):
+    """Test that renaming a sphere updates saved sessions in data.json"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "OldSphere": {"is_default": True, "active": True},
+                "OtherSphere": {"is_default": False, "active": True},
+            },
+            "projects": {
+                "ProjectA": {
+                    "sphere": "OldSphere",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "Break1": {"is_default": True, "active": True, "notes": ""},
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_rename_sessions.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_rename_sphere_shows_confirmation_popup(self):
+        """Test that renaming a sphere shows a confirmation dialog warning about sessions"""
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm:
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        mock_confirm.assert_called_once()
+
+    def test_rename_sphere_updates_sessions_with_old_name(self):
+        """Test that renaming a sphere updates sphere field in all matching sessions"""
+        sessions = {
+            "session_2026_01_01": {"sphere": "OldSphere", "date": "2026-01-01"},
+            "session_2026_01_02": {"sphere": "OldSphere", "date": "2026-01-02"},
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(
+            self.tracker, "save_data", side_effect=capture_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        self.assertEqual(saved_data["session_2026_01_01"]["sphere"], "NewSphere")
+        self.assertEqual(saved_data["session_2026_01_02"]["sphere"], "NewSphere")
+
+    def test_rename_sphere_does_not_affect_other_sphere_sessions(self):
+        """Test that renaming a sphere leaves sessions from other spheres unchanged"""
+        sessions = {
+            "session_a": {"sphere": "OldSphere", "date": "2026-01-01"},
+            "session_b": {"sphere": "OtherSphere", "date": "2026-01-02"},
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(
+            self.tracker, "save_data", side_effect=capture_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        self.assertEqual(saved_data["session_b"]["sphere"], "OtherSphere")
+
+    def test_rename_sphere_cancel_confirmation_aborts_all_changes(self):
+        """Test that cancelling the confirmation popup leaves sphere and sessions unchanged"""
+        mock_save = Mock()
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(self.tracker, "save_data", mock_save):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = False
+            self.frame.edit_sphere_name("OldSphere")
+
+        # save_data for sessions must not have been called
+        mock_save.assert_not_called()
+        # Sphere must still have old name in settings
+        self.assertIn("OldSphere", self.tracker.settings["spheres"])
+        self.assertNotIn("NewSphere", self.tracker.settings["spheres"])
+
+    def test_rename_sphere_no_sessions_does_not_call_save_data(self):
+        """Test that save_data is not called when no sessions exist for old sphere"""
+        mock_save = Mock()
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value={}
+        ), patch.object(
+            self.tracker, "save_data", mock_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        # save_data for sessions should not be called when no sessions exist
+        mock_save.assert_not_called()
+
+
 class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
     """Test that archiving a sphere archives all associated projects"""
 
@@ -1234,7 +1373,6 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1473,7 +1611,6 @@ class TestProjectSphereChangeIntegration(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1586,7 +1723,6 @@ class TestIdleSettingsValidation(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1686,7 +1822,6 @@ class TestIdleSettingsUI(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1798,7 +1933,6 @@ class TestBreakActionsCRUD(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1960,7 +2094,6 @@ class TestBreakActionsFilter(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2125,7 +2258,6 @@ class TestCSVExport(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2344,7 +2476,6 @@ class TestSettingsFrameCSVPercentageColumns(unittest.TestCase):
         self.frame = SettingsFrame(self.root, self.tracker, self.root)
 
     def tearDown(self):
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2612,7 +2743,6 @@ class TestScreenshotSettingsValidation(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2680,7 +2810,6 @@ class TestKeyboardShortcutsSection(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2775,7 +2904,6 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2865,6 +2993,227 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
         # Verify uploader was instantiated and test_connection was called
         mock_uploader.assert_called_once()
         mock_instance.test_connection.assert_called_once()
+
+
+class TestProjectRenameSessionUpdate(unittest.TestCase):
+    """Test that renaming a project updates saved sessions in data.json"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "Sphere1": {"is_default": True, "active": True},
+            },
+            "projects": {
+                "Project A": {
+                    "sphere": "Sphere1",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "Resting": {"is_default": True, "active": True, "notes": ""}
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_project_rename_sessions.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_rename_project_updates_active_period_project_names(self):
+        """Test that renaming a project updates project name in all active periods"""
+        sessions = {
+            "session_01": {
+                "sphere": "Sphere1",
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]}
+                ],
+            },
+            "session_02": {
+                "sphere": "Sphere1",
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]}
+                ],
+            },
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        self.assertEqual(
+            saved_data["session_01"]["active"][0]["projects"][0]["name"], "Project B"
+        )
+        self.assertEqual(
+            saved_data["session_02"]["active"][0]["projects"][0]["name"], "Project B"
+        )
+
+    def test_rename_project_does_not_affect_other_projects_in_same_period(self):
+        """Test that renaming does not change other project names in the same active period"""
+        sessions = {
+            "session_01": {
+                "active": [
+                    {
+                        "projects": [
+                            {"name": "Project A", "project_primary": True},
+                            {"name": "Other Project", "project_primary": False},
+                        ]
+                    }
+                ]
+            }
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        projects = saved_data["session_01"]["active"][0]["projects"]
+        self.assertEqual(projects[0]["name"], "Project B")
+        self.assertEqual(projects[1]["name"], "Other Project")
+
+    def test_rename_project_updates_all_active_periods_in_session(self):
+        """Test that all active periods within a session are updated"""
+        sessions = {
+            "session_01": {
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]},
+                    {"projects": [{"name": "Project A", "project_primary": True}]},
+                ]
+            }
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        for active_period in saved_data["session_01"]["active"]:
+            self.assertEqual(active_period["projects"][0]["name"], "Project B")
+
+    def test_rename_project_no_matching_sessions_does_not_call_save_data(self):
+        """Test that save_data is not called when no sessions reference the old project"""
+        mock_save = Mock()
+
+        with patch.object(self.tracker, "load_data", return_value={}), patch.object(
+            self.tracker, "save_data", mock_save
+        ):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_sessions_with_different_project_unchanged(self):
+        """Test that sessions referencing a different project are not saved"""
+        sessions = {
+            "session_other": {
+                "active": [
+                    {
+                        "projects": [
+                            {"name": "Different Project", "project_primary": True}
+                        ]
+                    }
+                ]
+            }
+        }
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_empty_active_list_does_not_crash(self):
+        """Test that sessions with empty active list are handled gracefully"""
+        sessions = {"session_empty": {"active": []}}
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            # Should not raise
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_legacy_string_field_updated(self):
+        """Test that legacy 'project' string field (not 'projects' array) is also updated.
+
+        Real sessions saved without multi-project support use:
+            active_period["project"] = "Project A"   (string)
+        rather than:
+            active_period["projects"] = [{"name": "Project A", ...}]  (array)
+        Both formats must be handled.
+        """
+        sessions = {
+            "session_legacy_01": {
+                "active": [{"project": "Project A", "duration": 5.0}]
+            },
+            "session_legacy_02": {
+                "active": [{"project": "Project A", "duration": 3.0}]
+            },
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        self.assertEqual(
+            saved_data["session_legacy_01"]["active"][0]["project"], "Project B"
+        )
+        self.assertEqual(
+            saved_data["session_legacy_02"]["active"][0]["project"], "Project B"
+        )
+
+    def test_rename_project_legacy_other_project_unchanged(self):
+        """Test that legacy 'project' string for a different project is not changed"""
+        sessions = {
+            "session_other": {
+                "active": [{"project": "Unrelated Project", "duration": 2.0}]
+            }
+        }
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
 
 
 if __name__ == "__main__":

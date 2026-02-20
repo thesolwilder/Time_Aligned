@@ -26,6 +26,251 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-20] - Bug Fix: Project Rename Did Not Update Legacy "project" String Field in Sessions
+
+**Search Keywords**: project rename legacy, project string field, active period project, data.json project format, \_rename_project_in_sessions, legacy format, single project session, project key vs projects array
+
+**Bug Reported**: After renaming Project A → Project B in Settings, sessions saved by the app still showed "Project A" in their JSON. The previous fix for this bug handled the new multi-project array format only.
+
+**Root Cause**: Two different data formats exist in `data.json` for project names in active periods:
+
+| Format            | When saved                                   | Structure                                                          |
+| ----------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| **Legacy**        | Sessions saved without multi-project support | `active_period["project"] = "Project A"` (string)                  |
+| **Multi-project** | Sessions saved with percentage split feature | `active_period["projects"] = [{"name": "Project A", ...}]` (array) |
+
+The previous fix only iterated `active_period.get("projects", [])` (array format). It never checked `active_period.get("project")` (string format), so legacy sessions were silently skipped.
+
+**Files Changed**:
+
+- `src/settings_frame.py` — `_rename_project_in_sessions()` updated to handle both formats
+- `tests/test_settings_frame.py` — 2 new tests added to `TestProjectRenameSessionUpdate`
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for "legacy", "project string field", "active period project"
+✅ Identified root cause from actual data.json shown by user
+✅ Wrote 2 failing tests FIRST (TDD) for legacy string format
+✅ Verified tests failed before touching source
+✅ Fixed with minimal change — added legacy check alongside existing array check
+✅ Both new tests pass in isolation; batch TclError is pre-existing Tk pollution
+```
+
+**2. Updated `_rename_project_in_sessions()` to handle both formats:**
+
+```python
+for active_period in session_data.get("active", []):
+    # Legacy single-project string field
+    if active_period.get("project") == old_name:
+        active_period["project"] = new_name
+        sessions_updated = True
+    # Multi-project array format
+    for project_entry in active_period.get("projects", []):
+        if project_entry.get("name") == old_name:
+            project_entry["name"] = new_name
+            sessions_updated = True
+```
+
+**Tests Added (to `TestProjectRenameSessionUpdate`):**
+
+- `test_rename_project_legacy_string_field_updated` — legacy `"project"` key is updated for all matching sessions
+- `test_rename_project_legacy_other_project_unchanged` — legacy session with different project is not written
+
+**Key Learnings**:
+
+1. **ALWAYS check actual data.json before writing session-update code** — the real file revealed the `"project"` string format that mock data did not cover. Mock data was created assuming new format only.
+2. **Two active period project formats exist and BOTH must be handled**:
+   - `active_period["project"]` = plain string (legacy, single project)
+   - `active_period["projects"]` = list of dicts with `"name"` key (multi-project/percentage)
+3. **TDD gap**: Previous tests passed because mock sessions only used the new format. Bug reproduction with the actual app revealed the gap. Always validate against real saved data when the bug is about persistence.
+
+---
+
+### [2026-02-20] - Bug Fix: Project Rename Did Not Update Saved Sessions
+
+**Search Keywords**: project rename, rename project, toggle_edit, create_project_row, \_rename_project_in_sessions, session project name, active period projects, data.json project, settings_frame, project name update, confirmation popup
+
+**Bug Reported**: After renaming a project in Settings (e.g., Project A → Project B), existing saved sessions in `data.json` still showed the old project name ("Project A") in each active period.
+
+**Root Cause**: The `toggle_edit()` nested closure inside `create_project_row()` in `src/settings_frame.py` only renamed the project key in `settings["projects"]`. It did **not** update `"projects"[i]["name"]` fields inside active periods of sessions stored in `data.json`, and showed no warning to the user.
+
+**Session Data Structure (important for future bugs):**
+
+```json
+"active": [
+  {
+    "projects": [
+      {"name": "Project A", "project_primary": true, "percentage": 90, ...},
+      {"name": "Project B", "project_primary": false, "percentage": 10, ...}
+    ]
+  }
+]
+```
+
+The project name lives at: `session["active"][i]["projects"][j]["name"]`
+
+**Files Changed**:
+
+- `src/settings_frame.py` — new `_rename_project_in_sessions()` method + `toggle_edit()` updated
+- `tests/test_settings_frame.py` — new `TestProjectRenameSessionUpdate` class (6 tests)
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for project/session/rename keywords
+✅ Wrote 6 failing tests FIRST (TDD)
+✅ Verified all 6 tests failed before fixing
+✅ Fixed the bug — 5/6 pass in batch (6th passes in isolation, Tk state pollution)
+✅ No regressions to existing tests
+```
+
+**2. Extracted `_rename_project_in_sessions(old_name, new_name)` as a class method:**
+
+```python
+def _rename_project_in_sessions(self, old_name, new_name):
+    """Update project name references in all saved sessions."""
+    all_sessions = self.tracker.load_data()
+    sessions_updated = False
+    for session_data in all_sessions.values():
+        for active_period in session_data.get("active", []):
+            for project_entry in active_period.get("projects", []):
+                if project_entry.get("name") == old_name:
+                    project_entry["name"] = new_name
+                    sessions_updated = True
+    if sessions_updated:
+        self.tracker.save_data(all_sessions, merge=False)
+```
+
+**3. Updated `toggle_edit()` save block in `create_project_row()` with two additions:**
+
+```python
+is_name_change = new_name != project_name
+
+# Confirmation popup BEFORE any mutation (user can cancel safely)
+if is_name_change:
+    confirmed = messagebox.askyesno(
+        "Rename Project",
+        f"Renaming '{project_name}' to '{new_name}' will update "
+        f"the project name in all saved sessions.\n\nDo you want to continue?",
+    )
+    if not confirmed:
+        return
+
+# ... (sphere/note/goal mutations happen after confirmation) ...
+
+# Rename project key and update sessions
+if is_name_change:
+    self.tracker.settings["projects"].pop(project_name)
+    self.tracker.settings["projects"][new_name] = project_data
+    self._rename_project_in_sessions(project_name, new_name)
+```
+
+**Why `is_name_change` computed before mutations**: If we mutate `project_data["sphere"]` etc. and then show the popup, cancelling leaves in-memory settings dirty (mutations done, not saved to disk). By checking `is_name_change` first and confirming before any mutation, a cancel is always a safe no-op.
+
+**Tests Added (`TestProjectRenameSessionUpdate`, 6 tests):**
+
+- `test_rename_project_updates_active_period_project_names` — matching sessions get new name
+- `test_rename_project_does_not_affect_other_projects_in_same_period` — sibling projects unchanged
+- `test_rename_project_updates_all_active_periods_in_session` — multi-period sessions all updated
+- `test_rename_project_no_matching_sessions_does_not_call_save_data` — no write if no match
+- `test_rename_project_sessions_with_different_project_unchanged` — other projects not saved
+- `test_rename_project_empty_active_list_does_not_crash` — graceful empty list handling
+
+**Key Learnings**:
+
+1. **Project name is nested 3 levels deep**: `session → active[i] → projects[j] → name`. Sphere name is only 1 level (`session → sphere`). Triple-loop required.
+2. **`_rename_project_in_sessions` pattern** matches `edit_sphere_name`'s session update approach (load → iterate → save with `merge=False`). Consistent pattern across both fixes.
+3. **Confirmation popup must come before any in-memory mutation** — otherwise cancelling leaves dirty state in `tracker.settings` (mutated sphere/note/goal but not saved). Computing `is_name_change = new_name != project_name` early and gating ALL mutations behind the confirmation solves this.
+4. **`toggle_edit` is a nested closure** — cannot call it directly from tests. Extracting `_rename_project_in_sessions` as a standalone method makes the session-update logic fully testable without needing to drive the UI.
+5. **Known Tk batch isolation failure**: `test_rename_project_empty_active_list_does_not_crash` fails in batch (Tk re-init TclError) but passes in isolation. Pre-existing state pollution issue — not a logic bug.
+
+---
+
+### [2026-02-20] - Bug Fix: Sphere Rename Did Not Update Saved Sessions
+
+**Search Keywords**: edit_sphere_name, sphere rename, session sphere, data.json sphere, settings_frame, rename sphere sessions, confirmation popup, sphere update sessions
+
+**Bug Reported**: After renaming a sphere in Settings (e.g., Sphere 1 → Sphere 2), existing saved sessions in `data.json` still displayed the old sphere name ("Sphere 1") in the Session View.
+
+**Root Cause**: `edit_sphere_name()` in `src/settings_frame.py` only updated:
+
+1. `settings["spheres"]` (the sphere dict key)
+2. `settings["projects"]` (project.sphere references)
+
+It did **not** update `"sphere"` fields in sessions stored in `data.json`, and showed no warning to the user.
+
+**Files Changed**:
+
+- `src/settings_frame.py` — `edit_sphere_name()` rewritten
+- `tests/test_settings_frame.py` — new `TestSphereRenameSessionUpdate` class (5 tests) + updated `MockTracker`
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for sphere/session keywords
+✅ Wrote 5 failing tests FIRST (TDD)
+✅ Verified tests failed before fixing
+✅ Fixed the bug to pass tests
+✅ No regressions — existing test updated to mock new askyesno popup
+```
+
+**2. Rewrote `edit_sphere_name()` with three additions:**
+
+```python
+# 1. Confirmation popup warning user about session impact
+confirm = messagebox.askyesno(
+    "Rename Sphere",
+    f"Renaming '{old_name}' to '{new_name}' will update the sphere name "
+    f"in all saved sessions.\n\nDo you want to continue?",
+)
+if not confirm:
+    return
+
+# 2. Load sessions, update matching sphere field
+all_sessions = self.tracker.load_data()
+sessions_updated = False
+for session_data in all_sessions.values():
+    if session_data.get("sphere") == old_name:
+        session_data["sphere"] = new_name
+        sessions_updated = True
+
+# 3. Only call save_data if at least one session was changed (merge=False)
+if sessions_updated:
+    self.tracker.save_data(all_sessions, merge=False)
+```
+
+**3. Added `load_data()` / `save_data()` stubs to `MockTracker`** so all tests that call `edit_sphere_name()` don't get `AttributeError`.
+
+**4. Updated existing `test_edit_sphere_name_updates_projects`** to also mock `messagebox.askyesno` (returning `True`) — required because the new confirmation popup runs before any mutations.
+
+**Tests Added (`TestSphereRenameSessionUpdate`):**
+
+- `test_rename_sphere_shows_confirmation_popup` — askyesno called exactly once
+- `test_rename_sphere_updates_sessions_with_old_name` — matching sessions get new name
+- `test_rename_sphere_does_not_affect_other_sphere_sessions` — other spheres unchanged
+- `test_rename_sphere_cancel_confirmation_aborts_all_changes` — cancel = no mutations at all
+- `test_rename_sphere_no_sessions_does_not_call_save_data` — `save_data` not called when 0 sessions match
+
+**Key Learnings**:
+
+1. **Session data is in `data.json` (via `tracker.load_data()`) — separate from settings.json**. Any rename that spans both must update both files independently.
+2. **`merge=False` is correct here** — we're replacing the entire file with the updated copy, not merging a partial update.
+3. **Adding stubs to MockTracker is preferable to per-test patching** for methods that every future test of `edit_sphere_name` will need.
+4. **Always mock `messagebox.askyesno` in tests that call methods with confirmation popups** — otherwise the tkinter dialog blocks headless tests.
+5. **Known Tkinter Tk() re-init error** when running `TestSphereRenameSessionUpdate` as a batch with earlier tests: passes in isolation. Not a logic bug — pre-existing state pollution issue documented elsewhere in this file.
+
+---
+
 ### [2026-02-20] - Test Fix: Stale expected_headers in test_csv_export_includes_all_expected_headers
 
 **Search Keywords**: test_analysis_priority, TestAnalysisCSVExportIntegration, test_csv_export_includes_all_expected_headers, expected_headers, fieldnames, Primary Percentage, Primary Duration, Secondary Percentage, Secondary Duration, export_to_csv, CSV headers stale
@@ -35,6 +280,7 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 **Root Cause**: The test's `expected_headers` list was written before `Primary Percentage`, `Primary Duration`, `Secondary Percentage`, and `Secondary Duration` were added to `export_to_csv`'s `fieldnames`. The source had been updated but the test was not.
 
 **Fix Applied** (`tests/test_analysis_priority.py` — `TestAnalysisCSVExportIntegration.test_csv_export_includes_all_expected_headers`):
+
 - Added `"Primary Percentage"` and `"Primary Duration"` after `"Primary Action"` in `expected_headers`
 - Added `"Secondary Percentage"` and `"Secondary Duration"` after `"Secondary Action"` in `expected_headers`
 - Updated count assertion: `14` → `18`
@@ -44,6 +290,7 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 When new columns are added to `export_to_csv`, ALL tests that assert on `fieldnames` / column count must be updated to match. The canonical source of truth is the `fieldnames` list in `src/analysis_frame.py` around line 2139.
 
 **Files Changed**:
+
 - [tests/test_analysis_priority.py](tests/test_analysis_priority.py) — updated `expected_headers` + count assertion in `test_csv_export_includes_all_expected_headers`
 
 ---
@@ -76,6 +323,7 @@ else:
 ```
 
 This ensures:
+
 - `sphere_var` always reflects the current dropdown selection
 - `sphere_mgmt_frame` is cleared (no real sphere → no management buttons)
 - Project list is refreshed (`sphere_var == "Create New Sphere..."` matches no project's sphere field → list is empty)
@@ -84,6 +332,7 @@ This ensures:
 Any method that conditionally handles a filter result MUST include an `else` for the empty case. Without it, the UI stays stale when no items match. The `refresh_project_section()` call already handles the empty case correctly (`data.get("sphere") == "Create New Sphere..."` matches nothing), so only the `sphere_var` and `sphere_mgmt_frame` updates were missing.
 
 **Tests Written** (`tests/test_settings_frame.py` — new class `TestSphereFilterEmptyResult`):
+
 - `test_archived_filter_with_no_archived_spheres_selects_create_new` — sphere_var == "Create New Sphere..."
 - `test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons` — sphere_mgmt_frame empty
 - `test_archived_filter_with_no_archived_spheres_empties_project_list` — projects_list_frame empty
@@ -91,6 +340,7 @@ Any method that conditionally handles a filter result MUST include an `else` for
 All 3 tests: FAIL before fix → PASS after fix.
 
 **Files Changed**:
+
 - [src/settings_frame.py](src/settings_frame.py) — `refresh_sphere_dropdown()`: added `else` branch + updated docstring
 - [tests/test_settings_frame.py](tests/test_settings_frame.py) — added `TestSphereFilterEmptyResult` class (3 tests)
 
@@ -13832,22 +14082,26 @@ User accepted this behavior with the reasoning:
 When agent runs Tkinter tests via pytest (full suite or multiple classes in one session), intermittent TclError crashes 1-2 tests even though the tests themselves are correct and pass when run properly.
 
 **Symptom**:
+
 ```
 TclError: invalid command name "tcl_findLibrary"
 TclError: Can't find a usable init.tcl
 ```
-This appears as a FAILED test in pytest output  **it is NOT a real failure**.
+
+This appears as a FAILED test in pytest output **it is NOT a real failure**.
 
 **Root Cause**: Agent environment pytest session isolation artifact. Multiple `tk.Tk()` instances across test classes in one pytest session causes Tcl interpreter state corruption between classes.
 
 **DO NOT**:
--  Modify the teardown pattern (it is already correct with `safe_teardown_tk_root`)
--  Switch to `setUpClass`/`tearDownClass` (tried and abandoned  makes things worse)
--  Add `addCleanup` patterns (FORBIDDEN pattern)
--  Treat it as a real test failure requiring code fixes
--  Waste time debugging or "fixing" it  the user does not want to be reminded of this
+
+- Modify the teardown pattern (it is already correct with `safe_teardown_tk_root`)
+- Switch to `setUpClass`/`tearDownClass` (tried and abandoned makes things worse)
+- Add `addCleanup` patterns (FORBIDDEN pattern)
+- Treat it as a real test failure requiring code fixes
+- Waste time debugging or "fixing" it the user does not want to be reminded of this
 
 **CORRECT VERIFICATION**:
+
 ```bash
 # Option 1: Run as script (most reliable):
 python tests/test_analysis_csv_percentage.py
@@ -13859,13 +14113,15 @@ pytest tests/test_your_file.py::TestClassName -v
 User confirmed: `Ran 21 tests in 24.270s OK` when run as script.
 
 **What Worked** :
-- `safe_teardown_tk_root(self.root)` in `tearDown()`  correct teardown
+
+- `safe_teardown_tk_root(self.root)` in `tearDown()` correct teardown
 - Running test file as a Python script directly
 - Running individual test classes via pytest
 
 **What Did NOT Work** :
-- `setUpClass`/`tearDownClass`  tried and abandoned, worse behavior
-- Running full test file via pytest in agent env  intermittent TclError
+
+- `setUpClass`/`tearDownClass` tried and abandoned, worse behavior
+- Running full test file via pytest in agent env intermittent TclError
 
 ---
 
@@ -13875,31 +14131,35 @@ User confirmed: `Ran 21 tests in 24.270s OK` when run as script.
 
 **Context**:
 Added 4 new columns to `export_to_csv()` in `src/analysis_frame.py`:
-- `Primary Percentage`  100 for single project/action, stored % for multi
-- `Primary Duration`  formatted full duration for single, formatted split duration for multi
-- `Secondary Percentage`  "" for single, stored secondary % for multi
-- `Secondary Duration`  "" for single, formatted secondary duration for multi
+
+- `Primary Percentage` 100 for single project/action, stored % for multi
+- `Primary Duration` formatted full duration for single, formatted split duration for multi
+- `Secondary Percentage` "" for single, stored secondary % for multi
+- `Secondary Duration` "" for single, formatted secondary duration for multi
 
 Columns appear in CSV ONLY (not in the timeline UI).
 
-**Implementation** (`src/analysis_frame.py`  `export_to_csv()`):
+**Implementation** (`src/analysis_frame.py` `export_to_csv()`):
 All three period types updated (active, break, idle):
+
 - Active: reads from `period["projects"]` array using `project_primary: True/False`
 - Break: reads from `period["actions"]` array using `break_primary: True/False`
 - Idle: reads from `period["actions"]` array using `idle_primary: True/False`
 - Single-item format (no array): `primary_percentage=100`, `secondary_percentage=""`
-- `secondary_period_duration` sentinel is `""` (not 0)  check `!= ""` before calling `format_duration()`
+- `secondary_period_duration` sentinel is `""` (not 0) check `!= ""` before calling `format_duration()`
 
-`fieldnames` updated: 14  18 columns. Order:
+`fieldnames` updated: 14 18 columns. Order:
 `Primary Action, Primary Percentage, Primary Duration, Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration, Secondary Comment`
 
 **Tests** (`tests/test_analysis_csv_percentage.py`):
-- 21 tests across 6 classes  all pass via `python tests/test_analysis_csv_percentage.py`
+
+- 21 tests across 6 classes all pass via `python tests/test_analysis_csv_percentage.py`
 - Uses `safe_teardown_tk_root` + `TestFileManager` correctly
 - TDD: wrote failing tests first (20 failed), then implemented to pass
 
 **Key Technical Details**:
-- `secondary_period_duration != ""` guard needed  `""` is sentinel for "no secondary", cannot call `format_duration("")`
+
+- `secondary_period_duration != ""` guard needed `""` is sentinel for "no secondary", cannot call `format_duration("")`
 - `format_duration()` takes seconds (float/int), returns string like `"30m 0s"`, `"11m 40s"`
 - Multi-project stored duration in data.json: `int(total_duration * percentage / 100)`
 - Used `csv.reader` for header test (not `split(",")` which breaks multi-word headers)
@@ -13913,17 +14173,18 @@ All three period types updated (active, break, idle):
 **Search Keywords**: google sheets upload, upload_session, primary percentage, secondary percentage, primary duration, secondary duration, break action column, action_primary, break_primary, google_sheets_integration, column structure, expected_headers
 
 **Context**:
-Updated `upload_session()` in `src/google_sheets_integration.py` to match the pattern established by `export_to_csv()` in `src/analysis_frame.py`.  Added Primary/Secondary Percentage and Duration columns and moved break actions into the Primary Action column.
+Updated `upload_session()` in `src/google_sheets_integration.py` to match the pattern established by `export_to_csv()` in `src/analysis_frame.py`. Added Primary/Secondary Percentage and Duration columns and moved break actions into the Primary Action column.
 
 **New Column Structure (23 cols, A-W)**:
 `Session ID, Date, Sphere, Session Start Time, Session End Time, Session Total Duration (min), Session Active Duration (min), Session Break Duration (min), Type, Primary Action, Primary Percentage, Primary Duration (min), Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration (min), Secondary Comment, Activity Start, Activity End, Active Notes, Break Notes, Idle Notes, Session Notes`
 
-**Removed Columns**: Activity Duration (min) [was col 17], Break Action [was col 18], old trailing Secondary Action [was col 19].  These are now 0 net change (3 removed, 3 added percentage/duration cols = still 23 cols).
+**Removed Columns**: Activity Duration (min) [was col 17], Break Action [was col 18], old trailing Secondary Action [was col 19]. These are now 0 net change (3 removed, 3 added percentage/duration cols = still 23 cols).
 
-**Bug Fixed**: Break multi-action extraction used `action_item.get("action_primary", True)`  WRONG.  Should be `break_primary`, matching the data format.  Fixed to `action_item.get("break_primary", True)`.
+**Bug Fixed**: Break multi-action extraction used `action_item.get("action_primary", True)` WRONG. Should be `break_primary`, matching the data format. Fixed to `action_item.get("break_primary", True)`.
 
 **Implementation** (`src/google_sheets_integration.py`):
-- `_ensure_sheet_headers()`  updated `expected_headers` list
+
+- `_ensure_sheet_headers()` updated `expected_headers` list
 - Active periods: added `primary_comment`, `primary_percentage`, `primary_period_duration`, `secondary_period_duration` variables; reads from `project_primary: True/False`
 - Break periods: same pattern using `break_primary: True/False` (bug fix); break action now in Primary Action col (9)
 - Idle/session_summary rows: updated to 23-col structure (no percentage/duration data)
@@ -13931,7 +14192,8 @@ Updated `upload_session()` in `src/google_sheets_integration.py` to match the pa
 - Secondary duration guard: `round(x / 60, 2) if secondary_period_duration != "" else ""`
 
 **Tests** (`tests/test_google_sheets.py`):
-- Added `TestGoogleSheetsPercentageColumns`  10 new tests, all passing
+
+- Added `TestGoogleSheetsPercentageColumns` 10 new tests, all passing
 - Updated 8 existing header mocks from old to new header list
 - Fixed column assertions in `test_upload_session_formats_data_correctly`: row[10] (was comment, now percentage), row[12] (now comment)
 - Fixed column assertions in `test_upload_detailed_format_with_active_periods`: row1[12], row1[17], row1[18], row3[9], row3[12]; removed row1[16] (activity_duration)
@@ -13940,9 +14202,10 @@ Updated `upload_session()` in `src/google_sheets_integration.py` to match the pa
 - **All 78 tests pass**: `Ran 78 tests in 6.929s OK`
 
 **Key Technical Details**:
-- `_make_uploader()` helper in new test class creates MagicMock service pre-wired with new headers  reusable across all new tests
+
+- `_make_uploader()` helper in new test class creates MagicMock service pre-wired with new headers reusable across all new tests
 - `_NEW_HEADERS` class attribute keeps the expected list DRY across test setup
 - ResourceWarning (unclosed SSL socket) in test output is from `unittest.mock` and is NOT a test failure
-- Duration for multi-project: reads from `project_item.get("duration", 0)`  if item has no duration stored, result is 0.0 min (test data without stored durations shows 0.0)
+- Duration for multi-project: reads from `project_item.get("duration", 0)` if item has no duration stored, result is 0.0 min (test data without stored durations shows 0.0)
 
 **Branch**: `percentage`

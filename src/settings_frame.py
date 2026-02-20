@@ -496,34 +496,54 @@ class SettingsFrame(ttk.Frame):
         self.load_selected_sphere()
 
     def edit_sphere_name(self, old_name):
-        """Edit sphere name"""
+        """Edit sphere name and update all references including saved sessions"""
         new_name = simpledialog.askstring(
             "Edit Sphere Name", "Enter new name:", initialvalue=old_name
         )
 
-        if new_name and new_name.strip() and new_name != old_name:
-            new_name = sanitize_name(new_name.strip())
-            if not new_name:
-                messagebox.showerror("Error", "Invalid sphere name")
-                return
+        if not (new_name and new_name.strip() and new_name != old_name):
+            return
 
-            if new_name in self.tracker.settings.get("spheres", {}):
-                messagebox.showerror("Error", "A sphere with this name already exists")
-                return
+        new_name = sanitize_name(new_name.strip())
+        if not new_name:
+            messagebox.showerror("Error", "Invalid sphere name")
+            return
 
-            # Rename sphere
-            sphere_data = self.tracker.settings["spheres"].pop(old_name)
-            self.tracker.settings["spheres"][new_name] = sphere_data
+        if new_name in self.tracker.settings.get("spheres", {}):
+            messagebox.showerror("Error", "A sphere with this name already exists")
+            return
 
-            # Update projects that reference this sphere
-            for _, project_data in self.tracker.settings.get("projects", {}).items():
-                if project_data.get("sphere") == old_name:
-                    project_data["sphere"] = new_name
+        confirm = messagebox.askyesno(
+            "Rename Sphere",
+            f"Renaming '{old_name}' to '{new_name}' will update the sphere name "
+            f"in all saved sessions.\n\nDo you want to continue?",
+        )
+        if not confirm:
+            return
 
-            self.save_settings()
-            self.refresh_sphere_dropdown()
-            self.sphere_var.set(new_name)
-            self.load_selected_sphere()
+        # Rename sphere in settings
+        sphere_data = self.tracker.settings["spheres"].pop(old_name)
+        self.tracker.settings["spheres"][new_name] = sphere_data
+
+        # Update projects that reference this sphere
+        for _, project_data in self.tracker.settings.get("projects", {}).items():
+            if project_data.get("sphere") == old_name:
+                project_data["sphere"] = new_name
+
+        # Update saved sessions that reference this sphere
+        all_sessions = self.tracker.load_data()
+        sessions_updated = False
+        for session_data in all_sessions.values():
+            if session_data.get("sphere") == old_name:
+                session_data["sphere"] = new_name
+                sessions_updated = True
+        if sessions_updated:
+            self.tracker.save_data(all_sessions, merge=False)
+
+        self.save_settings()
+        self.refresh_sphere_dropdown()
+        self.sphere_var.set(new_name)
+        self.load_selected_sphere()
 
     def toggle_sphere_active(self, sphere_name):
         """Toggle sphere active/inactive status"""
@@ -533,6 +553,35 @@ class SettingsFrame(ttk.Frame):
         self.tracker.settings["spheres"][sphere_name]["active"] = not current_status
         self.save_settings()
         self.refresh_sphere_dropdown()
+
+    def _rename_project_in_sessions(self, old_name, new_name):
+        """Update project name references in all saved sessions.
+
+        Handles two formats that may appear in active periods:
+        - Legacy format: active_period["project"] = "Project A"  (string)
+        - Multi-project format: active_period["projects"] = [{"name": "Project A", ...}]
+
+        Writes back to disk only when at least one entry was changed.
+
+        Args:
+            old_name: The project name to search for in sessions.
+            new_name: The replacement project name.
+        """
+        all_sessions = self.tracker.load_data()
+        sessions_updated = False
+        for session_data in all_sessions.values():
+            for active_period in session_data.get("active", []):
+                # Legacy single-project string field
+                if active_period.get("project") == old_name:
+                    active_period["project"] = new_name
+                    sessions_updated = True
+                # Multi-project array format
+                for project_entry in active_period.get("projects", []):
+                    if project_entry.get("name") == old_name:
+                        project_entry["name"] = new_name
+                        sessions_updated = True
+        if sessions_updated:
+            self.tracker.save_data(all_sessions, merge=False)
 
     def delete_sphere(self, sphere_name):
         """Delete a sphere and its associated projects"""
@@ -793,6 +842,18 @@ class SettingsFrame(ttk.Frame):
                     )
                     return
 
+                is_name_change = new_name != project_name
+
+                # Warn user that saved sessions will be updated before any mutation
+                if is_name_change:
+                    confirmed = messagebox.askyesno(
+                        "Rename Project",
+                        f"Renaming '{project_name}' to '{new_name}' will update "
+                        f"the project name in all saved sessions.\n\nDo you want to continue?",
+                    )
+                    if not confirmed:
+                        return
+
                 # Update project data
                 project_data = self.tracker.settings["projects"].get(project_name, {})
                 old_sphere = project_data.get("sphere")
@@ -801,10 +862,11 @@ class SettingsFrame(ttk.Frame):
                 project_data["note"] = note_var.get()
                 project_data["goal"] = goal_var.get()
 
-                # If name changed, rename project
-                if new_name != project_name:
+                # If name changed, rename project key and update saved sessions
+                if is_name_change:
                     self.tracker.settings["projects"].pop(project_name)
                     self.tracker.settings["projects"][new_name] = project_data
+                    self._rename_project_in_sessions(project_name, new_name)
 
                 self.save_settings()
 
