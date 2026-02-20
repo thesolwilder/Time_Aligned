@@ -341,12 +341,12 @@ class SettingsFrame(ttk.Frame):
         Side effects:
             - Updates sphere_dropdown combobox values
             - Selects first sphere if list non-empty
-            - Clears selection if list empty
-            - Calls on_sphere_selected() to update management UI
+            - Selects "Create New Sphere..." and clears management frame if list empty
+            - Calls refresh_project_section() to keep project list in sync
 
         Note:
-            Always calls on_sphere_selected() after refresh to ensure
-            management frame displays correct sphere or clears if none selected.
+            Always updates sphere_var and redraws dependent UI (management
+            buttons and project list) whether or not matching spheres exist.
         """
         filter_val = self.sphere_filter.get()
         spheres = self.tracker.settings.get("spheres", {})
@@ -374,6 +374,15 @@ class SettingsFrame(ttk.Frame):
             self.load_selected_sphere()
             # Update project list to reflect the newly selected sphere
             # Only call if projects_list_frame exists (it's created after sphere section)
+            if hasattr(self, "projects_list_frame"):
+                self.refresh_project_section()
+        else:
+            # No spheres match the filter — select the only available option
+            self.sphere_var.set("Create New Sphere...")
+            # Clear sphere management buttons (no real sphere is selected)
+            for widget in self.sphere_mgmt_frame.winfo_children():
+                widget.destroy()
+            # Refresh project list (will be empty — no sphere is active)
             if hasattr(self, "projects_list_frame"):
                 self.refresh_project_section()
 
@@ -487,34 +496,54 @@ class SettingsFrame(ttk.Frame):
         self.load_selected_sphere()
 
     def edit_sphere_name(self, old_name):
-        """Edit sphere name"""
+        """Edit sphere name and update all references including saved sessions"""
         new_name = simpledialog.askstring(
             "Edit Sphere Name", "Enter new name:", initialvalue=old_name
         )
 
-        if new_name and new_name.strip() and new_name != old_name:
-            new_name = sanitize_name(new_name.strip())
-            if not new_name:
-                messagebox.showerror("Error", "Invalid sphere name")
-                return
+        if not (new_name and new_name.strip() and new_name != old_name):
+            return
 
-            if new_name in self.tracker.settings.get("spheres", {}):
-                messagebox.showerror("Error", "A sphere with this name already exists")
-                return
+        new_name = sanitize_name(new_name.strip())
+        if not new_name:
+            messagebox.showerror("Error", "Invalid sphere name")
+            return
 
-            # Rename sphere
-            sphere_data = self.tracker.settings["spheres"].pop(old_name)
-            self.tracker.settings["spheres"][new_name] = sphere_data
+        if new_name in self.tracker.settings.get("spheres", {}):
+            messagebox.showerror("Error", "A sphere with this name already exists")
+            return
 
-            # Update projects that reference this sphere
-            for _, project_data in self.tracker.settings.get("projects", {}).items():
-                if project_data.get("sphere") == old_name:
-                    project_data["sphere"] = new_name
+        confirm = messagebox.askyesno(
+            "Rename Sphere",
+            f"Renaming '{old_name}' to '{new_name}' will update the sphere name "
+            f"in all saved sessions.\n\nDo you want to continue?",
+        )
+        if not confirm:
+            return
 
-            self.save_settings()
-            self.refresh_sphere_dropdown()
-            self.sphere_var.set(new_name)
-            self.load_selected_sphere()
+        # Rename sphere in settings
+        sphere_data = self.tracker.settings["spheres"].pop(old_name)
+        self.tracker.settings["spheres"][new_name] = sphere_data
+
+        # Update projects that reference this sphere
+        for _, project_data in self.tracker.settings.get("projects", {}).items():
+            if project_data.get("sphere") == old_name:
+                project_data["sphere"] = new_name
+
+        # Update saved sessions that reference this sphere
+        all_sessions = self.tracker.load_data()
+        sessions_updated = False
+        for session_data in all_sessions.values():
+            if session_data.get("sphere") == old_name:
+                session_data["sphere"] = new_name
+                sessions_updated = True
+        if sessions_updated:
+            self.tracker.save_data(all_sessions, merge=False)
+
+        self.save_settings()
+        self.refresh_sphere_dropdown()
+        self.sphere_var.set(new_name)
+        self.load_selected_sphere()
 
     def toggle_sphere_active(self, sphere_name):
         """Toggle sphere active/inactive status"""
@@ -524,6 +553,35 @@ class SettingsFrame(ttk.Frame):
         self.tracker.settings["spheres"][sphere_name]["active"] = not current_status
         self.save_settings()
         self.refresh_sphere_dropdown()
+
+    def _rename_project_in_sessions(self, old_name, new_name):
+        """Update project name references in all saved sessions.
+
+        Handles two formats that may appear in active periods:
+        - Legacy format: active_period["project"] = "Project A"  (string)
+        - Multi-project format: active_period["projects"] = [{"name": "Project A", ...}]
+
+        Writes back to disk only when at least one entry was changed.
+
+        Args:
+            old_name: The project name to search for in sessions.
+            new_name: The replacement project name.
+        """
+        all_sessions = self.tracker.load_data()
+        sessions_updated = False
+        for session_data in all_sessions.values():
+            for active_period in session_data.get("active", []):
+                # Legacy single-project string field
+                if active_period.get("project") == old_name:
+                    active_period["project"] = new_name
+                    sessions_updated = True
+                # Multi-project array format
+                for project_entry in active_period.get("projects", []):
+                    if project_entry.get("name") == old_name:
+                        project_entry["name"] = new_name
+                        sessions_updated = True
+        if sessions_updated:
+            self.tracker.save_data(all_sessions, merge=False)
 
     def delete_sphere(self, sphere_name):
         """Delete a sphere and its associated projects"""
@@ -784,6 +842,18 @@ class SettingsFrame(ttk.Frame):
                     )
                     return
 
+                is_name_change = new_name != project_name
+
+                # Warn user that saved sessions will be updated before any mutation
+                if is_name_change:
+                    confirmed = messagebox.askyesno(
+                        "Rename Project",
+                        f"Renaming '{project_name}' to '{new_name}' will update "
+                        f"the project name in all saved sessions.\n\nDo you want to continue?",
+                    )
+                    if not confirmed:
+                        return
+
                 # Update project data
                 project_data = self.tracker.settings["projects"].get(project_name, {})
                 old_sphere = project_data.get("sphere")
@@ -792,10 +862,11 @@ class SettingsFrame(ttk.Frame):
                 project_data["note"] = note_var.get()
                 project_data["goal"] = goal_var.get()
 
-                # If name changed, rename project
-                if new_name != project_name:
+                # If name changed, rename project key and update saved sessions
+                if is_name_change:
                     self.tracker.settings["projects"].pop(project_name)
                     self.tracker.settings["projects"][new_name] = project_data
+                    self._rename_project_in_sessions(project_name, new_name)
 
                 self.save_settings()
 
@@ -1389,7 +1460,9 @@ class SettingsFrame(ttk.Frame):
         min_seconds_spin = ttk.Spinbox(
             screenshot_frame, from_=1, to=300, textvariable=min_seconds_var, width=3
         )
-        min_seconds_spin.grid(row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W)
+        min_seconds_spin.grid(
+            row=screenshot_row, column=1, pady=5, columnspan=2, padx=5, sticky=tk.W
+        )
         screenshot_row += 1
 
         # Define nested save function with closure over widget variables
@@ -1810,23 +1883,38 @@ class SettingsFrame(ttk.Frame):
                     for active in active_periods:
                         # Extract primary and secondary project information
                         primary_project = ""
+                        primary_comment = ""
+                        primary_percentage = 100
+                        primary_period_duration = active.get("duration", 0)
                         secondary_project = ""
                         secondary_comment = ""
                         secondary_percentage = ""
+                        secondary_period_duration = ""
 
                         if active.get("project"):
                             # Single project case
                             primary_project = active.get("project", "")
+                            primary_comment = active.get("comment", "")
                         else:
                             # Multiple projects case
                             for project_item in active.get("projects", []):
                                 if project_item.get("project_primary", True):
                                     primary_project = project_item.get("name", "")
+                                    primary_comment = project_item.get("comment", "")
+                                    primary_percentage = project_item.get(
+                                        "percentage", 100
+                                    )
+                                    primary_period_duration = project_item.get(
+                                        "duration", 0
+                                    )
                                 else:
                                     secondary_project = project_item.get("name", "")
                                     secondary_comment = project_item.get("comment", "")
                                     secondary_percentage = project_item.get(
                                         "percentage", ""
+                                    )
+                                    secondary_period_duration = project_item.get(
+                                        "duration", 0
                                     )
 
                         row = {
@@ -1839,16 +1927,16 @@ class SettingsFrame(ttk.Frame):
                             "session_active_duration": active_duration,
                             "session_break_duration": break_duration,
                             "type": "active",
-                            "project": primary_project,
-                            "secondary_project": secondary_project,
-                            "secondary_comment": secondary_comment,
+                            "primary_action": primary_project,
+                            "primary_percentage": primary_percentage,
+                            "primary_duration": primary_period_duration,
+                            "primary_comment": primary_comment,
+                            "secondary_action": secondary_project,
                             "secondary_percentage": secondary_percentage,
+                            "secondary_duration": secondary_period_duration,
+                            "secondary_comment": secondary_comment,
                             "activity_start": active.get("start", ""),
                             "activity_end": active.get("end", ""),
-                            "activity_duration": active.get("duration", 0),
-                            "activity_comment": active.get("comment", ""),
-                            "break_action": "",
-                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1861,23 +1949,38 @@ class SettingsFrame(ttk.Frame):
                     for brk in breaks:
                         # Extract primary and secondary action information
                         primary_action = ""
+                        primary_comment = ""
+                        primary_percentage = 100
+                        primary_period_duration = brk.get("duration", 0)
                         secondary_action = ""
                         secondary_comment = ""
                         secondary_percentage = ""
+                        secondary_period_duration = ""
 
                         if brk.get("action"):
                             # Single action case
                             primary_action = brk.get("action", "")
+                            primary_comment = brk.get("comment", "")
                         else:
                             # Multiple actions case
                             for action_item in brk.get("actions", []):
-                                if action_item.get("action_primary", True):
+                                if action_item.get("break_primary", True):
                                     primary_action = action_item.get("name", "")
+                                    primary_comment = action_item.get("comment", "")
+                                    primary_percentage = action_item.get(
+                                        "percentage", 100
+                                    )
+                                    primary_period_duration = action_item.get(
+                                        "duration", 0
+                                    )
                                 else:
                                     secondary_action = action_item.get("name", "")
                                     secondary_comment = action_item.get("comment", "")
                                     secondary_percentage = action_item.get(
                                         "percentage", ""
+                                    )
+                                    secondary_period_duration = action_item.get(
+                                        "duration", 0
                                     )
 
                         row = {
@@ -1890,16 +1993,16 @@ class SettingsFrame(ttk.Frame):
                             "session_active_duration": active_duration,
                             "session_break_duration": break_duration,
                             "type": "break",
-                            "project": "",
-                            "secondary_project": "",
-                            "secondary_comment": secondary_comment,
+                            "primary_action": primary_action,
+                            "primary_percentage": primary_percentage,
+                            "primary_duration": primary_period_duration,
+                            "primary_comment": primary_comment,
+                            "secondary_action": secondary_action,
                             "secondary_percentage": secondary_percentage,
+                            "secondary_duration": secondary_period_duration,
+                            "secondary_comment": secondary_comment,
                             "activity_start": brk.get("start", ""),
                             "activity_end": "",
-                            "activity_duration": brk.get("duration", 0),
-                            "activity_comment": brk.get("comment", ""),
-                            "break_action": primary_action,
-                            "secondary_action": secondary_action,
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1910,6 +2013,42 @@ class SettingsFrame(ttk.Frame):
                 # Process idle periods
                 if idle_periods:
                     for idle in idle_periods:
+                        # Extract primary and secondary action information
+                        primary_action = ""
+                        primary_comment = ""
+                        primary_percentage = 100
+                        primary_period_duration = idle.get("duration", 0)
+                        secondary_action = ""
+                        secondary_comment = ""
+                        secondary_percentage = ""
+                        secondary_period_duration = ""
+
+                        if idle.get("action"):
+                            # Single action case
+                            primary_action = idle.get("action", "")
+                            primary_comment = idle.get("comment", "")
+                        else:
+                            # Multiple actions case
+                            for action_item in idle.get("actions", []):
+                                if action_item.get("idle_primary", True):
+                                    primary_action = action_item.get("name", "")
+                                    primary_comment = action_item.get("comment", "")
+                                    primary_percentage = action_item.get(
+                                        "percentage", 100
+                                    )
+                                    primary_period_duration = action_item.get(
+                                        "duration", 0
+                                    )
+                                else:
+                                    secondary_action = action_item.get("name", "")
+                                    secondary_comment = action_item.get("comment", "")
+                                    secondary_percentage = action_item.get(
+                                        "percentage", ""
+                                    )
+                                    secondary_period_duration = action_item.get(
+                                        "duration", 0
+                                    )
+
                         row = {
                             "session_id": session_id,
                             "date": date,
@@ -1920,16 +2059,16 @@ class SettingsFrame(ttk.Frame):
                             "session_active_duration": active_duration,
                             "session_break_duration": break_duration,
                             "type": "idle",
-                            "project": "",
-                            "secondary_project": "",
-                            "secondary_comment": "",
-                            "secondary_percentage": "",
+                            "primary_action": primary_action,
+                            "primary_percentage": primary_percentage,
+                            "primary_duration": primary_period_duration,
+                            "primary_comment": primary_comment,
+                            "secondary_action": secondary_action,
+                            "secondary_percentage": secondary_percentage,
+                            "secondary_duration": secondary_period_duration,
+                            "secondary_comment": secondary_comment,
                             "activity_start": idle.get("start", ""),
                             "activity_end": idle.get("end", ""),
-                            "activity_duration": idle.get("duration", 0),
-                            "activity_comment": "",
-                            "break_action": "",
-                            "secondary_action": "",
                             "active_notes": active_notes,
                             "break_notes": break_notes,
                             "idle_notes": idle_notes,
@@ -1949,16 +2088,16 @@ class SettingsFrame(ttk.Frame):
                         "session_active_duration": active_duration,
                         "session_break_duration": break_duration,
                         "type": "session_summary",
-                        "project": "",
-                        "secondary_project": "",
-                        "secondary_comment": "",
+                        "primary_action": "",
+                        "primary_percentage": "",
+                        "primary_duration": "",
+                        "primary_comment": "",
+                        "secondary_action": "",
                         "secondary_percentage": "",
+                        "secondary_duration": "",
+                        "secondary_comment": "",
                         "activity_start": "",
                         "activity_end": "",
-                        "activity_duration": 0,
-                        "activity_comment": "",
-                        "break_action": "",
-                        "secondary_action": "",
                         "active_notes": active_notes,
                         "break_notes": break_notes,
                         "idle_notes": idle_notes,
@@ -1979,16 +2118,16 @@ class SettingsFrame(ttk.Frame):
                         "session_active_duration",
                         "session_break_duration",
                         "type",
-                        "project",
-                        "secondary_project",
-                        "secondary_comment",
+                        "primary_action",
+                        "primary_percentage",
+                        "primary_duration",
+                        "primary_comment",
+                        "secondary_action",
                         "secondary_percentage",
+                        "secondary_duration",
+                        "secondary_comment",
                         "activity_start",
                         "activity_end",
-                        "activity_duration",
-                        "activity_comment",
-                        "break_action",
-                        "secondary_action",
                         "active_notes",
                         "break_notes",
                         "idle_notes",
@@ -2101,7 +2240,7 @@ class SettingsFrame(ttk.Frame):
 
         filtered_actions.sort(key=lambda x: x[0])
 
-        #default action at the top
+        # default action at the top
         if default_action:
             filtered_actions.insert(0, default_action)
 

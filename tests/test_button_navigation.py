@@ -193,8 +193,13 @@ class TestButtonNavigation(unittest.TestCase):
         self.assertIsNone(self.tracker.completion_container)
         self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
-    def test_delete_session_from_session_view_reloads(self):
-        """Test that Delete Session from session view reloads next session"""
+    def test_delete_session_from_session_view_navigates_home(self):
+        """Test that Delete Session from session view navigates to home frame.
+
+        Updated behaviour (Feb 2026): deletion no longer reloads session view
+        with the next session — it always calls show_main_frame() so the user
+        returns to the main tracker view and all session-view references are cleared.
+        """
         # Create multiple sessions
         test_data = {
             "session1": {
@@ -235,12 +240,15 @@ class TestButtonNavigation(unittest.TestCase):
                 # Call delete
                 self.tracker.session_view_frame._delete_session()
 
-        # Session should have been deleted
+        # Session should have been deleted from data
         all_data = self.tracker.load_data()
         self.assertNotIn(initial_session, all_data)
 
-        # Should still be in session view with different session
-        self.assertIsNotNone(self.tracker.session_view_frame)
+        # Session view must be closed and home frame shown
+        self.assertIsNone(self.tracker.session_view_frame)
+        self.assertIsNone(self.tracker.session_view_container)
+        self.root.update()
+        self.assertTrue(self.tracker.main_frame_container.winfo_ismapped())
 
     def test_analysis_button_opens_analysis(self):
         """Test that Analysis button opens analysis frame"""

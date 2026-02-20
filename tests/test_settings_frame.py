@@ -23,7 +23,7 @@ from unittest.mock import Mock, MagicMock, patch
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from test_helpers import TestDataGenerator, TestFileManager
+from test_helpers import TestDataGenerator, TestFileManager, safe_teardown_tk_root
 from src.settings_frame import SettingsFrame
 from src.ui_helpers import sanitize_name
 
@@ -62,6 +62,14 @@ class MockTracker:
                 return name
         return None
 
+    def load_data(self):
+        """Mock load data - returns empty dict by default"""
+        return {}
+
+    def save_data(self, session_data, merge=True):
+        """Mock save data - no-op by default"""
+        pass
+
     def close_settings(self):
         """Mock close settings"""
         pass
@@ -89,7 +97,6 @@ class TestSettingsFrameDefaults(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -162,7 +169,6 @@ class TestSettingsFrameFilters(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -388,6 +394,91 @@ class TestSettingsFrameFilters(unittest.TestCase):
         self.assertTrue(found_archived)
 
 
+class TestSphereFilterEmptyResult(unittest.TestCase):
+    """Test sphere radio button filter when no spheres match the selected filter.
+
+    Reproduces the bug: selecting 'Archived' radio when there are no archived
+    spheres caused nothing to update — sphere_var, sphere_mgmt_frame, and the
+    project list all remained stale.
+    """
+
+    def setUp(self):
+        """Set up with only active spheres — no archived spheres exist."""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "DefaultSphere": {"is_default": True, "active": True},
+            },
+            "projects": {
+                "DefaultProject": {
+                    "sphere": "DefaultSphere",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "DefaultBreak": {"is_default": True, "active": True, "notes": ""},
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_filter_empty.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_archived_filter_with_no_archived_spheres_selects_create_new(self):
+        """Selecting Archived radio with no archived spheres must select 'Create New Sphere...'.
+
+        Bug: sphere_var remained stale (still showed the previously selected
+        active sphere), so the UI appeared completely unchanged.
+        """
+        # Confirm initial state: active sphere is selected
+        self.assertEqual(self.frame.sphere_var.get(), "DefaultSphere")
+
+        # Switch to archived filter — no archived spheres exist
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        # sphere_var must change to the only available option
+        self.assertEqual(self.frame.sphere_var.get(), "Create New Sphere...")
+
+    def test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons(self):
+        """Selecting Archived radio with no archived spheres must clear sphere management buttons."""
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        children = self.frame.sphere_mgmt_frame.winfo_children()
+        self.assertEqual(
+            len(children),
+            0,
+            "sphere_mgmt_frame must be empty when no sphere is selected",
+        )
+
+    def test_archived_filter_with_no_archived_spheres_empties_project_list(self):
+        """Selecting Archived radio with no archived spheres must clear the project list."""
+        self.frame.sphere_filter.set("inactive")
+        self.frame.refresh_sphere_dropdown()
+
+        children = self.frame.projects_list_frame.winfo_children()
+        self.assertEqual(
+            len(children),
+            0,
+            "projects_list_frame must be empty when no sphere is selected",
+        )
+
+
 class TestSettingsFrameAddSphere(unittest.TestCase):
     """Test adding new spheres and recording to settings file"""
 
@@ -406,7 +497,6 @@ class TestSettingsFrameAddSphere(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -538,7 +628,6 @@ class TestSettingsFrameDefaultOrdering(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -641,7 +730,6 @@ class TestSettingsFrameOnlyOneDefault(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -775,7 +863,6 @@ class TestSettingsFrameArchiveActivate(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -865,7 +952,6 @@ class TestSettingsFrameComboboxScroll(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -898,7 +984,6 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -996,9 +1081,12 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
             "goal": "",
         }
 
-        # Mock the dialog
-        with patch("tkinter.simpledialog.askstring") as mock_ask:
+        # Mock the dialog and confirmation popup
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm:
             mock_ask.return_value = new_name
+            mock_confirm.return_value = True
             self.frame.edit_sphere_name(old_name)
 
         # Check that project's sphere reference was updated
@@ -1096,6 +1184,143 @@ class TestSettingsFrameDataAccuracy(unittest.TestCase):
         )
 
 
+class TestSphereRenameSessionUpdate(unittest.TestCase):
+    """Test that renaming a sphere updates saved sessions in data.json"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "OldSphere": {"is_default": True, "active": True},
+                "OtherSphere": {"is_default": False, "active": True},
+            },
+            "projects": {
+                "ProjectA": {
+                    "sphere": "OldSphere",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "Break1": {"is_default": True, "active": True, "notes": ""},
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_sphere_rename_sessions.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_rename_sphere_shows_confirmation_popup(self):
+        """Test that renaming a sphere shows a confirmation dialog warning about sessions"""
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm:
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        mock_confirm.assert_called_once()
+
+    def test_rename_sphere_updates_sessions_with_old_name(self):
+        """Test that renaming a sphere updates sphere field in all matching sessions"""
+        sessions = {
+            "session_2026_01_01": {"sphere": "OldSphere", "date": "2026-01-01"},
+            "session_2026_01_02": {"sphere": "OldSphere", "date": "2026-01-02"},
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(
+            self.tracker, "save_data", side_effect=capture_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        self.assertEqual(saved_data["session_2026_01_01"]["sphere"], "NewSphere")
+        self.assertEqual(saved_data["session_2026_01_02"]["sphere"], "NewSphere")
+
+    def test_rename_sphere_does_not_affect_other_sphere_sessions(self):
+        """Test that renaming a sphere leaves sessions from other spheres unchanged"""
+        sessions = {
+            "session_a": {"sphere": "OldSphere", "date": "2026-01-01"},
+            "session_b": {"sphere": "OtherSphere", "date": "2026-01-02"},
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(
+            self.tracker, "save_data", side_effect=capture_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        self.assertEqual(saved_data["session_b"]["sphere"], "OtherSphere")
+
+    def test_rename_sphere_cancel_confirmation_aborts_all_changes(self):
+        """Test that cancelling the confirmation popup leaves sphere and sessions unchanged"""
+        mock_save = Mock()
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(self.tracker, "save_data", mock_save):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = False
+            self.frame.edit_sphere_name("OldSphere")
+
+        # save_data for sessions must not have been called
+        mock_save.assert_not_called()
+        # Sphere must still have old name in settings
+        self.assertIn("OldSphere", self.tracker.settings["spheres"])
+        self.assertNotIn("NewSphere", self.tracker.settings["spheres"])
+
+    def test_rename_sphere_no_sessions_does_not_call_save_data(self):
+        """Test that save_data is not called when no sessions exist for old sphere"""
+        mock_save = Mock()
+
+        with patch("tkinter.simpledialog.askstring") as mock_ask, patch(
+            "tkinter.messagebox.askyesno"
+        ) as mock_confirm, patch.object(
+            self.tracker, "load_data", return_value={}
+        ), patch.object(
+            self.tracker, "save_data", mock_save
+        ):
+            mock_ask.return_value = "NewSphere"
+            mock_confirm.return_value = True
+            self.frame.edit_sphere_name("OldSphere")
+
+        # save_data for sessions should not be called when no sessions exist
+        mock_save.assert_not_called()
+
+
 class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
     """Test that archiving a sphere archives all associated projects"""
 
@@ -1148,7 +1373,6 @@ class TestSettingsFrameSphereArchiveCascade(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1387,7 +1611,6 @@ class TestProjectSphereChangeIntegration(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1500,7 +1723,6 @@ class TestIdleSettingsValidation(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1600,7 +1822,6 @@ class TestIdleSettingsUI(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1712,7 +1933,6 @@ class TestBreakActionsCRUD(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -1874,7 +2094,6 @@ class TestBreakActionsFilter(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2039,7 +2258,6 @@ class TestCSVExport(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2078,7 +2296,7 @@ class TestCSVExport(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["date"], "2026-02-17")
         self.assertEqual(rows[0]["sphere"], "Work")
-        self.assertEqual(rows[0]["project"], "Project A")
+        self.assertEqual(rows[0]["primary_action"], "Project A")
 
         # Verify success message was shown
         mock_info.assert_called_once()
@@ -2125,6 +2343,376 @@ class TestCSVExport(unittest.TestCase):
             os.remove(output_file)
 
 
+class TestSettingsFrameCSVPercentageColumns(unittest.TestCase):
+    """Test that CSV export uses new primary/secondary percentage/duration column structure"""
+
+    def setUp(self):
+        """Set up test fixtures with all period types including multi-action data"""
+        self.file_manager = TestFileManager()
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_pct_settings.json", settings
+        )
+
+        data = {
+            "session1": {
+                "date": "2026-02-17",
+                "sphere": "Work",
+                "start_time": "09:00:00",
+                "end_time": "17:00:00",
+                "total_duration": 28800,
+                "active_duration": 18000,
+                "break_duration": 5400,
+                "active": [
+                    # Single project
+                    {
+                        "project": "Solo Project",
+                        "start": "09:00:00",
+                        "end": "10:00:00",
+                        "duration": 3600,
+                        "comment": "Solo comment",
+                    },
+                    # Multi project
+                    {
+                        "projects": [
+                            {
+                                "name": "Primary Project",
+                                "project_primary": True,
+                                "percentage": 70,
+                                "duration": 2520,
+                                "comment": "Primary comment",
+                            },
+                            {
+                                "name": "Secondary Project",
+                                "project_primary": False,
+                                "percentage": 30,
+                                "duration": 1080,
+                                "comment": "Secondary comment",
+                            },
+                        ],
+                        "start": "10:00:00",
+                        "end": "11:00:00",
+                        "duration": 3600,
+                    },
+                ],
+                "breaks": [
+                    # Single action break
+                    {
+                        "action": "Coffee",
+                        "start": "11:00:00",
+                        "end": "11:15:00",
+                        "duration": 900,
+                        "comment": "Break comment",
+                    },
+                    # Multi action break — uses break_primary key (not action_primary)
+                    {
+                        "actions": [
+                            {
+                                "name": "Lunch",
+                                "break_primary": True,
+                                "percentage": 80,
+                                "duration": 1920,
+                                "comment": "Lunch comment",
+                            },
+                            {
+                                "name": "Walk",
+                                "break_primary": False,
+                                "percentage": 20,
+                                "duration": 480,
+                                "comment": "Walk comment",
+                            },
+                        ],
+                        "start": "12:00:00",
+                        "end": "12:40:00",
+                        "duration": 2400,
+                    },
+                ],
+                "idle_periods": [
+                    # Single action idle
+                    {
+                        "action": "Reading",
+                        "start": "15:00:00",
+                        "end": "15:30:00",
+                        "duration": 1800,
+                        "comment": "",
+                    },
+                    # Multi action idle — uses idle_primary key
+                    {
+                        "actions": [
+                            {
+                                "name": "Meeting",
+                                "idle_primary": True,
+                                "percentage": 60,
+                                "duration": 720,
+                                "comment": "Meeting comment",
+                            },
+                            {
+                                "name": "Docs",
+                                "idle_primary": False,
+                                "percentage": 40,
+                                "duration": 480,
+                                "comment": "Docs comment",
+                            },
+                        ],
+                        "start": "15:30:00",
+                        "end": "16:00:00",
+                        "duration": 1200,
+                    },
+                ],
+                "session_comments": {
+                    "active_notes": "",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "",
+                },
+            }
+        }
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_pct_data.json", data
+        )
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.tracker.data_file = self.test_data_file
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def _export_and_read(self):
+        """Helper: run CSV export and return (rows, fieldnames) from the written file."""
+        import csv
+
+        output_file = os.path.join(self.file_manager.test_data_dir, "output_pct.csv")
+        with (
+            patch("tkinter.filedialog.asksaveasfilename", return_value=output_file),
+            patch("tkinter.messagebox.showinfo"),
+            patch("os.startfile", create=True),
+        ):
+            self.frame.save_all_data_to_csv()
+
+        with open(output_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            fieldnames = reader.fieldnames or []
+        return rows, fieldnames
+
+    # ---- Fieldname tests ----
+
+    def test_fieldnames_include_new_columns(self):
+        """CSV must contain all new primary/secondary percentage/duration columns"""
+        _, fieldnames = self._export_and_read()
+        for col in [
+            "primary_action",
+            "primary_percentage",
+            "primary_duration",
+            "primary_comment",
+            "secondary_action",
+            "secondary_percentage",
+            "secondary_duration",
+            "secondary_comment",
+        ]:
+            self.assertIn(col, fieldnames, f"Expected column '{col}' in fieldnames")
+
+    def test_fieldnames_exclude_old_columns(self):
+        """CSV must NOT contain old column names"""
+        _, fieldnames = self._export_and_read()
+        for col in [
+            "project",
+            "secondary_project",
+            "activity_duration",
+            "activity_comment",
+            "break_action",
+        ]:
+            self.assertNotIn(col, fieldnames, f"Old column '{col}' should be removed")
+
+    # ---- Active single-project tests ----
+
+    def test_active_single_project_primary_action(self):
+        """Single-project active: primary_action = project name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_active_single_project_primary_percentage_100(self):
+        """Single-project active: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_active_single_project_primary_duration(self):
+        """Single-project active: primary_duration = period duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_duration"], "3600")
+
+    def test_active_single_project_primary_comment(self):
+        """Single-project active: primary_comment from period comment field"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_comment"], "Solo comment")
+
+    def test_active_single_project_empty_secondary(self):
+        """Single-project active: secondary fields are empty"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["secondary_action"], "")
+        self.assertEqual(row["secondary_percentage"], "")
+        self.assertEqual(row["secondary_duration"], "")
+
+    # ---- Active multi-project tests ----
+
+    def test_active_multi_project_primary_action(self):
+        """Multi-project active: primary_action = primary project name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_active_multi_project_primary_percentage(self):
+        """Multi-project active: primary_percentage from project item"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_percentage"], "70")
+
+    def test_active_multi_project_primary_duration(self):
+        """Multi-project active: primary_duration from project item (seconds)"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_duration"], "2520")
+
+    def test_active_multi_project_primary_comment(self):
+        """Multi-project active: primary_comment from primary project item"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_comment"], "Primary comment")
+
+    def test_active_multi_project_secondary_fields(self):
+        """Multi-project active: secondary fields populated from secondary project"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["secondary_action"], "Secondary Project")
+        self.assertEqual(row["secondary_percentage"], "30")
+        self.assertEqual(row["secondary_duration"], "1080")
+        self.assertEqual(row["secondary_comment"], "Secondary comment")
+
+    # ---- Break single-action tests ----
+
+    def test_break_single_action_primary_action(self):
+        """Single-action break: primary_action = action name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_break_single_action_primary_percentage_100(self):
+        """Single-action break: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_break_single_action_primary_duration(self):
+        """Single-action break: primary_duration = break duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        )
+        self.assertEqual(row["primary_duration"], "900")
+
+    def test_break_multi_action_uses_break_primary_key(self):
+        """Multi-action break: uses break_primary key (not action_primary) to find primary"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Lunch"
+        )
+        self.assertEqual(row["primary_percentage"], "80")
+        self.assertEqual(row["primary_duration"], "1920")
+        self.assertEqual(row["secondary_action"], "Walk")
+        self.assertEqual(row["secondary_percentage"], "20")
+        self.assertEqual(row["secondary_duration"], "480")
+
+    # ---- Idle tests ----
+
+    def test_idle_single_action_primary_action(self):
+        """Single-action idle: primary_action = action name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_idle_single_action_primary_percentage_100(self):
+        """Single-action idle: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_idle_single_action_primary_duration(self):
+        """Single-action idle: primary_duration = idle period duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        )
+        self.assertEqual(row["primary_duration"], "1800")
+
+    def test_idle_multi_action_uses_idle_primary_key(self):
+        """Multi-action idle: uses idle_primary key to find primary action"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Meeting"
+        )
+        self.assertEqual(row["primary_percentage"], "60")
+        self.assertEqual(row["primary_duration"], "720")
+        self.assertEqual(row["secondary_action"], "Docs")
+        self.assertEqual(row["secondary_percentage"], "40")
+        self.assertEqual(row["secondary_duration"], "480")
+
+
 class TestScreenshotSettingsValidation(unittest.TestCase):
     """Test screenshot settings validation"""
 
@@ -2155,7 +2743,6 @@ class TestScreenshotSettingsValidation(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2223,7 +2810,6 @@ class TestKeyboardShortcutsSection(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2318,7 +2904,6 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
 
     def tearDown(self):
         """Clean up"""
-        from tests.test_helpers import safe_teardown_tk_root
 
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
@@ -2364,7 +2949,10 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
         """Test successful Google Sheets connection test"""
         # Mock successful connection
         mock_instance = Mock()
-        mock_instance.test_connection.return_value = (True, "Connected to spreadsheet: Test Sheet")
+        mock_instance.test_connection.return_value = (
+            True,
+            "Connected to spreadsheet: Test Sheet",
+        )
         mock_uploader.return_value = mock_instance
 
         # Set valid spreadsheet ID
@@ -2395,7 +2983,7 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
 
         # Button should be found
         self.assertIsNotNone(found_test_btn, "Test Connection button not found")
-        
+
         # Invoke the button
         found_test_btn.invoke()
 
@@ -2405,6 +2993,227 @@ class TestGoogleSheetsSettingsUI(unittest.TestCase):
         # Verify uploader was instantiated and test_connection was called
         mock_uploader.assert_called_once()
         mock_instance.test_connection.assert_called_once()
+
+
+class TestProjectRenameSessionUpdate(unittest.TestCase):
+    """Test that renaming a project updates saved sessions in data.json"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+
+        settings = {
+            "spheres": {
+                "Sphere1": {"is_default": True, "active": True},
+            },
+            "projects": {
+                "Project A": {
+                    "sphere": "Sphere1",
+                    "is_default": True,
+                    "active": True,
+                    "note": "",
+                    "goal": "",
+                },
+            },
+            "break_actions": {
+                "Resting": {"is_default": True, "active": True, "notes": ""}
+            },
+            "idle_settings": {"idle_threshold": 60, "idle_break_threshold": 300},
+            "screenshot_settings": {"enabled": False},
+        }
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_project_rename_sessions.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_rename_project_updates_active_period_project_names(self):
+        """Test that renaming a project updates project name in all active periods"""
+        sessions = {
+            "session_01": {
+                "sphere": "Sphere1",
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]}
+                ],
+            },
+            "session_02": {
+                "sphere": "Sphere1",
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]}
+                ],
+            },
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        self.assertEqual(
+            saved_data["session_01"]["active"][0]["projects"][0]["name"], "Project B"
+        )
+        self.assertEqual(
+            saved_data["session_02"]["active"][0]["projects"][0]["name"], "Project B"
+        )
+
+    def test_rename_project_does_not_affect_other_projects_in_same_period(self):
+        """Test that renaming does not change other project names in the same active period"""
+        sessions = {
+            "session_01": {
+                "active": [
+                    {
+                        "projects": [
+                            {"name": "Project A", "project_primary": True},
+                            {"name": "Other Project", "project_primary": False},
+                        ]
+                    }
+                ]
+            }
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        projects = saved_data["session_01"]["active"][0]["projects"]
+        self.assertEqual(projects[0]["name"], "Project B")
+        self.assertEqual(projects[1]["name"], "Other Project")
+
+    def test_rename_project_updates_all_active_periods_in_session(self):
+        """Test that all active periods within a session are updated"""
+        sessions = {
+            "session_01": {
+                "active": [
+                    {"projects": [{"name": "Project A", "project_primary": True}]},
+                    {"projects": [{"name": "Project A", "project_primary": True}]},
+                ]
+            }
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        for active_period in saved_data["session_01"]["active"]:
+            self.assertEqual(active_period["projects"][0]["name"], "Project B")
+
+    def test_rename_project_no_matching_sessions_does_not_call_save_data(self):
+        """Test that save_data is not called when no sessions reference the old project"""
+        mock_save = Mock()
+
+        with patch.object(self.tracker, "load_data", return_value={}), patch.object(
+            self.tracker, "save_data", mock_save
+        ):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_sessions_with_different_project_unchanged(self):
+        """Test that sessions referencing a different project are not saved"""
+        sessions = {
+            "session_other": {
+                "active": [
+                    {
+                        "projects": [
+                            {"name": "Different Project", "project_primary": True}
+                        ]
+                    }
+                ]
+            }
+        }
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_empty_active_list_does_not_crash(self):
+        """Test that sessions with empty active list are handled gracefully"""
+        sessions = {"session_empty": {"active": []}}
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            # Should not raise
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
+
+    def test_rename_project_legacy_string_field_updated(self):
+        """Test that legacy 'project' string field (not 'projects' array) is also updated.
+
+        Real sessions saved without multi-project support use:
+            active_period["project"] = "Project A"   (string)
+        rather than:
+            active_period["projects"] = [{"name": "Project A", ...}]  (array)
+        Both formats must be handled.
+        """
+        sessions = {
+            "session_legacy_01": {
+                "active": [{"project": "Project A", "duration": 5.0}]
+            },
+            "session_legacy_02": {
+                "active": [{"project": "Project A", "duration": 3.0}]
+            },
+        }
+        saved_data = {}
+
+        def capture_save(data, merge=True):
+            saved_data.update(data)
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", side_effect=capture_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        self.assertEqual(
+            saved_data["session_legacy_01"]["active"][0]["project"], "Project B"
+        )
+        self.assertEqual(
+            saved_data["session_legacy_02"]["active"][0]["project"], "Project B"
+        )
+
+    def test_rename_project_legacy_other_project_unchanged(self):
+        """Test that legacy 'project' string for a different project is not changed"""
+        sessions = {
+            "session_other": {
+                "active": [{"project": "Unrelated Project", "duration": 2.0}]
+            }
+        }
+        mock_save = Mock()
+
+        with patch.object(
+            self.tracker, "load_data", return_value=sessions
+        ), patch.object(self.tracker, "save_data", mock_save):
+            self.frame._rename_project_in_sessions("Project A", "Project B")
+
+        mock_save.assert_not_called()
 
 
 if __name__ == "__main__":

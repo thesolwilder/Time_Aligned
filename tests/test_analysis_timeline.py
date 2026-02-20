@@ -310,6 +310,88 @@ class TestAnalysisFrameProjectFiltering(unittest.TestCase):
         # Should count periods with Project B: 1000 active
         self.assertEqual(active, 1000)
 
+    def test_project_filter_multi_project_period_allocates_partial_duration(self):
+        """
+        Bug regression: Multi-project period (spinbox split) must credit each
+        project its ALLOCATED duration only, not the full period duration.
+
+        Scenario (reproduces the reported bug):
+          - One active period, 10s duration
+          - Split 50/50: Project A gets 5s, Project B gets 5s
+          - Filter by Project A → expect 5s (not 10s)
+          - Filter by Project B → expect 5s (not 10s)
+          - Filter All Projects → expect 10s (full period, no split needed)
+        """
+        date = "2026-01-22"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "Work",
+                "date": date,
+                "total_duration": 10,
+                "active_duration": 10,
+                "break_duration": 0,
+                "active": [
+                    {
+                        "duration": 10,
+                        "projects": [
+                            {
+                                "name": "Project A",
+                                "percentage": 50,
+                                "duration": 5,
+                                "project_primary": True,
+                            },
+                            {
+                                "name": "Project B",
+                                "percentage": 50,
+                                "duration": 5,
+                                "project_primary": False,
+                            },
+                        ],
+                    }
+                ],
+                "breaks": [],
+                "idle_periods": [],
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+        frame.selected_card = 2  # All Time
+
+        # Project A should get only its 5s allocation, not the full 10s period
+        frame.sphere_var.set("All Spheres")
+        frame.project_var.set("Project A")
+        active_a, _ = frame.calculate_totals("All Time")
+        self.assertEqual(
+            active_a,
+            5,
+            f"Project A should receive 5s (50% of 10s), not {active_a}s",
+        )
+
+        # Project B should also get only its 5s allocation
+        frame.project_var.set("Project B")
+        active_b, _ = frame.calculate_totals("All Time")
+        self.assertEqual(
+            active_b,
+            5,
+            f"Project B should receive 5s (50% of 10s), not {active_b}s",
+        )
+
+        # All Projects should show the full 10s period duration
+        frame.project_var.set("All Projects")
+        active_all, _ = frame.calculate_totals("All Time")
+        self.assertEqual(
+            active_all,
+            10,
+            f"All Projects should show full 10s period, not {active_all}s",
+        )
+
 
 class TestAnalysisTimelineDataStructure(unittest.TestCase):
     """Test that timeline data returns correct structure with all required fields"""
@@ -3357,6 +3439,98 @@ class TestAnalysisFrameStatusFilterIntegration(unittest.TestCase):
             active, 1500, "Inactive sphere + active project should show on 'all' filter"
         )
         self.assertEqual(breaks, 300)
+
+    def test_all_projects_active_filter_excludes_inactive_project_breaks_cards(self):
+        """Bug 3: active sphere + inactive project, All Projects + Active radio → breaks = 0 in cards.
+
+        When every active period in a session belongs to an inactive project the
+        session is "archived". Its break time must NOT appear when the Active
+        radio button is selected, even with All Projects in the project dropdown.
+        """
+        date = "2026-02-02"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "ActiveSphere",
+                "date": date,
+                "total_duration": 2400,
+                "active_duration": 2000,
+                "break_duration": 400,
+                "active": [{"duration": 2000, "project": "InactiveProject"}],
+                "breaks": [{"duration": 400}],
+                "idle_periods": [],
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        frame.status_filter.set("active")
+        frame.refresh_dropdowns()
+        frame.sphere_var.set("ActiveSphere")
+        frame.project_var.set("All Projects")
+
+        active, breaks = frame.calculate_totals("All Time")
+
+        self.assertEqual(
+            active,
+            0,
+            "Inactive project time should not appear in active filter cards",
+        )
+        self.assertEqual(
+            breaks,
+            0,
+            "Break time for inactive-project session should not appear in active filter cards",
+        )
+
+    def test_all_projects_active_filter_excludes_inactive_project_breaks_timeline(self):
+        """Bug 3: active sphere + inactive project, All Projects + Active radio → no break rows in timeline.
+
+        When every active period in a session belongs to an inactive project the
+        session is "archived". Its break rows must NOT appear in the timeline
+        when the Active radio button is selected with All Projects.
+        """
+        date = "2026-02-02"
+        test_data = {
+            f"{date}_session1": {
+                "sphere": "ActiveSphere",
+                "date": date,
+                "total_duration": 2400,
+                "active_duration": 2000,
+                "break_duration": 400,
+                "active": [{"duration": 2000, "project": "InactiveProject"}],
+                "breaks": [{"duration": 400, "start": "14:00:00", "action": "Resting"}],
+                "idle_periods": [],
+            }
+        }
+        self.file_manager.create_test_file(self.test_data_file, test_data)
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        tracker.settings = tracker.get_settings()
+
+        parent_frame = ttk.Frame(self.root)
+        frame = AnalysisFrame(parent_frame, tracker, self.root)
+
+        frame.status_filter.set("active")
+        frame.refresh_dropdowns()
+        frame.sphere_var.set("ActiveSphere")
+        frame.project_var.set("All Projects")
+
+        timeline_data = frame.get_timeline_data("All Time")
+
+        break_rows = [row for row in timeline_data if row["type"] == "Break"]
+        self.assertEqual(
+            len(break_rows),
+            0,
+            "Break rows for inactive-project session should not appear in active filter timeline",
+        )
 
 
 class TestAnalysisFrameTimelineColumns(unittest.TestCase):

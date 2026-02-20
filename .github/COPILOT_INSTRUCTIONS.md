@@ -121,6 +121,19 @@ Following DEVELOPMENT.md bug fix workflow:
 5. Run full test suite (no regressions)
 6. Add edge case tests if needed
 
+**⛔ TKINTER TEST TEARDOWN — FORBIDDEN PATTERN (checked every time):**
+
+```python
+# ❌ FORBIDDEN — causes TclError in subsequent tests:
+self.addCleanup(self.root.destroy)
+
+# ✅ REQUIRED — always use this instead:
+def tearDown(self):
+    from tests.test_helpers import safe_teardown_tk_root
+    safe_teardown_tk_root(self.root)
+    self.file_manager.cleanup()
+```
+
 ### Feature Implementation Workflow
 
 Following DEVELOPMENT.md standards:
@@ -147,6 +160,19 @@ Add comprehensive tests following DEVELOPMENT.md:
 2. Unit tests for each function
 3. Integration tests for interactions
 4. E2E tests for workflows
+
+**⛔ TKINTER TEST TEARDOWN — FORBIDDEN PATTERN (checked every time):**
+
+```python
+# ❌ FORBIDDEN — causes TclError in subsequent tests:
+self.addCleanup(self.root.destroy)
+
+# ✅ REQUIRED — always use this instead:
+def tearDown(self):
+    from tests.test_helpers import safe_teardown_tk_root
+    safe_teardown_tk_root(self.root)
+    self.file_manager.cleanup()
+```
 
 ### Code Review Checklist
 

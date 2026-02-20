@@ -20,6 +20,14 @@ from unittest.mock import Mock, MagicMock, patch
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+from src.analysis_frame import AnalysisFrame
+from tests.test_helpers import (
+    TestFileManager,
+    TestDataGenerator,
+    MockTime,
+    safe_teardown_tk_root,
+)
+
 
 class TestAnalysisCardFiltersImport(unittest.TestCase):
     """Import tests for card filter functionality"""
@@ -44,18 +52,17 @@ class TestCardDateFilterFunctions(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.root = tk.Tk()
-        self.addCleanup(self.root.destroy)
-
-        from tests.test_helpers import MockTime, TestFileManager
-
         self.mock_time = MockTime()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    def tearDown(self):
+        """Clean up after tests"""
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
     def test_get_today_date_range(self):
         """Test that get_today_date_range returns correct date range"""
-        from src.analysis_frame import AnalysisFrame
-
         # Mock current date as 2026-01-28
         with patch("src.analysis_frame.datetime") as mock_datetime:
             mock_datetime.now.return_value = datetime(2026, 1, 28, 14, 30, 0)
@@ -70,7 +77,9 @@ class TestCardDateFilterFunctions(unittest.TestCase):
                     "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
                 }
             }
-            mock_tracker.settings_file = "test_settings.json"
+            mock_tracker.settings_file = self.file_manager.create_test_file(
+                "test_settings.json", mock_tracker.settings
+            )
             mock_tracker.data = {}
             mock_tracker.load_data = Mock(return_value={})
 
@@ -87,8 +96,6 @@ class TestCardDateFilterFunctions(unittest.TestCase):
 
     def test_get_yesterday_date_range(self):
         """Test that get_yesterday_date_range returns correct date range"""
-        from src.analysis_frame import AnalysisFrame
-
         # Mock current date as 2026-01-28
         with patch("src.analysis_frame.datetime") as mock_datetime:
             mock_datetime.now.return_value = datetime(2026, 1, 28, 14, 30, 0)
@@ -103,7 +110,9 @@ class TestCardDateFilterFunctions(unittest.TestCase):
                     "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
                 }
             }
-            mock_tracker.settings_file = "test_settings.json"
+            mock_tracker.settings_file = self.file_manager.create_test_file(
+                "test_settings.json", mock_tracker.settings
+            )
             mock_tracker.data = {}
             mock_tracker.load_data = Mock(return_value={})
 
@@ -120,8 +129,6 @@ class TestCardDateFilterFunctions(unittest.TestCase):
 
     def test_get_custom_date_range(self):
         """Test that get_custom_date_range returns correct date range"""
-        from src.analysis_frame import AnalysisFrame
-
         # Create mock tracker with proper settings
         mock_tracker = Mock()
         mock_tracker.settings = {
@@ -129,7 +136,9 @@ class TestCardDateFilterFunctions(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.data = {}
         mock_tracker.load_data = Mock(return_value={})
 
@@ -151,18 +160,17 @@ class TestCardFilterUI(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.root = tk.Tk()
-        self.addCleanup(self.root.destroy)
-
-        from tests.test_helpers import MockTime, TestFileManager
-
         self.mock_time = MockTime()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    def tearDown(self):
+        """Clean up after tests"""
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
     def test_card_has_today_filter_option(self):
         """Test that card dropdown includes Today option"""
-        from src.analysis_frame import AnalysisFrame
-
         # Create mock tracker with proper settings
         mock_tracker = Mock()
         mock_tracker.settings = {
@@ -170,7 +178,9 @@ class TestCardFilterUI(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.data = {}
         mock_tracker.load_data = Mock(return_value={})
 
@@ -183,8 +193,6 @@ class TestCardFilterUI(unittest.TestCase):
 
     def test_card_has_yesterday_filter_option(self):
         """Test that card dropdown includes Yesterday option"""
-        from src.analysis_frame import AnalysisFrame
-
         # Create mock tracker with proper settings
         mock_tracker = Mock()
         mock_tracker.settings = {
@@ -192,7 +200,9 @@ class TestCardFilterUI(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.data = {}
         mock_tracker.load_data = Mock(return_value={})
 
@@ -205,8 +215,6 @@ class TestCardFilterUI(unittest.TestCase):
 
     def test_card_has_custom_date_filter_option(self):
         """Test that card supports custom date selection"""
-        from src.analysis_frame import AnalysisFrame
-
         # Create mock tracker with proper settings
         mock_tracker = Mock()
         mock_tracker.settings = {
@@ -214,7 +222,9 @@ class TestCardFilterUI(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.data = {}
         mock_tracker.load_data = Mock(return_value={})
 
@@ -235,18 +245,16 @@ class TestCardFilterIntegration(unittest.TestCase):
     def setUp(self):
         """Set up test fixtures"""
         self.root = tk.Tk()
-        self.addCleanup(self.root.destroy)
-
-        from tests.test_helpers import TestFileManager
-
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
 
+    def tearDown(self):
+        """Clean up after tests"""
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
     def test_selecting_today_updates_card_data(self):
         """Test that selecting Today filter updates card with today's data"""
-        from src.analysis_frame import AnalysisFrame
-        from tests.test_helpers import TestDataGenerator
-
         # Create mock tracker with test data
         mock_tracker = Mock()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -257,7 +265,9 @@ class TestCardFilterIntegration(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.load_data = Mock(return_value=test_data)
 
         # Create frame with real Tk parent
@@ -275,9 +285,6 @@ class TestCardFilterIntegration(unittest.TestCase):
 
     def test_selecting_yesterday_updates_card_data(self):
         """Test that selecting Yesterday filter updates card with yesterday's data"""
-        from src.analysis_frame import AnalysisFrame
-        from tests.test_helpers import TestDataGenerator
-
         # Create mock tracker with test data
         mock_tracker = Mock()
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
@@ -288,7 +295,9 @@ class TestCardFilterIntegration(unittest.TestCase):
                 "card_ranges": ["Last 7 Days", "Last 30 Days", "All Time"]
             }
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.load_data = Mock(return_value=test_data)
 
         # Create frame with real Tk parent
@@ -306,9 +315,6 @@ class TestCardFilterIntegration(unittest.TestCase):
 
     def test_today_filter_shows_timeline_data(self):
         """Test that Today filter displays sessions in timeline"""
-        from src.analysis_frame import AnalysisFrame
-        from tests.test_helpers import TestDataGenerator
-
         # Create mock tracker with today's session data
         mock_tracker = Mock()
         today = datetime.now().strftime("%Y-%m-%d")
@@ -342,7 +348,9 @@ class TestCardFilterIntegration(unittest.TestCase):
         mock_tracker.settings = {
             "analysis_settings": {"card_ranges": ["Today", "Last 7 Days", "All Time"]}
         }
-        mock_tracker.settings_file = "test_settings.json"
+        mock_tracker.settings_file = self.file_manager.create_test_file(
+            "test_settings.json", mock_tracker.settings
+        )
         mock_tracker.load_data = Mock(return_value=test_data)
 
         # Create frame with real Tk parent

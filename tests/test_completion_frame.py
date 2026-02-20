@@ -273,6 +273,93 @@ class TestCompletionFrameSaveSkipDelete(unittest.TestCase):
         self.assertEqual(len(updated_data), initial_count)
         self.assertIn(session_name, updated_data)
 
+    @patch("src.completion_frame.messagebox.showinfo")
+    @patch("src.completion_frame.messagebox.askyesno", return_value=True)
+    @patch("shutil.copy2")
+    def test_delete_last_session_removes_from_file(
+        self, mock_copy, mock_askyesno, mock_showinfo
+    ):
+        """Regression test: deleting the ONLY session must write empty dict to disk.
+
+        Bug: save_data(merge=False) had a safety check 'if not session_data: return'
+        that silently skipped writing when all_data became {} after the last session
+        was deleted. The session stayed in data.json and deletion appeared to do nothing.
+        """
+        # Create a file with only ONE session
+        only_session_data = {
+            "only_session_key": {
+                "date": "2024-01-20",
+                "start_time": "10:00:00",
+                "end_time": "11:00:00",
+                "start_timestamp": 1234560000,
+                "end_timestamp": 1234563600,
+                "total_duration": 3600,
+                "active_duration": 3000,
+                "break_duration": 600,
+                "sphere": "Recreation",
+                "active": [],
+                "breaks": [],
+                "idle_periods": [],
+            }
+        }
+        single_data_file = self.file_manager.create_test_file(
+            "test_single_session.json", only_session_data
+        )
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = single_data_file
+        tracker.settings_file = self.test_settings_file
+
+        frame = CompletionFrame(self.root, tracker, "only_session_key")
+        self.root.update()
+
+        # Delete the only session
+        frame._delete_session()
+
+        # Session must be gone from the file (not silently skipped)
+        updated_data = tracker.load_data()
+        self.assertNotIn("only_session_key", updated_data)
+        self.assertEqual(len(updated_data), 0)
+
+    @patch("src.completion_frame.messagebox.showinfo")
+    @patch("src.completion_frame.messagebox.askyesno", return_value=True)
+    @patch("shutil.copy2")
+    def test_delete_session_from_session_view_navigates_home(
+        self, mock_copy, mock_askyesno, mock_showinfo
+    ):
+        """Regression test: delete from session view must navigate home, not reload.
+
+        Bug: after deletion the code reloaded session_view_frame with the next most
+        recent session instead of navigating home. The user was stuck in the session
+        frame with no way to delete and go home.
+        """
+        # Use a well-formed data file so CompletionFrame can initialise cleanly
+        session_view_data = TestDataGenerator.create_session_data(
+            sphere="Recreation",
+            date="2026-01-25",
+            start_timestamp=1737808000.0,
+        )
+        sv_data_file = self.file_manager.create_test_file(
+            "test_sv_nav_data.json", session_view_data
+        )
+
+        tracker = TimeTracker(self.root)
+        tracker.data_file = sv_data_file
+        tracker.settings_file = self.test_settings_file
+
+        # Simulate opening via "Session View" link (sets session_view_frame)
+        tracker.open_session_view(from_analysis=False)
+        self.assertIsNotNone(tracker.session_view_frame)
+
+        session_view_frame = tracker.session_view_frame
+
+        # Delete from within the session view
+        session_view_frame._delete_session()
+
+        # After deletion: must be at main (both refs cleared by show_main_frame)
+        self.assertIsNone(tracker.session_view_frame)
+        self.assertIsNone(tracker.session_view_container)
+
 
 class TestCompletionFrameGoogleSheets(unittest.TestCase):
     """Test Google Sheets integration in completion frame"""

@@ -15,6 +15,7 @@ import sys
 import os
 import gc
 import time
+import warnings
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -118,9 +119,23 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Pattern: {pattern}\n")
 
     start_time = time.time()
-    result = runner.run(suite)
+    with warnings.catch_warnings(record=True) as captured_warnings:
+        warnings.simplefilter("always")
+        result = runner.run(suite)
     end_time = time.time()
     total_seconds = end_time - start_time
+
+    # Print performance warnings if threshold reached in tests
+    perf_warnings = [
+        w for w in captured_warnings if issubclass(w.category, UserWarning)
+    ]
+    if perf_warnings:
+        print(f"\n{'='*70}")
+        print("PERFORMANCE WARNINGS")
+        print(f"{'='*70}")
+        for w in perf_warnings:
+            print(f"  ⚠  {w.message}")
+        print(f"{'='*70}")
 
     # Print failed/errored tests details
     if result.failures or result.errors:

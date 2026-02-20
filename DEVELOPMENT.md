@@ -2,11 +2,11 @@
 
 **⚠️ CRITICAL: AI AGENTS MUST FOLLOW THESE DIRECTIVES**
 
-## 🧠 AGENT MEMORY SYSTEM
+## 🧠 DECISION LOG
 
 ### ⚠️ DIRECTIVE 1: READ BEFORE ANY ACTION
 
-**BEFORE making ANY code changes**, you MUST read [AGENT_MEMORY.md](AGENT_MEMORY.md) to:
+**BEFORE making ANY code changes**, you MUST read [DECISION_LOG.md](DECISION_LOG.md) to:
 
 - Review what approaches have been tried before
 - Understand what worked and what didn't work
@@ -17,7 +17,7 @@
 
 When working on a specific task (bug fix, feature, or test), you MUST:
 
-1. **Search AGENT_MEMORY.md for keywords related to your task**
+1. **Search DECISION_LOG.md for keywords related to your task**
    - Module names (e.g., "analysis_frame", "timeline", "backup")
    - Technology/library names (e.g., "tkinter", "pandas", "CSV")
    - Error patterns (e.g., "geometry manager", "headless", "width")
@@ -37,11 +37,11 @@ When working on a specific task (bug fix, feature, or test), you MUST:
    - **UI components**: Search specific widgets, "frame", "canvas", "label"
    - **Data processing**: Search "filtering", "sorting", "aggregation"
 
-**Why this matters**: AGENT_MEMORY.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
+**Why this matters**: DECISION_LOG.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
 
 ### ⚠️ DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
 
-**AFTER completing ANY code changes**, you MUST update [AGENT_MEMORY.md](AGENT_MEMORY.md) with:
+**AFTER completing ANY code changes**, you MUST update [DECISION_LOG.md](DECISION_LOG.md) with:
 
 - Everything you tried (all approaches, not just the final one)
 - Whether each approach worked or failed
@@ -122,7 +122,66 @@ def test_function_name_expected_behavior():
 - Full data export workflow
 - Settings changes affecting behavior
 
-## 📋 TDD Test Template (USE THIS FOR ALL NEW TESTS)
+## � FORBIDDEN PATTERNS — NEVER USE THESE IN TKINTER TESTS
+
+**Search keywords: forbidden pattern, addCleanup root destroy, Tcl_AsyncDelete, TclError init.tcl, wrong thread**
+
+| ❌ FORBIDDEN                                 | ✅ REQUIRED REPLACEMENT                              |
+| -------------------------------------------- | ---------------------------------------------------- |
+| `self.addCleanup(self.root.destroy)`         | `tearDown()` with `safe_teardown_tk_root(self.root)` |
+| `self.root.destroy()` called directly        | `safe_teardown_tk_root(self.root)` in `tearDown()`   |
+| Inline import `from test_helpers import ...` | Top-level `from tests.test_helpers import ...`       |
+| Running full pytest suite in agent env       | Run as `python test_file.py` OR one class at a time  |
+
+> **WHY**: `self.addCleanup(self.root.destroy)` does NOT cancel pending `after()` callbacks
+> before destroying the root. This leaves the Tcl interpreter in a corrupted state.
+> The **next** test's `tk.Tk()` then fails with `TclError: Can't find a usable init.tcl`.
+> `safe_teardown_tk_root` cancels all callbacks first, then quits and destroys cleanly.
+>
+> **This has caused repeated failures across this codebase.** The user has had to
+> correct this pattern multiple times. DO NOT USE `self.addCleanup(self.root.destroy)`.
+
+---
+
+> ⚠️ **AGENT ENVIRONMENT TCLERROR — DO NOT TRY TO FIX THIS**
+>
+> **Search keywords: TclError agent env, tcl_findLibrary, pytest suite TclError, agent tcl error, TclError invalid command, pytest TclError fail**
+>
+> When running Tkinter tests via **pytest** in the agent/CI environment with many test
+> classes, you may see 1–2 tests FAIL with:
+>
+> ```
+> TclError: invalid command name "tcl_findLibrary"
+> TclError: Can't find a usable init.tcl
+> ```
+>
+> **THIS IS NOT A REAL TEST FAILURE.** It is a pytest session isolation artifact caused
+> by multiple `tk.Tk()` instances across many test classes in one session.
+>
+> **DO NOT:**
+>
+> - ❌ Modify the teardown pattern — it is already correct with `safe_teardown_tk_root`
+> - ❌ Switch to `setUpClass`/`tearDownClass` — tried and abandoned, makes things worse
+> - ❌ Add `addCleanup` patterns — FORBIDDEN (see above)
+> - ❌ Treat it as a real test failure requiring code fixes
+> - ❌ Waste time "debugging" it
+>
+> **CORRECT VERIFICATION — always use one of these two methods:**
+>
+> ```bash
+> # Option 1: Run file as a script (most reliable):
+> python tests/test_your_file.py
+>
+> # Option 2: Run one class at a time via pytest:
+> pytest tests/test_your_file.py::TestClassName -v
+> ```
+>
+> User confirmed: running as a script gives `OK` for all tests even when pytest shows failures.
+> The user does not want to be reminded of this again — **check the script output first**.
+
+---
+
+## �📋 TDD Test Template (USE THIS FOR ALL NEW TESTS)
 
 **⚠️ CRITICAL: Use this exact template when creating new Tkinter UI tests**
 
@@ -170,7 +229,7 @@ class TestYourFeature(unittest.TestCase):
 
     def tearDown(self):
         """Clean up after tests"""
-        from test_helpers import safe_teardown_tk_root
+        from tests.test_helpers import safe_teardown_tk_root
         safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 

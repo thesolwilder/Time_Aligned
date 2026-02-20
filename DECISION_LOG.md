@@ -26,6 +26,984 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-20] - Bug Fix: Project Rename Did Not Update Legacy "project" String Field in Sessions
+
+**Search Keywords**: project rename legacy, project string field, active period project, data.json project format, \_rename_project_in_sessions, legacy format, single project session, project key vs projects array
+
+**Bug Reported**: After renaming Project A → Project B in Settings, sessions saved by the app still showed "Project A" in their JSON. The previous fix for this bug handled the new multi-project array format only.
+
+**Root Cause**: Two different data formats exist in `data.json` for project names in active periods:
+
+| Format            | When saved                                   | Structure                                                          |
+| ----------------- | -------------------------------------------- | ------------------------------------------------------------------ |
+| **Legacy**        | Sessions saved without multi-project support | `active_period["project"] = "Project A"` (string)                  |
+| **Multi-project** | Sessions saved with percentage split feature | `active_period["projects"] = [{"name": "Project A", ...}]` (array) |
+
+The previous fix only iterated `active_period.get("projects", [])` (array format). It never checked `active_period.get("project")` (string format), so legacy sessions were silently skipped.
+
+**Files Changed**:
+
+- `src/settings_frame.py` — `_rename_project_in_sessions()` updated to handle both formats
+- `tests/test_settings_frame.py` — 2 new tests added to `TestProjectRenameSessionUpdate`
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for "legacy", "project string field", "active period project"
+✅ Identified root cause from actual data.json shown by user
+✅ Wrote 2 failing tests FIRST (TDD) for legacy string format
+✅ Verified tests failed before touching source
+✅ Fixed with minimal change — added legacy check alongside existing array check
+✅ Both new tests pass in isolation; batch TclError is pre-existing Tk pollution
+```
+
+**2. Updated `_rename_project_in_sessions()` to handle both formats:**
+
+```python
+for active_period in session_data.get("active", []):
+    # Legacy single-project string field
+    if active_period.get("project") == old_name:
+        active_period["project"] = new_name
+        sessions_updated = True
+    # Multi-project array format
+    for project_entry in active_period.get("projects", []):
+        if project_entry.get("name") == old_name:
+            project_entry["name"] = new_name
+            sessions_updated = True
+```
+
+**Tests Added (to `TestProjectRenameSessionUpdate`):**
+
+- `test_rename_project_legacy_string_field_updated` — legacy `"project"` key is updated for all matching sessions
+- `test_rename_project_legacy_other_project_unchanged` — legacy session with different project is not written
+
+**Key Learnings**:
+
+1. **ALWAYS check actual data.json before writing session-update code** — the real file revealed the `"project"` string format that mock data did not cover. Mock data was created assuming new format only.
+2. **Two active period project formats exist and BOTH must be handled**:
+   - `active_period["project"]` = plain string (legacy, single project)
+   - `active_period["projects"]` = list of dicts with `"name"` key (multi-project/percentage)
+3. **TDD gap**: Previous tests passed because mock sessions only used the new format. Bug reproduction with the actual app revealed the gap. Always validate against real saved data when the bug is about persistence.
+
+---
+
+### [2026-02-20] - Bug Fix: Project Rename Did Not Update Saved Sessions
+
+**Search Keywords**: project rename, rename project, toggle_edit, create_project_row, \_rename_project_in_sessions, session project name, active period projects, data.json project, settings_frame, project name update, confirmation popup
+
+**Bug Reported**: After renaming a project in Settings (e.g., Project A → Project B), existing saved sessions in `data.json` still showed the old project name ("Project A") in each active period.
+
+**Root Cause**: The `toggle_edit()` nested closure inside `create_project_row()` in `src/settings_frame.py` only renamed the project key in `settings["projects"]`. It did **not** update `"projects"[i]["name"]` fields inside active periods of sessions stored in `data.json`, and showed no warning to the user.
+
+**Session Data Structure (important for future bugs):**
+
+```json
+"active": [
+  {
+    "projects": [
+      {"name": "Project A", "project_primary": true, "percentage": 90, ...},
+      {"name": "Project B", "project_primary": false, "percentage": 10, ...}
+    ]
+  }
+]
+```
+
+The project name lives at: `session["active"][i]["projects"][j]["name"]`
+
+**Files Changed**:
+
+- `src/settings_frame.py` — new `_rename_project_in_sessions()` method + `toggle_edit()` updated
+- `tests/test_settings_frame.py` — new `TestProjectRenameSessionUpdate` class (6 tests)
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for project/session/rename keywords
+✅ Wrote 6 failing tests FIRST (TDD)
+✅ Verified all 6 tests failed before fixing
+✅ Fixed the bug — 5/6 pass in batch (6th passes in isolation, Tk state pollution)
+✅ No regressions to existing tests
+```
+
+**2. Extracted `_rename_project_in_sessions(old_name, new_name)` as a class method:**
+
+```python
+def _rename_project_in_sessions(self, old_name, new_name):
+    """Update project name references in all saved sessions."""
+    all_sessions = self.tracker.load_data()
+    sessions_updated = False
+    for session_data in all_sessions.values():
+        for active_period in session_data.get("active", []):
+            for project_entry in active_period.get("projects", []):
+                if project_entry.get("name") == old_name:
+                    project_entry["name"] = new_name
+                    sessions_updated = True
+    if sessions_updated:
+        self.tracker.save_data(all_sessions, merge=False)
+```
+
+**3. Updated `toggle_edit()` save block in `create_project_row()` with two additions:**
+
+```python
+is_name_change = new_name != project_name
+
+# Confirmation popup BEFORE any mutation (user can cancel safely)
+if is_name_change:
+    confirmed = messagebox.askyesno(
+        "Rename Project",
+        f"Renaming '{project_name}' to '{new_name}' will update "
+        f"the project name in all saved sessions.\n\nDo you want to continue?",
+    )
+    if not confirmed:
+        return
+
+# ... (sphere/note/goal mutations happen after confirmation) ...
+
+# Rename project key and update sessions
+if is_name_change:
+    self.tracker.settings["projects"].pop(project_name)
+    self.tracker.settings["projects"][new_name] = project_data
+    self._rename_project_in_sessions(project_name, new_name)
+```
+
+**Why `is_name_change` computed before mutations**: If we mutate `project_data["sphere"]` etc. and then show the popup, cancelling leaves in-memory settings dirty (mutations done, not saved to disk). By checking `is_name_change` first and confirming before any mutation, a cancel is always a safe no-op.
+
+**Tests Added (`TestProjectRenameSessionUpdate`, 6 tests):**
+
+- `test_rename_project_updates_active_period_project_names` — matching sessions get new name
+- `test_rename_project_does_not_affect_other_projects_in_same_period` — sibling projects unchanged
+- `test_rename_project_updates_all_active_periods_in_session` — multi-period sessions all updated
+- `test_rename_project_no_matching_sessions_does_not_call_save_data` — no write if no match
+- `test_rename_project_sessions_with_different_project_unchanged` — other projects not saved
+- `test_rename_project_empty_active_list_does_not_crash` — graceful empty list handling
+
+**Key Learnings**:
+
+1. **Project name is nested 3 levels deep**: `session → active[i] → projects[j] → name`. Sphere name is only 1 level (`session → sphere`). Triple-loop required.
+2. **`_rename_project_in_sessions` pattern** matches `edit_sphere_name`'s session update approach (load → iterate → save with `merge=False`). Consistent pattern across both fixes.
+3. **Confirmation popup must come before any in-memory mutation** — otherwise cancelling leaves dirty state in `tracker.settings` (mutated sphere/note/goal but not saved). Computing `is_name_change = new_name != project_name` early and gating ALL mutations behind the confirmation solves this.
+4. **`toggle_edit` is a nested closure** — cannot call it directly from tests. Extracting `_rename_project_in_sessions` as a standalone method makes the session-update logic fully testable without needing to drive the UI.
+5. **Known Tk batch isolation failure**: `test_rename_project_empty_active_list_does_not_crash` fails in batch (Tk re-init TclError) but passes in isolation. Pre-existing state pollution issue — not a logic bug.
+
+---
+
+### [2026-02-20] - Bug Fix: Sphere Rename Did Not Update Saved Sessions
+
+**Search Keywords**: edit_sphere_name, sphere rename, session sphere, data.json sphere, settings_frame, rename sphere sessions, confirmation popup, sphere update sessions
+
+**Bug Reported**: After renaming a sphere in Settings (e.g., Sphere 1 → Sphere 2), existing saved sessions in `data.json` still displayed the old sphere name ("Sphere 1") in the Session View.
+
+**Root Cause**: `edit_sphere_name()` in `src/settings_frame.py` only updated:
+
+1. `settings["spheres"]` (the sphere dict key)
+2. `settings["projects"]` (project.sphere references)
+
+It did **not** update `"sphere"` fields in sessions stored in `data.json`, and showed no warning to the user.
+
+**Files Changed**:
+
+- `src/settings_frame.py` — `edit_sphere_name()` rewritten
+- `tests/test_settings_frame.py` — new `TestSphereRenameSessionUpdate` class (5 tests) + updated `MockTracker`
+
+**What Worked** ✅:
+
+**1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
+
+```
+✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+✅ Searched AGENT_MEMORY.md for sphere/session keywords
+✅ Wrote 5 failing tests FIRST (TDD)
+✅ Verified tests failed before fixing
+✅ Fixed the bug to pass tests
+✅ No regressions — existing test updated to mock new askyesno popup
+```
+
+**2. Rewrote `edit_sphere_name()` with three additions:**
+
+```python
+# 1. Confirmation popup warning user about session impact
+confirm = messagebox.askyesno(
+    "Rename Sphere",
+    f"Renaming '{old_name}' to '{new_name}' will update the sphere name "
+    f"in all saved sessions.\n\nDo you want to continue?",
+)
+if not confirm:
+    return
+
+# 2. Load sessions, update matching sphere field
+all_sessions = self.tracker.load_data()
+sessions_updated = False
+for session_data in all_sessions.values():
+    if session_data.get("sphere") == old_name:
+        session_data["sphere"] = new_name
+        sessions_updated = True
+
+# 3. Only call save_data if at least one session was changed (merge=False)
+if sessions_updated:
+    self.tracker.save_data(all_sessions, merge=False)
+```
+
+**3. Added `load_data()` / `save_data()` stubs to `MockTracker`** so all tests that call `edit_sphere_name()` don't get `AttributeError`.
+
+**4. Updated existing `test_edit_sphere_name_updates_projects`** to also mock `messagebox.askyesno` (returning `True`) — required because the new confirmation popup runs before any mutations.
+
+**Tests Added (`TestSphereRenameSessionUpdate`):**
+
+- `test_rename_sphere_shows_confirmation_popup` — askyesno called exactly once
+- `test_rename_sphere_updates_sessions_with_old_name` — matching sessions get new name
+- `test_rename_sphere_does_not_affect_other_sphere_sessions` — other spheres unchanged
+- `test_rename_sphere_cancel_confirmation_aborts_all_changes` — cancel = no mutations at all
+- `test_rename_sphere_no_sessions_does_not_call_save_data` — `save_data` not called when 0 sessions match
+
+**Key Learnings**:
+
+1. **Session data is in `data.json` (via `tracker.load_data()`) — separate from settings.json**. Any rename that spans both must update both files independently.
+2. **`merge=False` is correct here** — we're replacing the entire file with the updated copy, not merging a partial update.
+3. **Adding stubs to MockTracker is preferable to per-test patching** for methods that every future test of `edit_sphere_name` will need.
+4. **Always mock `messagebox.askyesno` in tests that call methods with confirmation popups** — otherwise the tkinter dialog blocks headless tests.
+5. **Known Tkinter Tk() re-init error** when running `TestSphereRenameSessionUpdate` as a batch with earlier tests: passes in isolation. Not a logic bug — pre-existing state pollution issue documented elsewhere in this file.
+
+---
+
+### [2026-02-20] - Test Fix: Stale expected_headers in test_csv_export_includes_all_expected_headers
+
+**Search Keywords**: test_analysis_priority, TestAnalysisCSVExportIntegration, test_csv_export_includes_all_expected_headers, expected_headers, fieldnames, Primary Percentage, Primary Duration, Secondary Percentage, Secondary Duration, export_to_csv, CSV headers stale
+
+**Bug Reported**: `test_csv_export_includes_all_expected_headers` failed — `expected_headers` in the test had 14 columns but the actual CSV (from `export_to_csv` in `src/analysis_frame.py`) writes 18 headers.
+
+**Root Cause**: The test's `expected_headers` list was written before `Primary Percentage`, `Primary Duration`, `Secondary Percentage`, and `Secondary Duration` were added to `export_to_csv`'s `fieldnames`. The source had been updated but the test was not.
+
+**Fix Applied** (`tests/test_analysis_priority.py` — `TestAnalysisCSVExportIntegration.test_csv_export_includes_all_expected_headers`):
+
+- Added `"Primary Percentage"` and `"Primary Duration"` after `"Primary Action"` in `expected_headers`
+- Added `"Secondary Percentage"` and `"Secondary Duration"` after `"Secondary Action"` in `expected_headers`
+- Updated count assertion: `14` → `18`
+- Updated comment: `"All 13 timeline headers"` → `"All 18 timeline headers"`
+
+**Key Learning — Stale test pattern:**
+When new columns are added to `export_to_csv`, ALL tests that assert on `fieldnames` / column count must be updated to match. The canonical source of truth is the `fieldnames` list in `src/analysis_frame.py` around line 2139.
+
+**Files Changed**:
+
+- [tests/test_analysis_priority.py](tests/test_analysis_priority.py) — updated `expected_headers` + count assertion in `test_csv_export_includes_all_expected_headers`
+
+---
+
+### [2026-02-19] - Bug Fix: Settings Sphere Radio Button — Archived Filter With No Archived Spheres Does Nothing
+
+**Search Keywords**: settings_frame, refresh_sphere_dropdown, sphere_filter inactive, archived radio button, no archived spheres, sphere_var stale, sphere_mgmt_frame stale, project list stale, empty filter result, else branch missing, TestSphereFilterEmptyResult
+
+**Bug Reported**: Starting from the default first-run project, opening Settings and clicking the "Archived" radio button for sphere filter did nothing — the sphere dropdown, sphere management buttons, and project list all stayed the same.
+
+**Root Cause**: `refresh_sphere_dropdown()` in `src/settings_frame.py` had no `else` branch for when `filtered_spheres` is empty. When no spheres match the selected filter:
+
+1. `sphere_dropdown["values"]` was set to `["Create New Sphere..."]` ✓ (correct)
+2. `sphere_var` was **NOT** updated → still showed the previous active sphere name
+3. `sphere_mgmt_frame` was **NOT** cleared → old management buttons remained
+4. `refresh_project_section()` was **NOT** called → old project list persisted
+
+**Fix Applied** — Added `else` branch to `refresh_sphere_dropdown()`:
+
+```python
+else:
+    # No spheres match the filter — select the only available option
+    self.sphere_var.set("Create New Sphere...")
+    # Clear sphere management buttons (no real sphere is selected)
+    for widget in self.sphere_mgmt_frame.winfo_children():
+        widget.destroy()
+    # Refresh project list (will be empty — no sphere is active)
+    if hasattr(self, "projects_list_frame"):
+        self.refresh_project_section()
+```
+
+This ensures:
+
+- `sphere_var` always reflects the current dropdown selection
+- `sphere_mgmt_frame` is cleared (no real sphere → no management buttons)
+- Project list is refreshed (`sphere_var == "Create New Sphere..."` matches no project's sphere field → list is empty)
+
+**Key Learning — Filter result branches must always be complete:**
+Any method that conditionally handles a filter result MUST include an `else` for the empty case. Without it, the UI stays stale when no items match. The `refresh_project_section()` call already handles the empty case correctly (`data.get("sphere") == "Create New Sphere..."` matches nothing), so only the `sphere_var` and `sphere_mgmt_frame` updates were missing.
+
+**Tests Written** (`tests/test_settings_frame.py` — new class `TestSphereFilterEmptyResult`):
+
+- `test_archived_filter_with_no_archived_spheres_selects_create_new` — sphere_var == "Create New Sphere..."
+- `test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons` — sphere_mgmt_frame empty
+- `test_archived_filter_with_no_archived_spheres_empties_project_list` — projects_list_frame empty
+
+All 3 tests: FAIL before fix → PASS after fix.
+
+**Files Changed**:
+
+- [src/settings_frame.py](src/settings_frame.py) — `refresh_sphere_dropdown()`: added `else` branch + updated docstring
+- [tests/test_settings_frame.py](tests/test_settings_frame.py) — added `TestSphereFilterEmptyResult` class (3 tests)
+
+---
+
+### [2026-02-19] - Bug Fix: Regression + Stale Test from Bug 3 session_considered_active Fix
+
+**Search Keywords**: test_sessions_without_active_periods, pure break session, no active periods, session_considered_active, sphere_active fallback, stale test, test_active_filter_excludes_archived_project_break_time
+
+**Two failures from previous session's Bug 3 fix:**
+
+**Failure 1 — Regression** (`test_sessions_without_active_periods`):
+
+- Session had `active: []` (no active periods at all, only breaks)
+- `session_considered_active` loop started `False`, never iterated → breaks skipped under "active" filter
+- Fix: added `if not active_periods_list: session_considered_active = sphere_active` before the loop in **both** `calculate_totals()` and `get_timeline_data()`. A pure break/idle session with an active sphere IS an active session — there is no project to be inactive.
+
+**Failure 2 — Stale test** (`test_active_filter_excludes_archived_project_break_time`):
+
+- Test was written to capture the old sphere-level-only break behavior (break_time expected = 60)
+- Bug 3 intentionally changed this: sessions where all active periods are for inactive projects are "archived" — their breaks should be 0 under the active filter
+- Fix: updated test docstring + assertEqual to expect `break_time = 0`
+
+**Key Learning — Edge case must accompany session_considered_active loops:**
+Any loop that computes `session_considered_active` by iterating active periods MUST include a guard for the empty-periods case. Without it, pure break sessions are misclassified as archived. Pattern:
+
+```python
+if not active_periods_list:
+    session_considered_active = sphere_active  # pure break session
+else:
+    session_considered_active = False
+    for period in active_periods_list:
+        ...  # check sphere+project active
+```
+
+**Files Changed:**
+
+- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` else branch
+- [tests/test_analysis_card_status_filter.py](tests/test_analysis_card_status_filter.py) — updated stale test docstring + expected value
+
+---
+
+### [2026-02-19] - Bug Fix: Break Time Shows on Active Filter When Session's Only Project Is Inactive (Bug 3)
+
+**Search Keywords**: calculate_totals, get_timeline_data, All Projects filter, status_filter active, session_considered_active, inactive project breaks, active sphere all projects, timeline break rows, sphere_active only
+
+**Bugs Fixed (both cards and timeline):**
+
+- Cards: `calculate_totals()` returned non-zero break time for a session whose only active period was for an inactive project, when `project_filter = "All Projects"` + `status_filter = "active"`.
+- Timeline: `get_timeline_data()` included break rows for the same session under the same filter combo.
+
+**Root Cause:** Both `calculate_totals()` and `get_timeline_data()` shared the same flaw: the `else` branch for `project_filter == "All Projects"` set `session_considered_active = sphere_active`. For an active sphere with an inactive project, `sphere_active=True` → `session_considered_active=True` → breaks were NOT skipped on the active filter (and were incorrectly skipped on the archived filter).
+
+**Fix Applied — Both methods:** Replaced `session_considered_active = sphere_active` with a loop over the session's active periods to compute the correct value:
+
+- `session_considered_active = True` only if at least one active period has both `sphere_active AND proj_active`
+- If every active period has an inactive project → `session_considered_active = False` → breaks correctly excluded on active filter, included on archived filter.
+
+**Also fixed `get_timeline_data` break + idle filter:**
+The break and idle period filters were using `if not sphere_active` / `if sphere_active` directly instead of `session_considered_active`. Replaced both with the single flag, so all three period types (active, break, idle) now use consistent filtering logic.
+
+**Files Changed:**
+
+- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` `session_considered_active` block + break filter + idle filter
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) — 2 new tests in `TestAnalysisFrameStatusFilterIntegration`
+
+**Tests:**
+
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_cards` — PASSES ✅
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_timeline` — PASSES ✅ (must run in isolation due to pre-existing TclError teardown issue in this class)
+
+**Pre-existing TclError in `TestAnalysisFrameStatusFilterIntegration`:** This class uses per-test `setUp`/`tearDown` with `tk.Tk()`. In Python 3.13 the Tcl state is left corrupted after `safe_teardown_tk_root`, so tests after the first few may fail with TclError when run consecutively. Run tests in isolation to verify logic. See AGENT_MEMORY for the module-level singleton fix.
+
+---
+
+### [2026-02-19] - Bug Fix: Break Time Not Shown for Active Sphere + Inactive Project on Archived Filter
+
+**Search Keywords**: calculate_totals, breaks archived filter, inactive project breaks, active sphere breaks, session_considered_active, break_project_active, status_filter breaks
+
+**Bug Fixed:**
+`test_active_sphere_inactive_project_shows_on_archived_filter` failed with `breaks=0` (expected 400).
+Active time was counted correctly for active sphere + inactive project on "archived" filter, but breaks returned 0.
+
+**Root Cause:** The break/idle time filtering in `calculate_totals()` only checked `sphere_active`. For the case of active sphere + inactive project, `sphere_active=True` triggered `elif status_filter == "archived" and sphere_active: continue`, skipping ALL breaks even though the session is "archived" due to the inactive project.
+
+**Fix Applied:** In `calculate_totals()` [src/analysis_frame.py], compute `session_considered_active` before the break loop:
+
+- If a specific project is selected: `session_considered_active = sphere_active AND break_project_active`
+- If "All Projects": `session_considered_active = sphere_active`
+  Then apply `session_considered_active` in both the breaks loop and idle_periods loop. This mirrors how active periods already handle the combination.
+
+**Key Learning:** When filtering breaks, the "archived" determination must mirror the active-period logic: a session is archived if EITHER the sphere OR the selected project is inactive. The original implementation only checked sphere status for breaks, creating an inconsistency.
+
+**Test:** `tests/test_analysis_timeline.py::TestAnalysisFrameStatusFilterIntegration::test_active_sphere_inactive_project_shows_on_archived_filter` — now PASSES.
+
+---
+
+### [2026-02-19] - Bug Fix: Analysis Card Status Filter Ignoring Active/Archived Radio Buttons
+
+**Search Keywords**: calculate_totals, status_filter, active radio, archived radio, analysis frame cards, inactive project card, archived sphere card, card calculation bug, setUpClass tearDownClass module root singleton TclError bind_all
+
+**Bugs Fixed:**
+
+- Bug 1: Archived projects' time was calculated in analysis cards even when "Active" radio selected
+- Bug 2: Projects in archived spheres had their time calculated in cards even when "Active" selected
+
+**Root Cause:** `calculate_totals()` in `src/analysis_frame.py` read `sphere_var` and `project_var` but never read `status_filter`. All periods were counted regardless of the radio button selection.
+
+**Fix Applied:** Added `status_filter = self.status_filter.get()` and `sphere_active` / `project_active` flag checks to all three period-counting paths inside `calculate_totals()`. Break time is filtered at sphere-level only (break actions have no project active/inactive status).
+
+**Test File:** `tests/test_analysis_card_status_filter.py` — 10 tests, all pass.
+
+**Test Isolation Issue Discovered — Module-Level Singleton Root Pattern:**
+Tests that create `AnalysisFrame` (which contains `ScrollableFrame`) CANNOT use per-test `setUp`/`tearDown` with `tk.Tk()` create/destroy in Python 3.13. Even with `safe_teardown_tk_root`, the Tcl interpreter state is left corrupted — the next class's `setUpClass` calling `tk.Tk()` raises `TclError: invalid command name "tcl_findLibrary"`.
+
+**Correct pattern for multi-class test files using AnalysisFrame:**
+
+```python
+_MODULE_ROOT: tk.Tk | None = None
+
+def _get_module_root() -> tk.Tk:
+    global _MODULE_ROOT
+    if _MODULE_ROOT is None:
+        _MODULE_ROOT = tk.Tk()
+        _MODULE_ROOT.withdraw()
+    return _MODULE_ROOT
+
+class TestSomething(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.root = _get_module_root()  # shared, never destroyed between classes
+        cls.file_manager = TestFileManager()
+        ...
+
+    @classmethod
+    def tearDownClass(cls):
+        # Do NOT call safe_teardown_tk_root here — root is the shared module root
+        cls.file_manager.cleanup()
+```
+
+Also use `root.update_idletasks()` instead of `root.update()` in frame-creation helpers to avoid triggering `<Map>` events that register `bind_all("<MouseWheel>")` bindings.
+
+---
+
+### [2026-02-19] - ⛔ RECURRING BUG: Forbidden Tkinter Teardown Pattern Keeps Being Used
+
+**Search Keywords**: forbidden pattern, addCleanup root destroy, safe_teardown_tk_root, TclError init.tcl, Tcl_AsyncDelete, wrong thread, tearDown, tkinter test cleanup, setUp tk.Tk fails
+
+**This has been corrected MULTIPLE TIMES. Every new Tkinter test must use the pattern below.**
+
+**The Forbidden Pattern (NEVER USE):**
+
+```python
+# ❌ FORBIDDEN — DO NOT USE IN ANY TEST
+self.addCleanup(self.root.destroy)   # in setUp
+# or
+self.root.destroy()                  # called directly in tearDown
+```
+
+**Why it breaks**: `root.destroy()` does NOT cancel pending `root.after()` callbacks.
+Tkinter fires them anyway against the destroyed root → Tcl interpreter corruption → the
+**next test's** `tk.Tk()` fails with `TclError: Can't find a usable init.tcl`. The test
+that caused the problem _passes_. The _next_ test _fails_. This makes the cause hard to spot.
+
+**The Required Pattern (ALWAYS USE):**
+
+```python
+# In setUp — only this addCleanup:
+self.addCleanup(self.file_manager.cleanup)
+# ❌ DO NOT ADD: self.addCleanup(self.root.destroy)
+
+# Required tearDown in EVERY Tkinter test class:
+def tearDown(self):
+    from tests.test_helpers import safe_teardown_tk_root
+    safe_teardown_tk_root(self.root)  # cancels all after() callbacks, then destroys
+    self.file_manager.cleanup()
+```
+
+**Why `safe_teardown_tk_root` is safe**: It calls `cancel_tkinter_callbacks()` first
+(iterates pending after() IDs and cancels them), then `root.quit()`, then `root.destroy()`.
+This leaves Tcl in a clean state for the next test.
+
+**History of corrections**:
+
+- This session (2026-02-19): test_add_project_duplicate_bug.py fixed
+- Previous session (2026-02-19): test_analysis_card_filters.py fixed
+- Documented in DEVELOPMENT.md 🚫 FORBIDDEN PATTERNS section
+- Documented in COPILOT_INSTRUCTIONS.md Bug Fix and Add Tests workflows
+
+**IMPORTANT**: If you ever see `TclError: Can't find a usable init.tcl` in a test that
+calls `tk.Tk()` in `setUp`, look at the _previous_ test class — it almost certainly
+uses the forbidden `self.addCleanup(self.root.destroy)` pattern.
+
+---
+
+### [2026-02-19] - Bug Fix: Add New Project Duplicate Name Silently Accepted Across Spheres
+
+**Search Keywords**: add new project, duplicate project name, \_save_new_project, completion frame, sphere project creation, project name conflict, cross-sphere duplicate, project dropdown bug
+
+**Bug Description**:
+
+When adding a new project via the "Add New Project..." dropdown in the Completion Frame, if the user typed a name that already existed in **another sphere**, two bugs occurred:
+
+1. **Bug 1 (UI)** — The combobox silently accepted the name and displayed it as if it was added — no warning shown to the user.
+2. **Bug 2 (Data)** — No project was saved to `settings.json` for the new sphere (because `if new_project not in self.tracker.settings["projects"]` was False — the project already existed globally, so the else branch ran instead of saving).
+
+**Root Cause** (in `src/completion_frame.py`, `_save_new_project()`):
+
+The `else` branch (triggered when the project name already exists in the global `settings["projects"]` dict) only did:
+
+```python
+# Already exists
+combobox.config(state="readonly")
+combobox.set(new_project)  # ← silently shows the name, looks like it was added!
+```
+
+This gave no warning and left the combobox showing "Project A" (the duplicate) as if it was valid.
+
+**Fix Applied**:
+
+In the `else` branch:
+
+1. **Unbind `<Return>` and `<FocusOut>` BEFORE showing messagebox** — prevents FocusOut from triggering `_cancel_new_project` a second time when the messagebox steals focus.
+2. **Show `messagebox.showwarning`** — alerts user "Project names must be unique across all spheres."
+3. **Call `_cancel_new_project(None, combobox)`** — properly reverts combobox to readonly with a fallback value ("Select Project").
+4. **Return early** — bindings already cleaned up, no double-unbind needed.
+
+**File Changed**: `src/completion_frame.py`, `_save_new_project()` method (~line 1407)
+
+**Tests Added**: `tests/test_add_project_duplicate_bug.py` (7 tests)
+
+**Test Results**: 5/7 pass (2 fail with pre-existing TclError unrelated to the fix — same TclError pattern existed before this fix was applied)
+
+**What Worked** ✅:
+
+1. **TDD approach** — wrote failing tests first, confirmed bugs reproduced, fixed, tests now pass.
+2. **Unbind-before-messagebox pattern** — critical to prevent FocusOut double-trigger. messagebox steals focus → FocusOut fires → \_cancel_new_project called. Unbinding first prevents this.
+3. **`_cancel_new_project(None, combobox)` call** — reusable existing method handles the combobox revert cleanly; passing `None` for event is safe since event param is unused.
+4. **`return` early** — avoids running the `# Cleanup bindings` block at the bottom of the function (already cleaned up in the else branch).
+
+**What Didn't Work** ❌:
+
+1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** — was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in _subsequent_ tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` — that was wrong. `addCleanup(root.destroy)` was the cause.**
+
+**Key Learnings**:
+
+- ✅ Project names are stored globally in `settings["projects"]` dict — they CANNOT repeat across spheres by design (the key is the project name itself). This is why the duplicate check uses `if new_project not in self.tracker.settings["projects"]`.
+- ✅ Always unbind Tkinter events before showing a messagebox if those events reference cleanup functions — focus-stealing triggers FocusOut.
+- ✅ ALWAYS use `safe_teardown_tk_root(self.root)` in `tearDown()`. NEVER use `self.addCleanup(self.root.destroy)`. See 🚫 FORBIDDEN PATTERNS in DEVELOPMENT.md and the dedicated entry at the top of Recent Changes (2026-02-19).
+- ✅ `messagebox.showwarning` is patched via `patch("tkinter.messagebox.showwarning")` since `completion_frame.py` does `from tkinter import messagebox`.
+
+---
+
+### [2026-02-19] - Code Quality Fix: test_analysis_card_filters.py Forbidden Tkinter Pattern and PEP 8 Violations
+
+**Search Keywords**: addCleanup root.destroy, forbidden tkinter pattern, PEP 8 imports, inline imports, safe_teardown_tk_root, test_analysis_card_filters, tearDown, TestCardDateFilterFunctions, TestCardFilterUI, TestCardFilterIntegration
+
+**Problems Found (Code Review)**:
+
+1. **Forbidden Tkinter pattern** — All 3 test classes used `self.addCleanup(self.root.destroy)`, which is explicitly documented as ❌ Wrong Pattern #1 in DEVELOPMENT.md and AGENT_MEMORY.md. Causes `Tcl_AsyncDelete: async handler deleted by wrong thread` crashes.
+
+2. **PEP 8 import violations** — `from src.analysis_frame import AnalysisFrame`, `from tests.test_helpers import MockTime, TestFileManager`, and `from tests.test_helpers import TestDataGenerator` were placed **inside setUp() and individual test methods**. PEP 8 requires all imports at the top of the file.
+
+**Fixes Applied** (`tests/test_analysis_card_filters.py`):
+
+1. Added top-level imports:
+
+```python
+from src.analysis_frame import AnalysisFrame
+from tests.test_helpers import (
+    TestFileManager,
+    TestDataGenerator,
+    MockTime,
+    safe_teardown_tk_root,
+)
+```
+
+2. Replaced `self.addCleanup(self.root.destroy)` in all 3 setUp methods with proper `tearDown()`:
+
+```python
+def tearDown(self):
+    """Clean up after tests"""
+    safe_teardown_tk_root(self.root)
+    self.file_manager.cleanup()
+```
+
+3. Removed 12 inline import statements from setUp and test method bodies.
+
+**Note on Intermittent Failure**:
+`TestCardDateFilterFunctions` tests that use `patch("src.analysis_frame.datetime")` flake intermittently (`_tkinter.TclError: invalid command name "tcl_findLibrary"`) when Tkinter initializes multiple windows in rapid succession across the test suite. They always pass in isolation. This is a pre-existing Tkinter issue, not caused by our changes.
+
+**Key Learning**:
+
+- When doing code review (`r` shortcut), always check every setUp for `addCleanup(self.root.destroy)` — this is the most common forbidden pattern in test files
+- PEP 8: no imports inside functions/methods unless genuinely conditional (e.g., optional dependency handling)
+- The correct teardown sequence is always: `safe_teardown_tk_root(self.root)` → `self.file_manager.cleanup()`
+
+---
+
+### [2026-02-19] - Bug Fix: test_analysis_card_filters.py Created test_settings.json in Project Root
+
+**Search Keywords**: test_settings.json, root directory, temp file, test file cleanup, TestFileManager, settings_file, save_card_ranges, mock_tracker, analysis_card_filters
+
+**Problem**:
+Running the full test suite (or `test_analysis_card_filters.py` alone) left a stale `test_settings.json` in the project **root** directory. It appeared ~30 seconds into the full suite run.
+
+**Root Cause**:
+`AnalysisFrame.save_card_ranges()` writes `tracker.settings` to `tracker.settings_file`. All 9 tests in `test_analysis_card_filters.py` set `mock_tracker.settings_file = "test_settings.json"` (a bare relative path). When pytest runs from the project root, Python resolves this to `<root>/test_settings.json`. No cleanup was ever registered for it because the mock tracker was not managed by `TestFileManager`.
+
+**Fix Applied** (`tests/test_analysis_card_filters.py`):
+Replaced all 9 occurrences of:
+
+```python
+mock_tracker.settings_file = "test_settings.json"
+```
+
+with:
+
+```python
+mock_tracker.settings_file = self.file_manager.create_test_file("test_settings.json", mock_tracker.settings)
+```
+
+`TestFileManager.create_test_file()` creates the file in `tests/test_data/` (absolute path), tracks it in `self.test_files`, and the existing `self.addCleanup(self.file_manager.cleanup)` removes it after each test.
+
+**What Worked**:
+
+- Use `file_manager.create_test_file(name, content)` whenever pointing a mock tracker at a settings/data file — it returns the absolute path AND registers cleanup automatically.
+- All 11 tests pass; root-level stale file no longer created.
+
+**Key Learning**:
+Any time a test sets `tracker.settings_file` or `tracker.data_file` to a **bare filename string** (not an absolute path), it will write to whatever the current working directory is when pytest runs (usually the project root). Always use `TestFileManager.create_test_file()` or `os.path.join(self.file_manager.test_data_dir, filename)` to get an absolute, tracked path.
+
+---
+
+### [2026-02-19] - Test Update: test_delete_session_from_session_view_reloads Renamed to Reflect New Behaviour
+
+**Search Keywords**: test_delete_session_from_session_view_reloads, test_button_navigation, TestButtonNavigation, navigate home after delete, session_view_frame None after delete, assertIsNotNone session_view_frame failed
+
+**Context**:
+After the Feb 19 `_delete_session` fix (always navigate home), the test `test_delete_session_from_session_view_reloads` in `tests/test_button_navigation.py` failed:
+
+```
+AssertionError: unexpectedly None  (self.assertIsNotNone(self.tracker.session_view_frame))
+```
+
+**Root Cause (expected failure — test documented old buggy behaviour)**:
+The test asserted the old incorrect contract: "after deleting a session from session view, the session view reloads with a different session". The fix changed this to "always navigate home", which is the correct behaviour.
+
+**Fix**: Renamed and rewrote the test to assert the new correct contract:
+
+- `session_view_frame` is `None` after deletion
+- `session_view_container` is `None` after deletion
+- `main_frame_container` is visible (home frame shown)
+
+Old name: `test_delete_session_from_session_view_reloads`
+New name: `test_delete_session_from_session_view_navigates_home`
+
+**Key Learning**: After fixing a bug whose old behaviour was explicitly tested, search for tests asserting the old (wrong) behaviour and update them. The pattern `# Should still be in session view` or `assertIsNotNone(session_view_frame)` after deletion are red flags if the new contract navigates away.
+
+**Files Changed**:
+
+- `tests/test_button_navigation.py` — renamed + rewrote `test_delete_session_from_session_view_reloads`
+
+---
+
+### [2026-02-19] - Bug Fix: Delete Session Did Not Delete, Navigated Home or Reloaded Session Frame
+
+**Search Keywords**: \_delete_session, delete session, session_view_frame, save_data empty dict, last session, navigate home, session_view reload, completion_frame delete, json.dump empty, merge=False safety check, session still in data.json
+
+**Context**:
+User reported three bugs when clicking "Delete Session" from the Session Frame (either the post-session completion frame or the "Session View"):
+
+1. **First time (from completion frame)**: session not deleted, just navigated home
+2. **Every time (from session view)**: session not deleted, session view reloaded with same/next session
+3. **Session still in data.json** after deletion attempt
+
+**Root Cause 1 — Empty dict safety check in `save_data`**:
+`save_data(all_data, merge=False)` in `time_tracker.py` has a guard:
+
+```python
+if not session_data:
+    return  # silently skips writing
+```
+
+When the LAST session was deleted, `del all_data[self.session_name]` left `all_data = {}`. Calling `save_data({}, merge=False)` hit that guard and returned without writing the file. The session remained in `data.json`. The rest of `_delete_session` ran (showed "deleted" dialog, navigated home), but the file was unchanged.
+
+**Root Cause 2 — Session view reloaded instead of navigating home**:
+After deletion, `_delete_session` checked `if self.tracker.session_view_frame == self` and, when True, reloaded the session view with the next most-recent session. This meant the user could never actually leave — deletion always just swapped to a different session. Even when there was only 1 session, the failed save (Root Cause 1) caused the same session to reload.
+
+**Fix Applied** (`src/completion_frame.py` — `_delete_session`):
+
+1. **Replaced `save_data(all_data, merge=False)` with direct `json.dump`** to bypass the empty-dict guard:
+
+```python
+del all_data[self.session_name]
+
+# Write directly so an empty dict is saved correctly.
+# save_data(merge=False) has a safety guard that skips writing
+# when the dict is empty, which would leave the deleted session
+# in data.json when it was the last one.
+try:
+    with open(self.tracker.data_file, "w") as f:
+        json.dump(all_data, f, indent=2)
+except Exception as e:
+    messagebox.showerror("Save Error", ...)
+    return
+```
+
+2. **Removed the session_view reload logic — always navigate home**:
+
+```python
+# Always navigate home after deletion
+self.tracker.show_main_frame()
+```
+
+`show_main_frame()` properly destroys `session_view_container` and clears both `session_view_frame` and `session_view_container` references.
+
+**Key Learnings**:
+
+- `save_data(merge=False)` must NOT be used when you intentionally want to write an empty dict (e.g., deleting the last session). Use direct `json.dump` for explicit overwrites.
+- The "reload with next session" UX after deletion is confusing. Always navigate home: it's predictable, safe, and matches user expectation.
+- `show_main_frame()` properly handles cleanup of session_view_container even when called from within a child CompletionFrame — no need for `self.destroy()` beforehand.
+
+**Tests Added** (`tests/test_completion_frame.py` — `TestCompletionFrameSaveSkipDelete`):
+
+- `test_delete_last_session_removes_from_file`: deleting the only session writes `{}` to disk
+- `test_delete_session_from_session_view_navigates_home`: deletion from session view clears `session_view_frame` and `session_view_container` (i.e., navigates home)
+
+**Files Changed**:
+
+- `src/completion_frame.py` — rewrote deletion + navigation in `_delete_session`
+- `tests/test_completion_frame.py` — added 2 regression tests
+
+---
+
+### [2026-02-19] - Test Update: test_multi_project_periods Used Incomplete Project Dicts
+
+**Search Keywords**: test_analysis_calculations, TestAnalysisEdgeCases, test_multi_project_periods, projects array no duration, missing duration field, 0 != 1000, incomplete test data, project dict structure
+
+**Context**:
+After the Feb 19 `calculate_totals` fix (projects array takes priority), `test_multi_project_periods` in `tests/test_analysis_calculations.py` failed with `AssertionError: 0 != 1000`.
+
+**Root Cause (NOT a regression — bad test data)**:
+The test's `"projects"` array entries had only `"name"` — no `"duration"` or `"percentage"` field:
+
+```python
+# OLD (incomplete/unrealistic test data):
+"projects": [
+    {"name": "Project A"},   # ← no "duration" key
+    {"name": "Project B"},   # ← no "duration" key
+]
+```
+
+After the fix, `calculate_totals()` correctly calls `project_dict.get("duration", 0)` which returns **0** because the key is absent. The test got `0` — the correct result for incomplete data.
+
+Real app data **always** includes `"duration"` and `"percentage"` in every project dict (the spinbox split UI sets them). The test was written before the fix with simplified, unrealistic data.
+
+**Fix**: Updated test data to be realistic (add `"duration"`, `"percentage"`, `"project_primary"`), and expanded the test to also assert Project A (500), Project B (500), and All Projects (1000):
+
+```python
+# NEW (realistic test data):
+"projects": [
+    {"name": "Project A", "percentage": 50, "duration": 500, "project_primary": True},
+    {"name": "Project B", "percentage": 50, "duration": 500, "project_primary": False},
+]
+# Assertions:
+# Project A filter → 500
+# Project B filter → 500
+# All Projects → 1000 (full period, no split)
+```
+
+**Key Learning**: Multi-project period test data MUST include `"duration"` in each project dict — without it, `calculate_totals()` correctly returns 0 because there is no allocation to sum.
+
+**Required fields for realistic multi-project test data**:
+
+- `"name"`: project name string
+- `"duration"`: allocated seconds (float/int)
+- `"percentage"`: integer 0-100
+- `"project_primary"`: True for primary, False for secondary
+
+**Files Changed**:
+
+- `tests/test_analysis_calculations.py` — updated `test_multi_project_periods` test data and assertions
+
+---
+
+### [2026-02-19] - calculate_totals Fix Refinement: "projects" Array Takes Priority Over "project" Field
+
+**Search Keywords**: calculate_totals, project_filter, multi-project, projects array priority, "project" field, partial duration, primary project full duration, inconsistent behavior, test_analysis_priority, TestAnalysisMultipleSecondaryProjects, test_secondary_projects_aggregated_correctly, test_multiple_periods_with_different_splits
+
+**Context**:
+After the Feb 18 fix, two tests in `test_analysis_priority.py` started failing:
+
+- `test_secondary_projects_aggregated_correctly`: `400 != 1000`
+- `test_multiple_periods_with_different_splits`: `1600 != 3000`
+
+These were NOT regressions. Both tests had explicit comments (`# Note: Current implementation counts full period duration...` and `# This test documents current behavior`) indicating they were **snapshots of old buggy behavior**, not correctness assertions.
+
+**Root Cause of Feb 18 Fix Inconsistency**:
+The Feb 18 fix checked `"project"` field BEFORE `"projects"` array. When a period has BOTH:
+
+- Primary project (matches `"project"` field) → got FULL period duration (wrong)
+- Secondary project (only in `"projects"` list) → got ALLOCATED duration (correct)
+
+This is inconsistent. Real data from the app never saves a `"project"` field alongside a `"projects"` array (multi-project periods only have `"projects"`), but the old tests artificially had both for "compatibility".
+
+**Correct Rule**:
+
+> When `"projects"` array is present, it is the authoritative allocation data for **all** projects — including the primary. Only fall back to `"project"` field if no `"projects"` array exists.
+
+**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+
+```python
+for period in session_data.get("active", []):
+    if project_filter == "All Projects":
+        total_active += period.get("duration", 0)
+        continue
+
+    period_projects = period.get("projects", [])
+    if period_projects:
+        # Multi-project period: "projects" array holds each project's
+        # allocated duration — always use it for all projects.
+        for project_dict in period_projects:
+            if project_dict.get("name") == project_filter:
+                total_active += project_dict.get("duration", 0)
+                break
+    elif period.get("project", "") == project_filter:
+        # Single-project period: no allocation split, full duration.
+        total_active += period.get("duration", 0)
+```
+
+**Tests Updated** (correct expected values with the proper fix):
+
+`test_secondary_projects_aggregated_correctly` — period duration=1000, split 60/40:
+
+- Project A: **600** (was 1000 — old code gave full via `"project"` field match)
+- Project B: **400** (unchanged)
+- All Projects: 1000 (unchanged)
+
+`test_multiple_periods_with_different_splits`:
+
+- Project A: **1400** (70% of period 1, was 2000 full)
+- Project B: **1100** (600 from period 1 + 500 from period 2, was 3000 full)
+- Project C: **500** (50% of period 2, was 1000 full)
+
+**Key Learnings**:
+
+1. **`"projects"` array > `"project"` field**: If a period has been split, `"projects"` contains the authoritative per-project allocation. Never use `"project"` as a shortcut when `"projects"` is present.
+2. **"Documents current behavior" comments = tests to update**: Tests with that comment are behavior snapshots of bugs, not correctness contracts. Update them when the bug is fixed.
+3. **Inconsistency is a code smell**: If primary and secondary projects of the same period use different duration sources, the logic is wrong.
+4. **Real data never has both fields**: The app saves multi-project periods with only `"projects"` array — no top-level `"project"` field. The test data having both was an artifact.
+
+**Files Changed**:
+
+- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~16 lines)
+- `tests/test_analysis_priority.py` — updated assertions in `test_secondary_projects_aggregated_correctly` and `test_multiple_periods_with_different_splits`
+
+---
+
+### [2026-02-18] - Analysis Calculation Bug Fix: Multi-Project Period Duration Splitting
+
+**Search Keywords**: calculate_totals, project_filter, multi-project period, spinbox split, percentage allocation, projects list, duration split, primary_project, secondary_project, project_dict duration, partial duration, analysis frame filtering, total wrong, 50 percent
+
+**Context**:
+User reported bug: A session with one 10s active period split 50/50 between Project A and Project B showed 10s for BOTH projects when filtered individually in the analysis frame. Correct behavior: each project should show only its allocated 5s.
+
+**Root Cause**:
+In `calculate_totals()` (`src/analysis_frame.py`), multi-project periods store each project's allocated duration inside the `projects` list (`period["projects"][i]["duration"]`). The old code correctly identified whether a project matched the filter, but then always added the **full period duration** (`period.get("duration", 0)`) regardless:
+
+```python
+# BUG: found the project in the multi-project list but still adds full period duration
+found = False
+for project_dict in period.get("projects", []):
+    if project_dict.get("name") == project_filter:
+        found = True
+        break
+if not found:
+    continue
+
+total_active += period.get("duration", 0)  # ← adds 10s, not 5s!
+```
+
+**Data Structure (multi-project period)**:
+
+```json
+{
+  "duration": 10,
+  "projects": [
+    {
+      "name": "Project A",
+      "percentage": 50,
+      "duration": 5,
+      "project_primary": true
+    },
+    {
+      "name": "Project B",
+      "percentage": 50,
+      "duration": 5,
+      "project_primary": false
+    }
+  ]
+}
+```
+
+**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+
+Rewrote the active-period accumulation block with three distinct cases:
+
+```python
+for period in session_data.get("active", []):
+    if project_filter == "All Projects":
+        total_active += period.get("duration", 0)
+        continue
+
+    # Single-project period: direct "project" field matches filter
+    period_project = period.get("project", "")
+    if period_project == project_filter:
+        total_active += period.get("duration", 0)
+        continue
+
+    # Multi-project period: add only this project's allocated duration
+    for project_dict in period.get("projects", []):
+        if project_dict.get("name") == project_filter:
+            total_active += project_dict.get("duration", 0)
+            break
+```
+
+**TDD Process**:
+
+1. Wrote failing test `test_project_filter_multi_project_period_allocates_partial_duration` in `tests/test_analysis_timeline.py` → `TestAnalysisFrameProjectFiltering` class.
+2. Confirmed RED: Project A returned 10s, expected 5s.
+3. Applied fix.
+4. Confirmed GREEN: Project A = 5s, Project B = 5s, All Projects = 10s.
+
+**Test Data Pattern** (for multi-project period tests):
+
+```python
+"active": [
+    {
+        "duration": 10,
+        "projects": [
+            {"name": "Project A", "percentage": 50, "duration": 5, "project_primary": True},
+            {"name": "Project B", "percentage": 50, "duration": 5, "project_primary": False},
+        ],
+    }
+]
+```
+
+**Key Learnings**:
+
+1. Multi-project periods store per-project duration in `period["projects"][i]["duration"]` — NOT in `period["duration"]`.
+2. `period["duration"]` = total period time; `project_dict["duration"]` = this project's share.
+3. Old code found the matching project dict but then fell through to `period.get("duration")` — the continue/break was never placed correctly.
+4. New pattern uses `continue` after each case so only ONE branch executes per period.
+5. Backward compatible: single-project periods (no `projects` list, only `"project"` field) still use full duration.
+
+**Files Changed**:
+
+- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~15 lines replaced with ~16 cleaner lines)
+- `tests/test_analysis_timeline.py` — added `test_project_filter_multi_project_period_allocates_partial_duration` to `TestAnalysisFrameProjectFiltering` class
+
+---
+
 ### [2026-02-18] - Pie Chart Card Layout v4: Fixed Label Width, Col 0 Protected from Compression
 
 **Search Keywords**: pie chart layout, fixed label width, columnconfigure weight, sticky EW removed, col 0 priority, non-maximized window, label compressed, single character label, create_card weight, grid overflow right, width=14 tk.Label
@@ -13093,3 +14071,141 @@ User accepted this behavior with the reasoning:
 **Files affected**: [src/analysis_frame.py](src/analysis_frame.py) — `_render_timeline_period()` method, `add_column()` inner function with `use_text_widget=True`
 
 ---
+
+---
+
+### [2026-02-19] - CRITICAL: TclError in Agent Env is NOT a Real Test Failure
+
+**Search Keywords**: TclError agent env, tcl_findLibrary, pytest suite TclError, agent tcl error, init.tcl, TclError invalid command, test teardown tcl, test failure agent environment, pytest TclError fail
+
+**Context**:
+When agent runs Tkinter tests via pytest (full suite or multiple classes in one session), intermittent TclError crashes 1-2 tests even though the tests themselves are correct and pass when run properly.
+
+**Symptom**:
+
+```
+TclError: invalid command name "tcl_findLibrary"
+TclError: Can't find a usable init.tcl
+```
+
+This appears as a FAILED test in pytest output **it is NOT a real failure**.
+
+**Root Cause**: Agent environment pytest session isolation artifact. Multiple `tk.Tk()` instances across test classes in one pytest session causes Tcl interpreter state corruption between classes.
+
+**DO NOT**:
+
+- Modify the teardown pattern (it is already correct with `safe_teardown_tk_root`)
+- Switch to `setUpClass`/`tearDownClass` (tried and abandoned makes things worse)
+- Add `addCleanup` patterns (FORBIDDEN pattern)
+- Treat it as a real test failure requiring code fixes
+- Waste time debugging or "fixing" it the user does not want to be reminded of this
+
+**CORRECT VERIFICATION**:
+
+```bash
+# Option 1: Run as script (most reliable):
+python tests/test_analysis_csv_percentage.py
+
+# Option 2: Run one class at a time via pytest:
+pytest tests/test_your_file.py::TestClassName -v
+```
+
+User confirmed: `Ran 21 tests in 24.270s OK` when run as script.
+
+**What Worked** :
+
+- `safe_teardown_tk_root(self.root)` in `tearDown()` correct teardown
+- Running test file as a Python script directly
+- Running individual test classes via pytest
+
+**What Did NOT Work** :
+
+- `setUpClass`/`tearDownClass` tried and abandoned, worse behavior
+- Running full test file via pytest in agent env intermittent TclError
+
+---
+
+### [2026-02-19] - CSV Export Percentage/Duration Columns (COMPLETED )
+
+**Search Keywords**: CSV export, percentage, primary percentage, secondary percentage, primary duration, secondary duration, export_to_csv, analysis_frame, multi-project, projects array, actions array, analysis timeline csv
+
+**Context**:
+Added 4 new columns to `export_to_csv()` in `src/analysis_frame.py`:
+
+- `Primary Percentage` 100 for single project/action, stored % for multi
+- `Primary Duration` formatted full duration for single, formatted split duration for multi
+- `Secondary Percentage` "" for single, stored secondary % for multi
+- `Secondary Duration` "" for single, formatted secondary duration for multi
+
+Columns appear in CSV ONLY (not in the timeline UI).
+
+**Implementation** (`src/analysis_frame.py` `export_to_csv()`):
+All three period types updated (active, break, idle):
+
+- Active: reads from `period["projects"]` array using `project_primary: True/False`
+- Break: reads from `period["actions"]` array using `break_primary: True/False`
+- Idle: reads from `period["actions"]` array using `idle_primary: True/False`
+- Single-item format (no array): `primary_percentage=100`, `secondary_percentage=""`
+- `secondary_period_duration` sentinel is `""` (not 0) check `!= ""` before calling `format_duration()`
+
+`fieldnames` updated: 14 18 columns. Order:
+`Primary Action, Primary Percentage, Primary Duration, Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration, Secondary Comment`
+
+**Tests** (`tests/test_analysis_csv_percentage.py`):
+
+- 21 tests across 6 classes all pass via `python tests/test_analysis_csv_percentage.py`
+- Uses `safe_teardown_tk_root` + `TestFileManager` correctly
+- TDD: wrote failing tests first (20 failed), then implemented to pass
+
+**Key Technical Details**:
+
+- `secondary_period_duration != ""` guard needed `""` is sentinel for "no secondary", cannot call `format_duration("")`
+- `format_duration()` takes seconds (float/int), returns string like `"30m 0s"`, `"11m 40s"`
+- Multi-project stored duration in data.json: `int(total_duration * percentage / 100)`
+- Used `csv.reader` for header test (not `split(",")` which breaks multi-word headers)
+
+**Branch**: `percentage`
+
+---
+
+### [2026-02-20] - Google Sheets Upload Percentage/Duration Columns (COMPLETED )
+
+**Search Keywords**: google sheets upload, upload_session, primary percentage, secondary percentage, primary duration, secondary duration, break action column, action_primary, break_primary, google_sheets_integration, column structure, expected_headers
+
+**Context**:
+Updated `upload_session()` in `src/google_sheets_integration.py` to match the pattern established by `export_to_csv()` in `src/analysis_frame.py`. Added Primary/Secondary Percentage and Duration columns and moved break actions into the Primary Action column.
+
+**New Column Structure (23 cols, A-W)**:
+`Session ID, Date, Sphere, Session Start Time, Session End Time, Session Total Duration (min), Session Active Duration (min), Session Break Duration (min), Type, Primary Action, Primary Percentage, Primary Duration (min), Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration (min), Secondary Comment, Activity Start, Activity End, Active Notes, Break Notes, Idle Notes, Session Notes`
+
+**Removed Columns**: Activity Duration (min) [was col 17], Break Action [was col 18], old trailing Secondary Action [was col 19]. These are now 0 net change (3 removed, 3 added percentage/duration cols = still 23 cols).
+
+**Bug Fixed**: Break multi-action extraction used `action_item.get("action_primary", True)` WRONG. Should be `break_primary`, matching the data format. Fixed to `action_item.get("break_primary", True)`.
+
+**Implementation** (`src/google_sheets_integration.py`):
+
+- `_ensure_sheet_headers()` updated `expected_headers` list
+- Active periods: added `primary_comment`, `primary_percentage`, `primary_period_duration`, `secondary_period_duration` variables; reads from `project_primary: True/False`
+- Break periods: same pattern using `break_primary: True/False` (bug fix); break action now in Primary Action col (9)
+- Idle/session_summary rows: updated to 23-col structure (no percentage/duration data)
+- Duration format: `round(duration / 60, 2)` minutes (matches rest of Google Sheets)
+- Secondary duration guard: `round(x / 60, 2) if secondary_period_duration != "" else ""`
+
+**Tests** (`tests/test_google_sheets.py`):
+
+- Added `TestGoogleSheetsPercentageColumns` 10 new tests, all passing
+- Updated 8 existing header mocks from old to new header list
+- Fixed column assertions in `test_upload_session_formats_data_correctly`: row[10] (was comment, now percentage), row[12] (now comment)
+- Fixed column assertions in `test_upload_detailed_format_with_active_periods`: row1[12], row1[17], row1[18], row3[9], row3[12]; removed row1[16] (activity_duration)
+- Fixed column assertions in `test_upload_with_secondary_projects`: rows 10-16
+- TDD: 10 tests failed first (red), then implemented to pass (green)
+- **All 78 tests pass**: `Ran 78 tests in 6.929s OK`
+
+**Key Technical Details**:
+
+- `_make_uploader()` helper in new test class creates MagicMock service pre-wired with new headers reusable across all new tests
+- `_NEW_HEADERS` class attribute keeps the expected list DRY across test setup
+- ResourceWarning (unclosed SSL socket) in test output is from `unittest.mock` and is NOT a test failure
+- Duration for multi-project: reads from `project_item.get("duration", 0)` if item has no duration stored, result is 0.0 min (test data without stored durations shows 0.0)
+
+**Branch**: `percentage`
