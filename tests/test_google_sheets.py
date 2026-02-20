@@ -2263,7 +2263,6 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
         else:
             self.token_path = os.path.join(self.test_dir, "token.pickle")
 
-
     @patch("src.google_sheets_integration.messagebox.showerror")
     @unittest.skipUnless(
         os.path.exists(
