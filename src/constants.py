@@ -108,3 +108,29 @@ DEFAULT_DATA_FILE = "data.json"
 DEFAULT_SCREENSHOT_FOLDER = "screenshots"
 DEFAULT_BACKUP_FOLDER = "backups"
 DEFAULT_GOOGLE_CREDENTIALS_FILE = "credentials.json"
+
+# =============================================================================
+# Resource Path Helper (PyInstaller compatibility)
+# =============================================================================
+
+import os
+import sys
+
+
+def get_resource_path(relative_path):
+    """Resolve a resource path for both development and PyInstaller builds.
+
+    In a PyInstaller --onedir bundle, data files are extracted to a temp
+    directory referenced by sys._MEIPASS. In development, paths are resolved
+    relative to the project root (parent of src/).
+
+    Args:
+        relative_path: Path relative to the project root, e.g. 'assets/icon.ico'
+
+    Returns:
+        Absolute path string to the resource.
+    """
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(project_root, relative_path)

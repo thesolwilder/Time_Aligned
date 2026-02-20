@@ -28,6 +28,7 @@ from src.constants import (
     COLOR_LINK_BLUE,
     COLOR_GRAY_TEXT,
     COLOR_ACTIVE_GREEN,
+    get_resource_path,
     COLOR_BREAK_ORANGE,
     COLOR_TRAY_IDLE,
     COLOR_TRAY_ACTIVE,
@@ -52,6 +53,11 @@ class TimeTracker:
         self.root = root
         self.root.title("Time Aligned - Time Tracker")
         self.root.geometry("600x400")
+
+        # Set window and taskbar icon (works in dev and PyInstaller bundle)
+        icon_path = get_resource_path("assets/icon.ico")
+        if os.path.isfile(icon_path):
+            self.root.iconbitmap(icon_path)
 
         # Set theme
         style = ttk.Style()
@@ -778,12 +784,12 @@ class TimeTracker:
 
             # Apply defaults to any unassigned periods so data is complete for analysis
             session = all_data[self.session_name]
-            
+
             # Get defaults using helper methods that parse JSON structure correctly
             default_sphere = self._get_default_sphere()
             default_project = self.get_default_project(default_sphere)
             _, default_break_action = self.get_active_break_actions()
-            
+
             # Fallback if helpers return None
             if not default_sphere:
                 default_sphere = "General"

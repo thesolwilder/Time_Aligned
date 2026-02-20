@@ -210,6 +210,7 @@ tests/                           # Full test suite
 - Python 3.7+
 - Windows (for system tray and some features)
 - See `requirements.txt` for Python package dependencies
+- See `requirements-dev.txt` for dev/build dependencies (pytest, coverage, PyInstaller)
 
 ## Contributing
 

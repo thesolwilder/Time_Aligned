@@ -26,6 +26,79 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-20] - Feature: PyInstaller --onedir Packaging Setup
+
+**Search Keywords**: packaging, pyinstaller, exe, dist, build, onedir, icon, iconbitmap, get_resource_path, ico, assets, spec file, distribution, installer
+
+**Feature Added**: Single-folder `.exe` distribution via PyInstaller. Non-technical users download a zip, unzip, and double-click `TimeAligned.exe`. No installer required.
+
+**Files Added/Changed**:
+
+- `time_tracker.spec` — PyInstaller build config (new)
+- `assets/generate_icon.py` — Pillow script to regenerate `icon.ico` (new)
+- `assets/icon.ico` — Generated green circle icon, all ICO sizes (new)
+- `src/constants.py` — Added `get_resource_path()` helper
+- `time_tracker.py` — Added `iconbitmap` call in `__init__` (graceful fallback if missing)
+- `.gitignore` — Added `dist/` and `build/`
+- `tests/test_packaging.py` — 16 structural tests for packaging config (new)
+
+**What Worked** ✅:
+
+**1. TDD approach for packaging (structural tests):**
+Packaging has no unit-testable logic in the traditional sense, but structural tests are valid:
+
+- Test `.gitignore` entries exist
+- Test `assets/` directory and `icon.ico` exist and are non-empty
+- Test `time_tracker.spec` exists with required content (entry point, app name, `console=False`, icon, datas)
+- Test `get_resource_path()` returns correct path in dev mode
+  All 16 tests fail before implementation, pass after — TDD red/green cycle confirmed.
+
+**2. `get_resource_path()` pattern for PyInstaller compatibility:**
+
+```python
+def get_resource_path(relative_path):
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(project_root, relative_path)
+```
+
+- In dev: resolves relative to project root (parent of `src/`)
+- In PyInstaller bundle: resolves from `sys._MEIPASS` temp extraction dir
+- `iconbitmap` call guarded with `os.path.isfile()` — app still launches if icon missing
+
+**3. Icon generated with Pillow (already a dependency):**
+
+- No new dependencies required
+- `generate_icon.py` produces multi-size `.ico` (16, 32, 48, 64, 128, 256px)
+- Green circle (#2E7D32) matches `COLOR_ACTIVE_GREEN` — consistent with tray icon style
+
+**4. Spec hidden imports to include:**
+
+- `pystray._win32` — Windows tray backend not auto-detected
+- `pynput.mouse._win32`, `pynput.keyboard._win32` — Windows input backends
+- `PIL._tkinter_finder` — Pillow/tkinter integration
+- `win32api`, `win32con`, `win32gui` — pywin32 system integration
+- `googleapiclient.discovery`, `googleapiclient.errors` — dynamic imports missed by analysis
+
+**Build command (run when ready to distribute):**
+
+```
+pip install pyinstaller
+pyinstaller time_tracker.spec
+# Output: dist/TimeAligned/ folder — zip and upload to GitHub Release
+```
+
+**Key Learnings**:
+
+1. **`iconbitmap` must use `.ico` format** — PNG/other formats raise TclError on Windows
+2. **Guard `iconbitmap` with `os.path.isfile()`** — app must still launch in dev environments without the icon
+3. **`src/` must be in `datas`** — PyInstaller sees Python imports but not the module files themselves as data when using `--onedir`
+4. **`console=False` is critical** — omitting this makes a console window flash on every launch for a GUI app
+5. **`dist/` and `build/` must be gitignored** — build output should never be committed; users get the zip from GitHub Releases
+
+---
+
 ### [2026-02-20] - Bug Fix: Project Rename Did Not Update Legacy "project" String Field in Sessions
 
 **Search Keywords**: project rename legacy, project string field, active period project, data.json project format, \_rename_project_in_sessions, legacy format, single project session, project key vs projects array
