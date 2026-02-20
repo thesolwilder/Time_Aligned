@@ -26,6 +26,28 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-02-20] - Test Fix: Stale expected_headers in test_csv_export_includes_all_expected_headers
+
+**Search Keywords**: test_analysis_priority, TestAnalysisCSVExportIntegration, test_csv_export_includes_all_expected_headers, expected_headers, fieldnames, Primary Percentage, Primary Duration, Secondary Percentage, Secondary Duration, export_to_csv, CSV headers stale
+
+**Bug Reported**: `test_csv_export_includes_all_expected_headers` failed — `expected_headers` in the test had 14 columns but the actual CSV (from `export_to_csv` in `src/analysis_frame.py`) writes 18 headers.
+
+**Root Cause**: The test's `expected_headers` list was written before `Primary Percentage`, `Primary Duration`, `Secondary Percentage`, and `Secondary Duration` were added to `export_to_csv`'s `fieldnames`. The source had been updated but the test was not.
+
+**Fix Applied** (`tests/test_analysis_priority.py` — `TestAnalysisCSVExportIntegration.test_csv_export_includes_all_expected_headers`):
+- Added `"Primary Percentage"` and `"Primary Duration"` after `"Primary Action"` in `expected_headers`
+- Added `"Secondary Percentage"` and `"Secondary Duration"` after `"Secondary Action"` in `expected_headers`
+- Updated count assertion: `14` → `18`
+- Updated comment: `"All 13 timeline headers"` → `"All 18 timeline headers"`
+
+**Key Learning — Stale test pattern:**
+When new columns are added to `export_to_csv`, ALL tests that assert on `fieldnames` / column count must be updated to match. The canonical source of truth is the `fieldnames` list in `src/analysis_frame.py` around line 2139.
+
+**Files Changed**:
+- [tests/test_analysis_priority.py](tests/test_analysis_priority.py) — updated `expected_headers` + count assertion in `test_csv_export_includes_all_expected_headers`
+
+---
+
 ### [2026-02-19] - Bug Fix: Settings Sphere Radio Button — Archived Filter With No Archived Spheres Does Nothing
 
 **Search Keywords**: settings_frame, refresh_sphere_dropdown, sphere_filter inactive, archived radio button, no archived spheres, sphere_var stale, sphere_mgmt_frame stale, project list stale, empty filter result, else branch missing, TestSphereFilterEmptyResult
@@ -13881,5 +13903,46 @@ All three period types updated (active, break, idle):
 - `format_duration()` takes seconds (float/int), returns string like `"30m 0s"`, `"11m 40s"`
 - Multi-project stored duration in data.json: `int(total_duration * percentage / 100)`
 - Used `csv.reader` for header test (not `split(",")` which breaks multi-word headers)
+
+**Branch**: `percentage`
+
+---
+
+### [2026-02-20] - Google Sheets Upload Percentage/Duration Columns (COMPLETED )
+
+**Search Keywords**: google sheets upload, upload_session, primary percentage, secondary percentage, primary duration, secondary duration, break action column, action_primary, break_primary, google_sheets_integration, column structure, expected_headers
+
+**Context**:
+Updated `upload_session()` in `src/google_sheets_integration.py` to match the pattern established by `export_to_csv()` in `src/analysis_frame.py`.  Added Primary/Secondary Percentage and Duration columns and moved break actions into the Primary Action column.
+
+**New Column Structure (23 cols, A-W)**:
+`Session ID, Date, Sphere, Session Start Time, Session End Time, Session Total Duration (min), Session Active Duration (min), Session Break Duration (min), Type, Primary Action, Primary Percentage, Primary Duration (min), Primary Comment, Secondary Action, Secondary Percentage, Secondary Duration (min), Secondary Comment, Activity Start, Activity End, Active Notes, Break Notes, Idle Notes, Session Notes`
+
+**Removed Columns**: Activity Duration (min) [was col 17], Break Action [was col 18], old trailing Secondary Action [was col 19].  These are now 0 net change (3 removed, 3 added percentage/duration cols = still 23 cols).
+
+**Bug Fixed**: Break multi-action extraction used `action_item.get("action_primary", True)`  WRONG.  Should be `break_primary`, matching the data format.  Fixed to `action_item.get("break_primary", True)`.
+
+**Implementation** (`src/google_sheets_integration.py`):
+- `_ensure_sheet_headers()`  updated `expected_headers` list
+- Active periods: added `primary_comment`, `primary_percentage`, `primary_period_duration`, `secondary_period_duration` variables; reads from `project_primary: True/False`
+- Break periods: same pattern using `break_primary: True/False` (bug fix); break action now in Primary Action col (9)
+- Idle/session_summary rows: updated to 23-col structure (no percentage/duration data)
+- Duration format: `round(duration / 60, 2)` minutes (matches rest of Google Sheets)
+- Secondary duration guard: `round(x / 60, 2) if secondary_period_duration != "" else ""`
+
+**Tests** (`tests/test_google_sheets.py`):
+- Added `TestGoogleSheetsPercentageColumns`  10 new tests, all passing
+- Updated 8 existing header mocks from old to new header list
+- Fixed column assertions in `test_upload_session_formats_data_correctly`: row[10] (was comment, now percentage), row[12] (now comment)
+- Fixed column assertions in `test_upload_detailed_format_with_active_periods`: row1[12], row1[17], row1[18], row3[9], row3[12]; removed row1[16] (activity_duration)
+- Fixed column assertions in `test_upload_with_secondary_projects`: rows 10-16
+- TDD: 10 tests failed first (red), then implemented to pass (green)
+- **All 78 tests pass**: `Ran 78 tests in 6.929s OK`
+
+**Key Technical Details**:
+- `_make_uploader()` helper in new test class creates MagicMock service pre-wired with new headers  reusable across all new tests
+- `_NEW_HEADERS` class attribute keeps the expected list DRY across test setup
+- ResourceWarning (unclosed SSL socket) in test output is from `unittest.mock` and is NOT a test failure
+- Duration for multi-project: reads from `project_item.get("duration", 0)`  if item has no duration stored, result is 0.0 min (test data without stored durations shows 0.0)
 
 **Branch**: `percentage`

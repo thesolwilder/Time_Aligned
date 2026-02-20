@@ -365,16 +365,16 @@ class GoogleSheetsUploader:
             "Session Active Duration (min)",
             "Session Break Duration (min)",
             "Type",
-            "Project",
-            "Project Comment",
-            "Secondary Project",
-            "Secondary Comment",
+            "Primary Action",
+            "Primary Percentage",
+            "Primary Duration (min)",
+            "Primary Comment",
+            "Secondary Action",
             "Secondary Percentage",
+            "Secondary Duration (min)",
+            "Secondary Comment",
             "Activity Start",
             "Activity End",
-            "Activity Duration (min)",
-            "Break Action",
-            "Secondary Action",
             "Active Notes",
             "Break Notes",
             "Idle Notes",
@@ -553,19 +553,31 @@ class GoogleSheetsUploader:
                 for active in active_periods:
                     # Extract primary and secondary project information
                     primary_project = ""
+                    primary_comment = ""
+                    primary_percentage = 100
+                    primary_period_duration = active.get("duration", 0)
                     secondary_project = ""
                     secondary_comment = ""
                     secondary_percentage = ""
+                    secondary_period_duration = ""
 
                     if active.get("project"):
                         # Single project case
                         primary_project = escape_for_sheets(active.get("project", ""))
+                        primary_comment = escape_for_sheets(active.get("comment", ""))
                     else:
                         # Multiple projects case
                         for project_item in active.get("projects", []):
                             if project_item.get("project_primary", True):
                                 primary_project = escape_for_sheets(
                                     project_item.get("name", "")
+                                )
+                                primary_comment = escape_for_sheets(
+                                    project_item.get("comment", "")
+                                )
+                                primary_percentage = project_item.get("percentage", 100)
+                                primary_period_duration = project_item.get(
+                                    "duration", 0
                                 )
                             else:
                                 secondary_project = escape_for_sheets(
@@ -576,6 +588,9 @@ class GoogleSheetsUploader:
                                 )
                                 secondary_percentage = project_item.get(
                                     "percentage", ""
+                                )
+                                secondary_period_duration = project_item.get(
+                                    "duration", 0
                                 )
 
                     row = [
@@ -589,25 +604,19 @@ class GoogleSheetsUploader:
                         break_duration,
                         "active",
                         primary_project,
-                        #primary percentage, 100 if single project 
-                        #primary duration per period, the total period duration if single project
-                        #then comment
-                        escape_for_sheets(
-                            active.get("comment", "")
-                        ),  # primary project comment
+                        primary_percentage,
+                        round(primary_period_duration / 60, 2),
+                        primary_comment,
                         secondary_project,
-                        #put the secondary percentage here, 0 if single project
-                        #secondary duration per period, 0 if single project
-                        secondary_comment,
                         secondary_percentage,
+                        (
+                            round(secondary_period_duration / 60, 2)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
+                        secondary_comment,
                         active.get("start", ""),
                         active.get("end", ""),
-                        #isn't this already in a colum at active duration?
-                        round(active.get("duration", 0) / 60, 2),
-                        #aren't the break action and secondary action supposed to be up in project col
-                        #remove these columns and put the break action in the project comment column
-                        "",  # break_action
-                        "",  # secondary_action
                         active_notes,
                         break_notes,
                         idle_notes,
@@ -620,20 +629,30 @@ class GoogleSheetsUploader:
                 for brk in breaks:
                     # Extract primary and secondary action information
                     primary_action = ""
+                    primary_comment = ""
+                    primary_percentage = 100
+                    primary_period_duration = brk.get("duration", 0)
                     secondary_action = ""
                     secondary_comment = ""
                     secondary_percentage = ""
+                    secondary_period_duration = ""
 
                     if brk.get("action"):
                         # Single action case
                         primary_action = escape_for_sheets(brk.get("action", ""))
+                        primary_comment = escape_for_sheets(brk.get("comment", ""))
                     else:
                         # Multiple actions case
                         for action_item in brk.get("actions", []):
-                            if action_item.get("action_primary", True):
+                            if action_item.get("break_primary", True):
                                 primary_action = escape_for_sheets(
                                     action_item.get("name", "")
                                 )
+                                primary_comment = escape_for_sheets(
+                                    action_item.get("comment", "")
+                                )
+                                primary_percentage = action_item.get("percentage", 100)
+                                primary_period_duration = action_item.get("duration", 0)
                             else:
                                 secondary_action = escape_for_sheets(
                                     action_item.get("name", "")
@@ -642,6 +661,9 @@ class GoogleSheetsUploader:
                                     action_item.get("comment", "")
                                 )
                                 secondary_percentage = action_item.get("percentage", "")
+                                secondary_period_duration = action_item.get(
+                                    "duration", 0
+                                )
 
                     row = [
                         session_id,
@@ -653,18 +675,20 @@ class GoogleSheetsUploader:
                         active_duration,
                         break_duration,
                         "break",
-                        "",  # project
-                        escape_for_sheets(
-                            brk.get("comment", "")
-                        ),  # primary action comment
-                        "",  # secondary_project
-                        secondary_comment,
+                        primary_action,
+                        primary_percentage,
+                        round(primary_period_duration / 60, 2),
+                        primary_comment,
+                        secondary_action,
                         secondary_percentage,
+                        (
+                            round(secondary_period_duration / 60, 2)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
+                        secondary_comment,
                         brk.get("start", ""),
                         "",  # activity_end
-                        round(brk.get("duration", 0) / 60, 2),
-                        primary_action,
-                        secondary_action,
                         active_notes,
                         break_notes,
                         idle_notes,
@@ -675,6 +699,42 @@ class GoogleSheetsUploader:
             # Process idle periods
             if idle_periods:
                 for idle in idle_periods:
+                    # Extract primary and secondary action information
+                    primary_action = ""
+                    primary_comment = ""
+                    primary_percentage = 100
+                    primary_period_duration = idle.get("duration", 0)
+                    secondary_action = ""
+                    secondary_comment = ""
+                    secondary_percentage = ""
+                    secondary_period_duration = ""
+
+                    if idle.get("action"):
+                        # Single action case
+                        primary_action = escape_for_sheets(idle.get("action", ""))
+                        primary_comment = escape_for_sheets(idle.get("comment", ""))
+                    else:
+                        # Multiple actions case
+                        for action_item in idle.get("actions", []):
+                            if action_item.get("idle_primary", True):
+                                primary_action = escape_for_sheets(
+                                    action_item.get("name", "")
+                                )
+                                primary_comment = escape_for_sheets(
+                                    action_item.get("comment", "")
+                                )
+                                primary_percentage = action_item.get("percentage", 100)
+                                primary_period_duration = action_item.get("duration", 0)
+                            else:
+                                secondary_action = escape_for_sheets(
+                                    action_item.get("name", "")
+                                )
+                                secondary_comment = escape_for_sheets(
+                                    action_item.get("comment", "")
+                                )
+                                secondary_percentage = action_item.get("percentage", "")
+                                secondary_period_duration = action_item.get("duration", 0)
+
                     row = [
                         session_id,
                         date,
@@ -685,16 +745,20 @@ class GoogleSheetsUploader:
                         active_duration,
                         break_duration,
                         "idle",
-                        "",  # project
-                        "",  # project_comment
-                        "",  # secondary_project
-                        "",  # secondary_comment
-                        "",  # secondary_percentage
+                        primary_action,
+                        primary_percentage,
+                        round(primary_period_duration / 60, 2),
+                        primary_comment,
+                        secondary_action,
+                        secondary_percentage,
+                        (
+                            round(secondary_period_duration / 60, 2)
+                            if secondary_period_duration != ""
+                            else ""
+                        ),
+                        secondary_comment,
                         idle.get("start", ""),
                         idle.get("end", ""),
-                        round(idle.get("duration", 0) / 60, 2),
-                        "",  # break_action
-                        "",  # secondary_action
                         active_notes,
                         break_notes,
                         idle_notes,
@@ -714,16 +778,16 @@ class GoogleSheetsUploader:
                     active_duration,
                     break_duration,
                     "session_summary",
-                    "",  # project
-                    "",  # project_comment
-                    "",  # secondary_project
-                    "",  # secondary_comment
+                    "",  # primary_action
+                    "",  # primary_percentage
+                    "",  # primary_duration
+                    "",  # primary_comment
+                    "",  # secondary_action
                     "",  # secondary_percentage
+                    "",  # secondary_duration
+                    "",  # secondary_comment
                     "",  # activity_start
                     "",  # activity_end
-                    0,  # activity_duration
-                    "",  # break_action
-                    "",  # secondary_action
                     active_notes,
                     break_notes,
                     idle_notes,
@@ -818,7 +882,7 @@ class GoogleSheetsUploader:
         connectivity and access permissions.
 
         Called from: Settings frame "Test Connection" button
-        
+
         User Feedback:
             - Error dialogs (messagebox.showerror) displayed in Settings frame for:
               • 404 Not Found: Spreadsheet ID doesn't exist or was deleted

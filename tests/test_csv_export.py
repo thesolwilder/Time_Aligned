@@ -713,13 +713,13 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                         "actions": [
                             {
                                 "name": "bathroom",
-                                "action_primary": True,
+                                "break_primary": True,
                                 "comment": "Primary action",
                                 "percentage": 70
                             },
                             {
                                 "name": "stretching",
-                                "action_primary": False,
+                                "break_primary": False,
                                 "comment": "Secondary action",
                                 "percentage": 30
                             }
@@ -778,10 +778,8 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
 
     def tearDown(self):
         """Clean up test files"""
-        try:
-            self.root.destroy()
-        except:
-            pass
+        from tests.test_helpers import safe_teardown_tk_root
+        safe_teardown_tk_root(self.root)
         self.file_manager.cleanup()
 
     @patch("tkinter.filedialog.asksaveasfilename")
@@ -806,7 +804,7 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                 rows = list(reader)
             
             # Verify headers include secondary fields
-            self.assertIn("secondary_project", headers)
+            self.assertIn("secondary_action", headers)
             self.assertIn("secondary_comment", headers)
             self.assertIn("secondary_percentage", headers)
             
@@ -818,8 +816,8 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                     break
             
             self.assertIsNotNone(active_row, "Should have an active row")
-            self.assertEqual(active_row["project"], "learning_to_code")
-            self.assertEqual(active_row["secondary_project"], "documentation")
+            self.assertEqual(active_row["primary_action"], "learning_to_code")
+            self.assertEqual(active_row["secondary_action"], "documentation")
             self.assertEqual(active_row["secondary_comment"], "Side documentation")
             self.assertEqual(active_row["secondary_percentage"], "20")
             
@@ -860,7 +858,7 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
                     break
             
             self.assertIsNotNone(break_row, "Should have a break row")
-            self.assertEqual(break_row["break_action"], "bathroom")
+            self.assertEqual(break_row["primary_action"], "bathroom")
             self.assertEqual(break_row["secondary_action"], "stretching")
             self.assertEqual(break_row["secondary_comment"], "Secondary action")
             self.assertEqual(break_row["secondary_percentage"], "30")

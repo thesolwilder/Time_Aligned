@@ -719,7 +719,7 @@ class TestAnalysisCSVExportIntegration(unittest.TestCase):
             reader = csv.DictReader(f)
             fieldnames = reader.fieldnames
 
-        # All 13 timeline headers should be exported in the same order
+        # All 18 timeline headers should be exported in the same order
         expected_headers = [
             "Date",
             "Start",
@@ -729,8 +729,12 @@ class TestAnalysisCSVExportIntegration(unittest.TestCase):
             "Project Active",
             "Type",
             "Primary Action",
+            "Primary Percentage",
+            "Primary Duration",
             "Primary Comment",
             "Secondary Action",
+            "Secondary Percentage",
+            "Secondary Duration",
             "Secondary Comment",
             "Active Comments",
             "Break Comments",
@@ -739,7 +743,7 @@ class TestAnalysisCSVExportIntegration(unittest.TestCase):
 
         self.assertEqual(fieldnames, expected_headers)
         self.assertEqual(
-            len(fieldnames), 14, "CSV should have 14 headers matching timeline"
+            len(fieldnames), 18, "CSV should have 18 headers matching timeline"
         )
 
     def test_csv_export_preserves_large_text_comments(self):

@@ -2164,7 +2164,7 @@ class TestCSVExport(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["date"], "2026-02-17")
         self.assertEqual(rows[0]["sphere"], "Work")
-        self.assertEqual(rows[0]["project"], "Project A")
+        self.assertEqual(rows[0]["primary_action"], "Project A")
 
         # Verify success message was shown
         mock_info.assert_called_once()
@@ -2209,6 +2209,377 @@ class TestCSVExport(unittest.TestCase):
         # Clean up (in case file was created)
         if os.path.exists(output_file):
             os.remove(output_file)
+
+
+class TestSettingsFrameCSVPercentageColumns(unittest.TestCase):
+    """Test that CSV export uses new primary/secondary percentage/duration column structure"""
+
+    def setUp(self):
+        """Set up test fixtures with all period types including multi-action data"""
+        self.file_manager = TestFileManager()
+        settings = TestDataGenerator.create_settings_data()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_csv_pct_settings.json", settings
+        )
+
+        data = {
+            "session1": {
+                "date": "2026-02-17",
+                "sphere": "Work",
+                "start_time": "09:00:00",
+                "end_time": "17:00:00",
+                "total_duration": 28800,
+                "active_duration": 18000,
+                "break_duration": 5400,
+                "active": [
+                    # Single project
+                    {
+                        "project": "Solo Project",
+                        "start": "09:00:00",
+                        "end": "10:00:00",
+                        "duration": 3600,
+                        "comment": "Solo comment",
+                    },
+                    # Multi project
+                    {
+                        "projects": [
+                            {
+                                "name": "Primary Project",
+                                "project_primary": True,
+                                "percentage": 70,
+                                "duration": 2520,
+                                "comment": "Primary comment",
+                            },
+                            {
+                                "name": "Secondary Project",
+                                "project_primary": False,
+                                "percentage": 30,
+                                "duration": 1080,
+                                "comment": "Secondary comment",
+                            },
+                        ],
+                        "start": "10:00:00",
+                        "end": "11:00:00",
+                        "duration": 3600,
+                    },
+                ],
+                "breaks": [
+                    # Single action break
+                    {
+                        "action": "Coffee",
+                        "start": "11:00:00",
+                        "end": "11:15:00",
+                        "duration": 900,
+                        "comment": "Break comment",
+                    },
+                    # Multi action break — uses break_primary key (not action_primary)
+                    {
+                        "actions": [
+                            {
+                                "name": "Lunch",
+                                "break_primary": True,
+                                "percentage": 80,
+                                "duration": 1920,
+                                "comment": "Lunch comment",
+                            },
+                            {
+                                "name": "Walk",
+                                "break_primary": False,
+                                "percentage": 20,
+                                "duration": 480,
+                                "comment": "Walk comment",
+                            },
+                        ],
+                        "start": "12:00:00",
+                        "end": "12:40:00",
+                        "duration": 2400,
+                    },
+                ],
+                "idle_periods": [
+                    # Single action idle
+                    {
+                        "action": "Reading",
+                        "start": "15:00:00",
+                        "end": "15:30:00",
+                        "duration": 1800,
+                        "comment": "",
+                    },
+                    # Multi action idle — uses idle_primary key
+                    {
+                        "actions": [
+                            {
+                                "name": "Meeting",
+                                "idle_primary": True,
+                                "percentage": 60,
+                                "duration": 720,
+                                "comment": "Meeting comment",
+                            },
+                            {
+                                "name": "Docs",
+                                "idle_primary": False,
+                                "percentage": 40,
+                                "duration": 480,
+                                "comment": "Docs comment",
+                            },
+                        ],
+                        "start": "15:30:00",
+                        "end": "16:00:00",
+                        "duration": 1200,
+                    },
+                ],
+                "session_comments": {
+                    "active_notes": "",
+                    "break_notes": "",
+                    "idle_notes": "",
+                    "session_notes": "",
+                },
+            }
+        }
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_csv_pct_data.json", data
+        )
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.tracker.data_file = self.test_data_file
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        from tests.test_helpers import safe_teardown_tk_root
+
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def _export_and_read(self):
+        """Helper: run CSV export and return (rows, fieldnames) from the written file."""
+        import csv
+
+        output_file = os.path.join(self.file_manager.test_data_dir, "output_pct.csv")
+        with (
+            patch("tkinter.filedialog.asksaveasfilename", return_value=output_file),
+            patch("tkinter.messagebox.showinfo"),
+            patch("os.startfile", create=True),
+        ):
+            self.frame.save_all_data_to_csv()
+
+        with open(output_file, "r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+            fieldnames = reader.fieldnames or []
+        return rows, fieldnames
+
+    # ---- Fieldname tests ----
+
+    def test_fieldnames_include_new_columns(self):
+        """CSV must contain all new primary/secondary percentage/duration columns"""
+        _, fieldnames = self._export_and_read()
+        for col in [
+            "primary_action",
+            "primary_percentage",
+            "primary_duration",
+            "primary_comment",
+            "secondary_action",
+            "secondary_percentage",
+            "secondary_duration",
+            "secondary_comment",
+        ]:
+            self.assertIn(col, fieldnames, f"Expected column '{col}' in fieldnames")
+
+    def test_fieldnames_exclude_old_columns(self):
+        """CSV must NOT contain old column names"""
+        _, fieldnames = self._export_and_read()
+        for col in [
+            "project",
+            "secondary_project",
+            "activity_duration",
+            "activity_comment",
+            "break_action",
+        ]:
+            self.assertNotIn(col, fieldnames, f"Old column '{col}' should be removed")
+
+    # ---- Active single-project tests ----
+
+    def test_active_single_project_primary_action(self):
+        """Single-project active: primary_action = project name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_active_single_project_primary_percentage_100(self):
+        """Single-project active: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_active_single_project_primary_duration(self):
+        """Single-project active: primary_duration = period duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_duration"], "3600")
+
+    def test_active_single_project_primary_comment(self):
+        """Single-project active: primary_comment from period comment field"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["primary_comment"], "Solo comment")
+
+    def test_active_single_project_empty_secondary(self):
+        """Single-project active: secondary fields are empty"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Solo Project"
+        )
+        self.assertEqual(row["secondary_action"], "")
+        self.assertEqual(row["secondary_percentage"], "")
+        self.assertEqual(row["secondary_duration"], "")
+
+    # ---- Active multi-project tests ----
+
+    def test_active_multi_project_primary_action(self):
+        """Multi-project active: primary_action = primary project name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_active_multi_project_primary_percentage(self):
+        """Multi-project active: primary_percentage from project item"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_percentage"], "70")
+
+    def test_active_multi_project_primary_duration(self):
+        """Multi-project active: primary_duration from project item (seconds)"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_duration"], "2520")
+
+    def test_active_multi_project_primary_comment(self):
+        """Multi-project active: primary_comment from primary project item"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["primary_comment"], "Primary comment")
+
+    def test_active_multi_project_secondary_fields(self):
+        """Multi-project active: secondary fields populated from secondary project"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r
+            for r in rows
+            if r["type"] == "active" and r["primary_action"] == "Primary Project"
+        )
+        self.assertEqual(row["secondary_action"], "Secondary Project")
+        self.assertEqual(row["secondary_percentage"], "30")
+        self.assertEqual(row["secondary_duration"], "1080")
+        self.assertEqual(row["secondary_comment"], "Secondary comment")
+
+    # ---- Break single-action tests ----
+
+    def test_break_single_action_primary_action(self):
+        """Single-action break: primary_action = action name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_break_single_action_primary_percentage_100(self):
+        """Single-action break: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_break_single_action_primary_duration(self):
+        """Single-action break: primary_duration = break duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Coffee"
+        )
+        self.assertEqual(row["primary_duration"], "900")
+
+    def test_break_multi_action_uses_break_primary_key(self):
+        """Multi-action break: uses break_primary key (not action_primary) to find primary"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "break" and r["primary_action"] == "Lunch"
+        )
+        self.assertEqual(row["primary_percentage"], "80")
+        self.assertEqual(row["primary_duration"], "1920")
+        self.assertEqual(row["secondary_action"], "Walk")
+        self.assertEqual(row["secondary_percentage"], "20")
+        self.assertEqual(row["secondary_duration"], "480")
+
+    # ---- Idle tests ----
+
+    def test_idle_single_action_primary_action(self):
+        """Single-action idle: primary_action = action name"""
+        rows, _ = self._export_and_read()
+        match = [
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        ]
+        self.assertEqual(len(match), 1)
+
+    def test_idle_single_action_primary_percentage_100(self):
+        """Single-action idle: primary_percentage defaults to 100"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        )
+        self.assertEqual(row["primary_percentage"], "100")
+
+    def test_idle_single_action_primary_duration(self):
+        """Single-action idle: primary_duration = idle period duration in seconds"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Reading"
+        )
+        self.assertEqual(row["primary_duration"], "1800")
+
+    def test_idle_multi_action_uses_idle_primary_key(self):
+        """Multi-action idle: uses idle_primary key to find primary action"""
+        rows, _ = self._export_and_read()
+        row = next(
+            r for r in rows if r["type"] == "idle" and r["primary_action"] == "Meeting"
+        )
+        self.assertEqual(row["primary_percentage"], "60")
+        self.assertEqual(row["primary_duration"], "720")
+        self.assertEqual(row["secondary_action"], "Docs")
+        self.assertEqual(row["secondary_percentage"], "40")
+        self.assertEqual(row["secondary_duration"], "480")
 
 
 class TestScreenshotSettingsValidation(unittest.TestCase):

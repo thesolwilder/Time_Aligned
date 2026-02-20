@@ -895,16 +895,16 @@ class TestGoogleSheetsIntegration(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -1082,16 +1082,16 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -1159,8 +1159,9 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
             self.assertEqual(row[1], "2024-01-20")  # date
             self.assertEqual(row[2], "Work")  # sphere
             self.assertEqual(row[8], "active")  # type
-            self.assertEqual(row[9], "Testing")  # project
-            self.assertEqual(row[10], "Working on tests")  # project_comment
+            self.assertEqual(row[9], "Testing")  # primary_project
+            self.assertEqual(row[10], 100)  # primary_percentage (single project)
+            self.assertEqual(row[12], "Working on tests")  # primary_comment
 
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
@@ -1878,16 +1879,16 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -1983,16 +1984,16 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -2084,16 +2085,16 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -2179,16 +2180,16 @@ class TestGoogleSheetsTestConnection(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -2537,16 +2538,16 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -2627,23 +2628,24 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
             self.assertEqual(row1[1], "2024-01-20")  # date
             self.assertEqual(row1[2], "Work")  # sphere
             self.assertEqual(row1[8], "active")  # type
-            self.assertEqual(row1[9], "Project A")  # project
-            self.assertEqual(row1[10], "Working on feature X")  # project_comment
-            self.assertEqual(row1[14], "10:00:00")  # activity_start
-            self.assertEqual(row1[15], "10:25:00")  # activity_end
-            self.assertEqual(row1[16], 25.0)  # activity_duration in minutes
+            self.assertEqual(row1[9], "Project A")  # primary_action
+            self.assertEqual(row1[12], "Working on feature X")  # primary_comment
+            self.assertEqual(row1[17], "10:00:00")  # activity_start
+            self.assertEqual(row1[18], "10:25:00")  # activity_end
 
             # Verify second active row
             row2 = rows[1]
             self.assertEqual(row2[8], "active")  # type
-            self.assertEqual(row2[9], "Project B")  # project
-            self.assertEqual(row2[10], "Code review")  # project_comment
+            self.assertEqual(row2[9], "Project B")  # primary_action
+            self.assertEqual(row2[12], "Code review")  # primary_comment
 
             # Verify break row
             row3 = rows[2]
             self.assertEqual(row3[8], "break")  # type
-            self.assertEqual(row3[10], "Quick coffee break")  # primary action comment
-            self.assertEqual(row3[17], "Coffee")  # break_action
+            self.assertEqual(
+                row3[9], "Coffee"
+            )  # primary_action (break action in col 9)
+            self.assertEqual(row3[12], "Quick coffee break")  # primary_comment
 
             # Verify session comments are in all rows
             for row in rows:
@@ -2698,16 +2700,16 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
                         "Session Active Duration (min)",
                         "Session Break Duration (min)",
                         "Type",
-                        "Project",
-                        "Project Comment",
-                        "Secondary Project",
-                        "Secondary Comment",
+                        "Primary Action",
+                        "Primary Percentage",
+                        "Primary Duration (min)",
+                        "Primary Comment",
+                        "Secondary Action",
                         "Secondary Percentage",
+                        "Secondary Duration (min)",
+                        "Secondary Comment",
                         "Activity Start",
                         "Activity End",
-                        "Activity Duration (min)",
-                        "Break Action",
-                        "Secondary Action",
                         "Active Notes",
                         "Break Notes",
                         "Idle Notes",
@@ -2765,12 +2767,595 @@ class TestGoogleSheetsDetailedFormat(unittest.TestCase):
             self.assertEqual(len(rows), 1)
 
             row = rows[0]
-            self.assertEqual(row[9], "Primary Project")  # project
-            self.assertEqual(row[10], "Multi-project work")  # project_comment
-            self.assertEqual(row[11], "Secondary Project")  # secondary_project
-            self.assertEqual(row[12], "Supporting work")  # secondary_comment
-            self.assertEqual(row[13], "30")  # secondary_percentage
+            self.assertEqual(row[9], "Primary Project")  # primary_action
+            self.assertEqual(row[10], 100)  # primary_percentage (no % in item)
+            self.assertEqual(row[11], 0.0)  # primary_duration (no duration in item)
+            self.assertEqual(
+                row[12], ""
+            )  # primary_comment (no comment in primary item)
+            self.assertEqual(row[13], "Secondary Project")  # secondary_action
+            self.assertEqual(row[14], "30")  # secondary_percentage
+            self.assertEqual(row[15], 0.0)  # secondary_duration (no duration in item)
+            self.assertEqual(row[16], "Supporting work")  # secondary_comment
 
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+
+@unittest.skipIf(
+    not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed"
+)
+class TestGoogleSheetsPercentageColumns(unittest.TestCase):
+    """Test Primary/Secondary Percentage and Duration columns in upload_session.
+
+    Columns mirror analysis_frame.export_to_csv() pattern:
+        Primary Action, Primary Percentage, Primary Duration (min), Primary Comment,
+        Secondary Action, Secondary Percentage, Secondary Duration (min), Secondary Comment
+
+    Old dedicated columns Activity Duration (min), Break Action, and the trailing
+    Secondary Action column have been removed.  Break actions now go in Primary Action.
+    """
+
+    _NEW_HEADERS = [
+        "Session ID",
+        "Date",
+        "Sphere",
+        "Session Start Time",
+        "Session End Time",
+        "Session Total Duration (min)",
+        "Session Active Duration (min)",
+        "Session Break Duration (min)",
+        "Type",
+        "Primary Action",
+        "Primary Percentage",
+        "Primary Duration (min)",
+        "Primary Comment",
+        "Secondary Action",
+        "Secondary Percentage",
+        "Secondary Duration (min)",
+        "Secondary Comment",
+        "Activity Start",
+        "Activity End",
+        "Active Notes",
+        "Break Notes",
+        "Idle Notes",
+        "Session Notes",
+    ]
+
+    def setUp(self):
+        self.file_manager = TestFileManager()
+        self.addCleanup(self.file_manager.cleanup)
+
+    def _make_uploader(self, suffix="pct"):
+        """Create uploader with mocked service pre-wired with new headers."""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+        except ImportError:
+            return None, None
+
+        settings = TestDataGenerator.create_settings_data()
+        settings["google_sheets"] = {
+            "enabled": True,
+            "spreadsheet_id": "test_123",
+            "sheet_name": "Sessions",
+        }
+        test_file = self.file_manager.create_test_file(f"test_{suffix}.json", settings)
+        uploader = GoogleSheetsUploader(test_file)
+        mock_service = MagicMock()
+        uploader.service = mock_service
+        uploader.credentials = MagicMock()
+        mock_service.spreadsheets().values().get().execute.return_value = {
+            "values": [self._NEW_HEADERS]
+        }
+        mock_service.spreadsheets().values().append().execute.return_value = {
+            "updates": {"updatedCells": 23}
+        }
+        return uploader, mock_service
+
+    def _base_session(self):
+        return {
+            "date": "2024-01-20",
+            "sphere": "Work",
+            "start_time": "10:00:00",
+            "end_time": "10:30:00",
+            "total_duration": 1800,
+            "active_duration": 1500,
+            "break_duration": 300,
+            "session_comments": {},
+            "active": [],
+            "breaks": [],
+            "idle_periods": [],
+        }
+
+    # ── Header shape ───────────────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_headers_include_percentage_and_duration_columns(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """_ensure_sheet_headers writes new Primary/Secondary Percentage and Duration columns"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            mock_service = MagicMock()
+            mock_build.return_value = mock_service
+            mock_exists.return_value = True
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+                "sheet_name": "Sessions",
+            }
+            test_file = self.file_manager.create_test_file(
+                "test_hdr_new.json", settings
+            )
+            uploader = GoogleSheetsUploader(test_file)
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": []
+            }
+            mock_service.spreadsheets().values().update().execute.return_value = {}
+            uploader.service = mock_service
+            uploader.credentials = MagicMock()
+
+            uploader._ensure_sheet_headers()
+
+            call_args = mock_service.spreadsheets().values().update.call_args
+            headers = call_args[1]["body"]["values"][0]
+
+            self.assertIn("Primary Percentage", headers)
+            self.assertIn("Primary Duration (min)", headers)
+            self.assertIn("Primary Comment", headers)
+            self.assertIn("Secondary Action", headers)
+            self.assertIn("Secondary Percentage", headers)
+            self.assertIn("Secondary Duration (min)", headers)
+            self.assertIn("Secondary Comment", headers)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_headers_exclude_old_dedicated_columns(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Old Activity Duration (min), Break Action, Project Comment columns removed"""
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+
+            mock_service = MagicMock()
+            mock_build.return_value = mock_service
+            mock_exists.return_value = True
+            settings = TestDataGenerator.create_settings_data()
+            settings["google_sheets"] = {
+                "enabled": True,
+                "spreadsheet_id": "test_123",
+                "sheet_name": "Sessions",
+            }
+            test_file = self.file_manager.create_test_file(
+                "test_hdr_old.json", settings
+            )
+            uploader = GoogleSheetsUploader(test_file)
+            mock_service.spreadsheets().values().get().execute.return_value = {
+                "values": []
+            }
+            mock_service.spreadsheets().values().update().execute.return_value = {}
+            uploader.service = mock_service
+            uploader.credentials = MagicMock()
+
+            uploader._ensure_sheet_headers()
+
+            call_args = mock_service.spreadsheets().values().update.call_args
+            headers = call_args[1]["body"]["values"][0]
+
+            self.assertNotIn("Activity Duration (min)", headers)
+            self.assertNotIn("Break Action", headers)
+            self.assertNotIn("Project Comment", headers)
+            self.assertNotIn("Secondary Project", headers)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    # ── Active single project ──────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_active_single_project_primary_percentage_100(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Single project: Primary Percentage col = 100"""
+        try:
+            uploader, mock_service = self._make_uploader("sp1")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:25:00",
+                    "duration": 1500,
+                    "project": "My Project",
+                    "comment": "My note",
+                }
+            ]
+            uploader.upload_session(session, "s1")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[10], 100)  # Primary Percentage
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_active_single_project_primary_duration_full_period(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Single project: Primary Duration = full period duration in minutes"""
+        try:
+            uploader, mock_service = self._make_uploader("sp2")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:25:00",
+                    "duration": 1500,
+                    "project": "My Project",
+                    "comment": "note",
+                }
+            ]
+            uploader.upload_session(session, "s1")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[11], 25.0)  # Primary Duration: 1500s / 60 = 25.0 min
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_active_single_project_comment_and_empty_secondary(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Single project: Primary Comment at col 12, all secondary columns empty"""
+        try:
+            uploader, mock_service = self._make_uploader("sp3")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:25:00",
+                    "duration": 1500,
+                    "project": "Project X",
+                    "comment": "Great work",
+                }
+            ]
+            uploader.upload_session(session, "s1")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[12], "Great work")  # Primary Comment
+            self.assertEqual(row[13], "")  # Secondary Action (empty)
+            self.assertEqual(row[14], "")  # Secondary Percentage (empty)
+            self.assertEqual(row[15], "")  # Secondary Duration (empty)
+            self.assertEqual(row[16], "")  # Secondary Comment (empty)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_active_single_project_activity_times_at_cols_17_18(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Activity Start at col 17, Activity End at col 18 (shifted from old cols 14/15)"""
+        try:
+            uploader, mock_service = self._make_uploader("sp4")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:25:00",
+                    "duration": 1500,
+                    "project": "P",
+                    "comment": "",
+                }
+            ]
+            uploader.upload_session(session, "s1")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[17], "10:00:00")  # Activity Start
+            self.assertEqual(row[18], "10:25:00")  # Activity End
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    # ── Active multi project ───────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_active_multi_project_percentage_and_duration(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Multi-project: percentage and duration populated for primary and secondary"""
+        try:
+            uploader, mock_service = self._make_uploader("mp1")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:30:00",
+                    "duration": 1800,
+                    "projects": [
+                        {
+                            "name": "Primary P",
+                            "project_primary": True,
+                            "comment": "Main work",
+                            "percentage": 70,
+                            "duration": 1260,
+                        },
+                        {
+                            "name": "Secondary P",
+                            "project_primary": False,
+                            "comment": "Side work",
+                            "percentage": 30,
+                            "duration": 540,
+                        },
+                    ],
+                }
+            ]
+            uploader.upload_session(session, "s2")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[9], "Primary P")  # Primary Action
+            self.assertEqual(row[10], 70)  # Primary Percentage
+            self.assertEqual(row[11], 21.0)  # Primary Duration: 1260s / 60
+            self.assertEqual(row[12], "Main work")  # Primary Comment
+            self.assertEqual(row[13], "Secondary P")  # Secondary Action
+            self.assertEqual(row[14], 30)  # Secondary Percentage
+            self.assertEqual(row[15], 9.0)  # Secondary Duration: 540s / 60
+            self.assertEqual(row[16], "Side work")  # Secondary Comment
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    # ── Break tests ────────────────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_break_single_action_in_primary_action_col(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Break single action goes in Primary Action col (9), not a separate column"""
+        try:
+            uploader, mock_service = self._make_uploader("brk1")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["breaks"] = [
+                {
+                    "start": "10:25:00",
+                    "duration": 300,
+                    "action": "Coffee",
+                    "comment": "Quick break",
+                }
+            ]
+            uploader.upload_session(session, "s3")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[9], "Coffee")  # Primary Action (break action here)
+            self.assertEqual(row[10], 100)  # Primary Percentage (single = 100)
+            self.assertEqual(row[12], "Quick break")  # Primary Comment
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_break_multi_action_percentage_and_duration(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Break multi-action: percentage and duration for primary and secondary"""
+        try:
+            uploader, mock_service = self._make_uploader("brk2")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["breaks"] = [
+                {
+                    "start": "10:25:00",
+                    "duration": 300,
+                    "actions": [
+                        {
+                            "name": "Coffee",
+                            "break_primary": True,
+                            "comment": "Main break",
+                            "percentage": 60,
+                            "duration": 180,
+                        },
+                        {
+                            "name": "Walk",
+                            "break_primary": False,
+                            "comment": "Short walk",
+                            "percentage": 40,
+                            "duration": 120,
+                        },
+                    ],
+                }
+            ]
+            uploader.upload_session(session, "s4")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[9], "Coffee")  # Primary Action
+            self.assertEqual(row[10], 60)  # Primary Percentage
+            self.assertEqual(row[11], 3.0)  # Primary Duration: 180s / 60
+            self.assertEqual(row[12], "Main break")  # Primary Comment
+            self.assertEqual(row[13], "Walk")  # Secondary Action
+            self.assertEqual(row[14], 40)  # Secondary Percentage
+            self.assertEqual(row[15], 2.0)  # Secondary Duration: 120s / 60
+            self.assertEqual(row[16], "Short walk")  # Secondary Comment
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    # ── Idle tests ─────────────────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_idle_single_action_in_primary_action_col(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Idle single action: Primary Action col populated, percentage=100"""
+        try:
+            uploader, mock_service = self._make_uploader("idl1")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["idle_periods"] = [
+                {
+                    "start": "10:25:00",
+                    "end": "10:28:00",
+                    "duration": 180,
+                    "action": "Distracted",
+                    "comment": "Phone",
+                }
+            ]
+            uploader.upload_session(session, "s6")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[9], "Distracted")  # Primary Action
+            self.assertEqual(row[10], 100)  # Primary Percentage (single = 100)
+            self.assertEqual(row[11], 3.0)  # Primary Duration: 180s / 60
+            self.assertEqual(row[12], "Phone")  # Primary Comment
+            self.assertEqual(row[13], "")  # Secondary Action (empty)
+            self.assertEqual(row[14], "")  # Secondary Percentage (empty)
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_idle_multi_action_percentage_and_duration(
+        self, mock_exists, mock_build, mock_error
+    ):
+        """Idle multi-action: percentage and duration for primary and secondary"""
+        try:
+            uploader, mock_service = self._make_uploader("idl2")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["idle_periods"] = [
+                {
+                    "start": "10:25:00",
+                    "end": "10:28:00",
+                    "duration": 180,
+                    "actions": [
+                        {
+                            "name": "Distracted",
+                            "idle_primary": True,
+                            "comment": "Phone distraction",
+                            "percentage": 60,
+                            "duration": 108,
+                        },
+                        {
+                            "name": "Unfocused",
+                            "idle_primary": False,
+                            "comment": "Mind wandered",
+                            "percentage": 40,
+                            "duration": 72,
+                        },
+                    ],
+                }
+            ]
+            uploader.upload_session(session, "s7")
+            row = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"][0]
+            )
+            self.assertEqual(row[9], "Distracted")  # Primary Action
+            self.assertEqual(row[10], 60)  # Primary Percentage
+            self.assertEqual(row[11], 1.8)  # Primary Duration: 108s / 60
+            self.assertEqual(row[12], "Phone distraction")  # Primary Comment
+            self.assertEqual(row[13], "Unfocused")  # Secondary Action
+            self.assertEqual(row[14], 40)  # Secondary Percentage
+            self.assertEqual(row[15], 1.2)  # Secondary Duration: 72s / 60
+            self.assertEqual(row[16], "Mind wandered")  # Secondary Comment
+        except ImportError:
+            self.skipTest("Google Sheets dependencies not installed")
+
+    # ── Column count ───────────────────────────────────────────────────────
+
+    @patch("src.google_sheets_integration.messagebox.showerror")
+    @patch("src.google_sheets_integration.build")
+    @patch("src.google_sheets_integration.os.path.exists")
+    def test_each_row_has_exactly_23_columns(self, mock_exists, mock_build, mock_error):
+        """Every uploaded row must have exactly 23 columns"""
+        try:
+            uploader, mock_service = self._make_uploader("cnt")
+            if uploader is None:
+                self.skipTest("Google Sheets dependencies not installed")
+            session = self._base_session()
+            session["active"] = [
+                {
+                    "start": "10:00:00",
+                    "end": "10:25:00",
+                    "duration": 1500,
+                    "project": "P",
+                    "comment": "",
+                }
+            ]
+            session["breaks"] = [
+                {"start": "10:25:00", "duration": 300, "action": "Break", "comment": ""}
+            ]
+            session["idle_periods"] = [
+                {"start": "10:28:00", "end": "10:30:00", "duration": 120}
+            ]
+            uploader.upload_session(session, "s5")
+            rows = (
+                mock_service.spreadsheets()
+                .values()
+                .append.call_args[1]["body"]["values"]
+            )
+            self.assertEqual(len(rows), 3)
+            for i, row in enumerate(rows):
+                self.assertEqual(
+                    len(row),
+                    23,
+                    f"Row {i} ({row[8]}) has {len(row)} columns, expected 23",
+                )
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
