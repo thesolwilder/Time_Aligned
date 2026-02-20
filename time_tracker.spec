@@ -45,8 +45,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        # Exclude test infrastructure from bundle
-        "unittest",
+        # Note: unittest must NOT be excluded — googleapiclient.discovery imports it at runtime
         "pytest",
         "coverage",
     ],
