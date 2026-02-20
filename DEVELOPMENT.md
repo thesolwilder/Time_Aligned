@@ -2,11 +2,11 @@
 
 **⚠️ CRITICAL: AI AGENTS MUST FOLLOW THESE DIRECTIVES**
 
-## 🧠 AGENT MEMORY SYSTEM
+## 🧠 DECISION LOG
 
 ### ⚠️ DIRECTIVE 1: READ BEFORE ANY ACTION
 
-**BEFORE making ANY code changes**, you MUST read [AGENT_MEMORY.md](AGENT_MEMORY.md) to:
+**BEFORE making ANY code changes**, you MUST read [DECISION_LOG.md](DECISION_LOG.md) to:
 
 - Review what approaches have been tried before
 - Understand what worked and what didn't work
@@ -17,7 +17,7 @@
 
 When working on a specific task (bug fix, feature, or test), you MUST:
 
-1. **Search AGENT_MEMORY.md for keywords related to your task**
+1. **Search DECISION_LOG.md for keywords related to your task**
    - Module names (e.g., "analysis_frame", "timeline", "backup")
    - Technology/library names (e.g., "tkinter", "pandas", "CSV")
    - Error patterns (e.g., "geometry manager", "headless", "width")
@@ -37,11 +37,11 @@ When working on a specific task (bug fix, feature, or test), you MUST:
    - **UI components**: Search specific widgets, "frame", "canvas", "label"
    - **Data processing**: Search "filtering", "sorting", "aggregation"
 
-**Why this matters**: AGENT_MEMORY.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
+**Why this matters**: DECISION_LOG.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
 
 ### ⚠️ DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
 
-**AFTER completing ANY code changes**, you MUST update [AGENT_MEMORY.md](AGENT_MEMORY.md) with:
+**AFTER completing ANY code changes**, you MUST update [DECISION_LOG.md](DECISION_LOG.md) with:
 
 - Everything you tried (all approaches, not just the final one)
 - Whether each approach worked or failed

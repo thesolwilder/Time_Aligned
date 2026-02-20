@@ -45,40 +45,42 @@ python tests/run_all_tests.py --help
 4. **test_analysis.py** - Analysis filtering and aggregation
 5. **test_analysis_calculations.py** - Duration calculation accuracy
 6. **test_analysis_card_filters.py** - Filter card behaviour
-7. **test_analysis_navigation_bug.py** - Navigation regression tests
-8. **test_analysis_performance.py** - Performance benchmarks
-9. **test_analysis_pie_chart.py** - Pie chart data accuracy
-10. **test_analysis_priority.py** - Priority sort logic
-11. **test_analysis_timeline.py** - Timeline rendering
-12. **test_analysis_load_more.py** - Paginated loading
-13. **test_screenshots.py** - Screenshot timing and capture
-14. **test_settings.py** - Settings persistence and defaults
-15. **test_settings_frame.py** - Settings UI behaviour
-16. **test_idle_tracking.py** - Idle detection and period recording
-17. **test_active_after_idle.py** - State transitions after idle
-18. **test_breaks.py** - Break period tracking
-19. **test_button_navigation.py** - UI navigation
-20. **test_completion_frame.py** - Session completion interface
-21. **test_completion_frame_comprehensive.py** - Full completion frame coverage
-22. **test_completion_frame_rename_bug.py** - Rename regression test
-23. **test_completion_dropdowns.py** - Dropdown population and selection
-24. **test_completion_comments_populate.py** - Comment field population
-25. **test_completion_priority.py** - Priority field in completion
-26. **test_completion_skip_bug.py** - Skip behaviour regression
-27. **test_csv_export.py** - CSV export correctness
-28. **test_csv_export_integration.py** - CSV export integration
-29. **test_csv_export_imports.py** - CSV import handling
-30. **test_sanitization.py** - Input sanitization and security
-31. **test_ui_helpers.py** - UI utility functions and security helpers
-32. **test_google_sheets.py** - Google Sheets integration and validation
-33. **test_data_integrity.py** - Data structure validation
-34. **test_error_handling.py** - Error and edge case handling
-35. **test_navigation.py** - Frame navigation
-36. **test_secondary_project_bug.py** - Secondary project regression
-37. **test_inactive_project_completion.py** - Archived project handling
-38. **test_interleaved_periods_secondary_dropdown.py** - Secondary dropdown in interleaved periods
-39. **test_spreadsheet_url_extraction.py** - Spreadsheet ID extraction
-40. **test_inactive_project_completion.py** - Inactive project edge cases
+7. **test_analysis_card_status_filter.py** - Active/archived status filter on summary cards
+8. **test_analysis_csv_percentage.py** - CSV export percentage fields for multi-project/action periods
+9. **test_analysis_navigation_bug.py** - Navigation regression tests
+10. **test_analysis_performance.py** - Performance benchmarks
+11. **test_analysis_pie_chart.py** - Pie chart data accuracy
+12. **test_analysis_priority.py** - Priority sort logic
+13. **test_analysis_timeline.py** - Timeline rendering
+14. **test_analysis_load_more.py** - Paginated loading
+15. **test_screenshots.py** - Screenshot timing and capture
+16. **test_settings.py** - Settings persistence and defaults
+17. **test_settings_frame.py** - Settings UI behaviour
+18. **test_idle_tracking.py** - Idle detection and period recording
+19. **test_active_after_idle.py** - State transitions after idle
+20. **test_breaks.py** - Break period tracking
+21. **test_button_navigation.py** - UI navigation
+22. **test_completion_frame.py** - Session completion interface
+23. **test_completion_frame_comprehensive.py** - Full completion frame coverage
+24. **test_completion_frame_rename_bug.py** - Rename regression test
+25. **test_completion_dropdowns.py** - Dropdown population and selection
+26. **test_completion_comments_populate.py** - Comment field population
+27. **test_completion_priority.py** - Priority field in completion
+28. **test_completion_skip_bug.py** - Skip behaviour regression
+29. **test_csv_export.py** - CSV export correctness
+30. **test_csv_export_integration.py** - CSV export integration
+31. **test_csv_export_imports.py** - CSV import handling
+32. **test_sanitization.py** - Input sanitization and security
+33. **test_ui_helpers.py** - UI utility functions and security helpers
+34. **test_google_sheets.py** - Google Sheets integration and validation
+35. **test_data_integrity.py** - Data structure validation
+36. **test_error_handling.py** - Error and edge case handling
+37. **test_navigation.py** - Frame navigation
+38. **test_add_project_duplicate_bug.py** - Duplicate project name conflict regression
+39. **test_secondary_project_bug.py** - Secondary project regression
+40. **test_inactive_project_completion.py** - Archived project handling
+41. **test_interleaved_periods_secondary_dropdown.py** - Secondary dropdown in interleaved periods
+42. **test_spreadsheet_url_extraction.py** - Spreadsheet ID extraction
 
 ## Data Accuracy Priorities
 

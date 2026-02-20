@@ -216,6 +216,9 @@ tests/                           # Full test suite
 Contributions are welcome! Please see:
 
 - **[DEVELOPMENT.md](DEVELOPMENT.md)** - Development standards and testing procedures
+- **[.github/COPILOT_INSTRUCTIONS.md](.github/COPILOT_INSTRUCTIONS.md)** - AI-assisted development workflow
+
+This project uses a **documented AI-assisted development workflow**. The `.github/COPILOT_INSTRUCTIONS.md` file defines standing orders for AI coding agents — covering TDD requirements, forbidden patterns, and code quality standards — so that any contributor (human or AI) works consistently within the same conventions. `DECISION_LOG.md` serves as a decision log, recording what approaches were tried, what worked, and why, similar to Architecture Decision Records (ADRs).
 
 This project follows **Test-Driven Development (TDD)**:
 
