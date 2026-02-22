@@ -12,7 +12,9 @@ A comprehensive time tracking desktop application built with Python — featurin
 2. Extract anywhere — e.g. `C:\Program Files\TimeAligned`
 3. Run `TimeAligned.exe` — no installer, fully portable
 
-> Windows may show a SmartScreen warning on first run (unsigned exe). Click **More info → Run anyway**.
+> **Chrome blocks the download?** Click the downloads arrow → flag icon → **Keep anyway**  
+> **Windows SmartScreen warning?** Click **More info → Run anyway**  
+> The exe is unsigned but safe — verify at [VirusTotal](https://www.virustotal.com) if unsure.
 
 ---
 
