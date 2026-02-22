@@ -74,6 +74,9 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon="assets/icon.ico",
+    # Embeds Windows version info (ProductName = "Time Aligned", FileDescription, etc.)
+    # Visible in Task Manager → Details and File → Properties → Details.
+    version="version_info.txt",
 )
 
 # COLLECT produces the --onedir output folder: dist/TimeAligned/
