@@ -1,8 +1,20 @@
 # Time Aligned - Time Tracker
 
-![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python) ![tkinter](https://img.shields.io/badge/GUI-tkinter-informational) ![Google Sheets](https://img.shields.io/badge/Integration-Google%20Sheets-34A853?logo=google-sheets) ![pytest](https://img.shields.io/badge/Tests-pytest%2083%25%20coverage-brightgreen?logo=pytest) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey)
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python) ![tkinter](https://img.shields.io/badge/GUI-tkinter-informational) ![Google Sheets](https://img.shields.io/badge/Integration-Google%20Sheets-34A853?logo=google-sheets) ![pytest](https://img.shields.io/badge/Tests-pytest%2083%25%20coverage-brightgreen?logo=pytest) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey) [![Download](https://img.shields.io/github/v/release/thesolwilder/Time_Aligned-?label=Download&logo=github)](https://github.com/thesolwilder/Time_Aligned-/releases/latest)
 
 A comprehensive time tracking desktop application built with Python — featuring session tracking, idle detection, Google Sheets integration, screenshot capture, and a full analysis suite.
+
+## ⬇️ Download
+
+**[→ Download the latest release](https://github.com/thesolwilder/Time_Aligned-/releases/latest)**
+
+1. Download `TimeAligned-vX.Y.Z.zip`
+2. Extract anywhere — e.g. `C:\Program Files\TimeAligned`
+3. Run `TimeAligned.exe` — no installer, fully portable
+
+> Windows may show a SmartScreen warning on first run (unsigned exe). Click **More info → Run anyway**.
+
+---
 
 | Home                                    | Active Session                                               |
 | --------------------------------------- | ------------------------------------------------------------ |
