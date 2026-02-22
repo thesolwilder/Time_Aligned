@@ -5,6 +5,36 @@ from tkinter import ttk
 import re
 
 
+def get_taskbar_color():
+    """
+    Detect the Windows OS taskbar background colour.
+
+    Reads the SystemUsesLightTheme registry value to choose between a
+    light and dark taskbar colour.  Falls back to a fully-transparent
+    RGBA tuple when the registry key is unavailable (non-Windows, or
+    permission error) so the icon still blends naturally.
+
+    Returns:
+        tuple: RGBA colour tuple (R, G, B, A).  Transparent (0, 0, 0, 0)
+               is returned on failure so PIL can composite correctly.
+    """
+    try:
+        import winreg
+
+        key = winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+        )
+        use_light_theme = winreg.QueryValueEx(key, "SystemUsesLightTheme")[0]
+        winreg.CloseKey(key)
+        if use_light_theme:
+            return (242, 242, 242, 255)  # Light Windows taskbar
+        else:
+            return (32, 32, 32, 255)  # Dark Windows taskbar
+    except Exception:
+        return (0, 0, 0, 0)  # Transparent fallback for non-Windows / errors
+
+
 def get_frame_background():
     """
     Get the background color for ttk frames based on current theme.

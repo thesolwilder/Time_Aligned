@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 import pystray
 from pynput import mouse, keyboard
 
-from src.ui_helpers import ScrollableFrame, get_frame_background
+from src.ui_helpers import ScrollableFrame, get_frame_background, get_taskbar_color
 from src.completion_frame import CompletionFrame
 from src.settings_frame import SettingsFrame
 from src.analysis_frame import AnalysisFrame
@@ -37,6 +37,7 @@ from src.constants import (
     TRAY_ICON_SIZE,
     TRAY_ICON_MARGIN,
     TRAY_ICON_OUTLINE_WIDTH,
+    TRAY_ICON_BG_COLOR,
     FONT_LINK,
     FONT_SMALL,
     FONT_NORMAL,
@@ -1586,13 +1587,19 @@ class TimeTracker:
                   Defaults to "idle" if unrecognized state
 
         Returns:
-            PIL Image object (64x64 RGB) with colored circle on white background
+            PIL Image object (64x64 RGBA) with colored circle on transparent/
+            taskbar-matched background.
 
         Note:
             Circle drawn with 8px margin, 2px black outline for visibility.
+            RGBA mode lets the OS taskbar colour show through so no white
+            square appears behind the icon.
             Image format compatible with pystray.Icon.
         """
-        image = Image.new("RGB", (TRAY_ICON_SIZE, TRAY_ICON_SIZE), "white")
+        # Use RGBA with the detected OS taskbar colour so the icon
+        # blends in rather than showing a white square.
+        bg = get_taskbar_color() or TRAY_ICON_BG_COLOR
+        image = Image.new("RGBA", (TRAY_ICON_SIZE, TRAY_ICON_SIZE), bg)
         dc = ImageDraw.Draw(image)
 
         colors = {

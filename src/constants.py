@@ -92,6 +92,12 @@ MOUSEWHEEL_DELTA_DIVISOR = 120  # Windows standard for mouse wheel delta
 TRAY_ICON_SIZE = 64  # Icon size in pixels
 TRAY_ICON_MARGIN = 8  # Margin around circle
 TRAY_ICON_OUTLINE_WIDTH = 2  # Circle outline thickness
+TRAY_ICON_BG_COLOR = (
+    0,
+    0,
+    0,
+    0,
+)  # Transparent RGBA background — blends with OS taskbar
 
 # Pie chart dimensions (analysis frame cards)
 PIE_CHART_SIZE = 160  # Canvas width and height in pixels
