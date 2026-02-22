@@ -212,6 +212,7 @@ tests/                           # Full test suite
 
 ## Documentation
 
+- [About / Release Notes](docs/ABOUT.md) - What Time Aligned is and what's included
 - [Google Sheets Setup Guide](docs/GOOGLE_SHEETS_SETUP.md) - Complete setup instructions
 - [Screenshot Feature Guide](docs/SCREENSHOT_FEATURE.md) - Screenshot feature details
 - [System Tray Guide](docs/SYSTEM_TRAY_GUIDE.md) - Using the system tray icon
