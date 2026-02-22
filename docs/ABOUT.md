@@ -51,8 +51,31 @@ All data is stored locally. Google Sheets upload is opt-in. No account required.
 3. Run **TimeAligned.exe**
 4. No installer needed — fully portable
 
-> **Note:** Windows may show a SmartScreen warning on first run because the exe is unsigned.  
-> Click **More info → Run anyway**.
+---
+
+### ⚠️ Chrome Download Warning
+
+Chrome's Enhanced Safe Browsing blocks unsigned executables and may cancel the download entirely. To fix this temporarily:
+
+1. In Chrome, go to `chrome://settings/security` in the address bar
+2. Under **Safe Browsing**, select **Standard protection**
+3. Go back to the release page and download again
+4. When Chrome warns you, click the **downloads arrow** → **flag icon** → **Keep anyway**
+5. After downloading, you can switch back to **Enhanced protection** in the same settings page
+
+> **Alternatively**, use **Microsoft Edge** — it handles GitHub release zips without blocking the download.
+
+---
+
+### ⚠️ Windows SmartScreen Warning
+
+On first run Windows may show _"Windows protected your PC"_:
+
+1. Click **More info**
+2. Click **Run anyway**
+
+This appears because the exe is not yet code-signed. The app contains no malware —
+you can verify by scanning the zip at [VirusTotal](https://www.virustotal.com) before running.
 
 ---
 
@@ -65,12 +88,12 @@ All data is stored locally. Google Sheets upload is opt-in. No account required.
 
 ## 📖 Documentation
 
-| Guide | Description |
-|---|---|
+| Guide                                         | Description                                   |
+| --------------------------------------------- | --------------------------------------------- |
 | [Google Sheets Setup](GOOGLE_SHEETS_SETUP.md) | Connect to Google Sheets for automatic upload |
-| [Screenshot Feature](SCREENSHOT_FEATURE.md) | Configure and use screenshot capture |
-| [System Tray Guide](SYSTEM_TRAY_GUIDE.md) | Use the app headlessly from the system tray |
-| [Testing Guide](TESTING_GUIDE.md) | Run the test suite (developers) |
+| [Screenshot Feature](SCREENSHOT_FEATURE.md)   | Configure and use screenshot capture          |
+| [System Tray Guide](SYSTEM_TRAY_GUIDE.md)     | Use the app headlessly from the system tray   |
+| [Testing Guide](TESTING_GUIDE.md)             | Run the test suite (developers)               |
 
 ---
 
