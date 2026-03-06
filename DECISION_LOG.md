@@ -14282,3 +14282,74 @@ Updated `upload_session()` in `src/google_sheets_integration.py` to match the pa
 - Duration for multi-project: reads from `project_item.get("duration", 0)` if item has no duration stored, result is 0.0 min (test data without stored durations shows 0.0)
 
 **Branch**: `percentage`
+
+---
+
+### [2026-03-05] - Bug Fix: Duplicate Active Period / Negative Active Time When Idle Converts to Break (COMPLETED ✅)
+
+**Search Keywords**: idle to break, auto-break, session_idle, check_idle, on_activity, duplicate active period, negative active time, idle equals break duration, end_session break, toggle_break idle, session_idle flag, break_active guard
+
+**Bug**: Start session → go idle → idle converts to break → press E (end session) produced:
+1. Two identical active periods in completion frame timeline instead of one
+2. Idle period with same time range as break (confusing/wrong)
+3. Active Time header showing negative number (e.g. `-01:56:29`)
+
+**Root Cause**:
+`session_idle` flag was never reset when `check_idle()` auto-converted idle to break via `toggle_break()`. This left `session_idle = True` while `break_active = True`. When the user pressed any key (including E to end session), the pynput `on_activity` callback fired and saw `session_idle = True`, executing the full idle recovery path:
+- Closed the idle period with `end_timestamp = now` (= session end time) → **idle duration = same as break duration**
+- Saved a second copy of the pre-idle active period (T0→T1) → **duplicate active period**
+- Updated `active_period_start_time = now`
+
+Then in `end_session()`: `total_idle = break_duration`, `active_time = active_duration - total_idle = 1:07 - 4:38 = -3:31` → displayed as `-01:56:29` due to Python floor division on negative numbers in `format_time()`.
+
+**Two-part fix** (`time_tracker.py`):
+
+**Fix 1** — `check_idle()` auto-break branch: reset `session_idle = False` and remove the open idle period before calling `toggle_break()`.
+
+```python
+# Before (bug):
+self.auto_break_start_time_from_idle = self.idle_start_time
+self.toggle_break()
+
+# After (fix):
+self.auto_break_start_time_from_idle = self.idle_start_time
+self.session_idle = False   # prevent on_activity from re-processing idle
+# Remove open idle period (break starts at idle detection time → idle duration = 0)
+all_data = self.load_data()
+if self.session_name in all_data:
+    idle_periods = all_data[self.session_name].get("idle_periods", [])
+    if idle_periods and "end" not in idle_periods[-1]:
+        idle_periods.pop()
+        self.save_data(all_data)
+self.toggle_break()
+```
+
+**Fix 2** — `on_activity` callback: guard with `not self.break_active` as belt-and-suspenders.
+
+```python
+# Before:
+if self.session_idle:
+
+# After:
+if self.session_idle and not self.break_active:
+```
+
+**Result**: 1 active period, 1 break period, 0 idle periods. Active time non-negative.
+
+**What Worked** ✅:
+1. Read COPILOT_INSTRUCTIONS.md (shortcut 'b' = Bug Fix Workflow) and DEVELOPMENT.md directives
+2. Traced exact code path: check_idle → toggle_break (start) → on_activity (keypress) → duplicate save
+3. Identified that `session_idle` was never cleared in the idle→break path
+4. TDD: wrote 4 failing tests first (all proper FAIL not ERROR)
+5. Fixed root cause in `check_idle()` + added defensive guard in `on_activity`
+6. All 4 new tests pass; all related test files pass (test_idle_tracking, test_active_after_idle, test_breaks, test_data_integrity, test_time_tracking)
+
+**What Did NOT Work** ❌:
+- First test run: tests failed because `tracker.settings` was loaded at init time from default settings file, not test file. Fix: add `tracker.settings = tracker.get_settings()` after setting `tracker.settings_file` in test helper.
+
+**Key Learnings**:
+- `self.settings` is cached at `__init__` time; tests must call `tracker.settings = tracker.get_settings()` after setting `tracker.settings_file` or idle thresholds won't apply
+- `on_activity` (pynput callback) fires on ANY keypress including keyboard shortcuts like E (end session) — must guard all state-dependent branches against `break_active`
+- Python floor division on negative seconds: `format_time(-211)` = `"-01:56:29"` (hours = `int(-211 // 3600)` = -1, minutes = `int(-211 % 3600 // 60)` = 56, secs = `int(-211 % 60)` = 29)
+- When idle auto-converts to break, removing the open idle period is correct: break starts at `idle_start_time` so the idle duration would be 0 — suppressing it keeps the timeline clean
+- Test file: `tests/test_idle_to_break_bug.py` (4 tests)

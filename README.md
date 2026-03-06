@@ -1,6 +1,6 @@
 # Time Aligned - Time Tracker
 
-![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python) ![tkinter](https://img.shields.io/badge/GUI-tkinter-informational) ![Google Sheets](https://img.shields.io/badge/Integration-Google%20Sheets-34A853?logo=google-sheets) ![pytest](https://img.shields.io/badge/Tests-pytest%2083%25%20coverage-brightgreen?logo=pytest) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey) [![Download](https://img.shields.io/github/v/release/thesolwilder/Time_Aligned-?label=Download&logo=github)](https://github.com/thesolwilder/Time_Aligned-/releases/latest) ![Downloads](https://img.shields.io/github/downloads/thesolwilder/Time_Aligned-/total?label=Downloads)
+![Python](https://img.shields.io/badge/Python-3.7%2B-blue?logo=python) ![tkinter](https://img.shields.io/badge/GUI-tkinter-informational) ![Google Sheets](https://img.shields.io/badge/Integration-Google%20Sheets-34A853?logo=google-sheets) ![pytest](https://img.shields.io/badge/Tests-pytest%2084%25%20coverage-brightgreen?logo=pytest) ![License](https://img.shields.io/badge/License-CC%20BY--NC%204.0-lightgrey) [![Download](https://img.shields.io/github/v/release/thesolwilder/Time_Aligned-?label=Download&logo=github)](https://github.com/thesolwilder/Time_Aligned-/releases/latest) ![Downloads](https://img.shields.io/github/downloads/thesolwilder/Time_Aligned-/total?label=Downloads&cacheSeconds=300)
 
 A comprehensive time tracking desktop application built with Python — featuring session tracking, idle detection, Google Sheets integration, screenshot capture, and a full analysis suite.
 
@@ -240,7 +240,7 @@ This project follows **Test-Driven Development (TDD)**:
 
 1. Import test → 2. Unit tests → 3. Integration tests → 4. E2E tests
 
-The test suite has **83% code coverage** across the core application. All contributions must include appropriate tests. See DEVELOPMENT.md for details.
+The test suite has **84% code coverage** across the core application. All contributions must include appropriate tests. See DEVELOPMENT.md for details.
 
 ## License
 

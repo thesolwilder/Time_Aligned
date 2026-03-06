@@ -508,7 +508,7 @@ class TimeTracker:
         def on_activity(*args):
             try:
                 self.last_user_input = time.time()
-                if self.session_idle:
+                if self.session_idle and not self.break_active:
                     self.session_idle = False
                     self.status_label.config(text="Active")
                     # Save idle period end
@@ -1147,8 +1147,19 @@ class TimeTracker:
             and idle_time >= self.settings["idle_settings"]["idle_break_threshold"]
         ):
             if not self.break_active:
-                # stat of break should be idle start time
+                # Break start time should be idle start time
                 self.auto_break_start_time_from_idle = self.idle_start_time
+                # Reset idle state: the break subsumes the idle period.
+                # Prevents on_activity from re-running idle recovery on next keypress.
+                self.session_idle = False
+                # Remove the open idle period — break starts at idle detection time
+                # so the idle duration would be 0; suppress it to keep timeline clean.
+                all_data = self.load_data()
+                if self.session_name in all_data:
+                    idle_periods = all_data[self.session_name].get("idle_periods", [])
+                    if idle_periods and "end" not in idle_periods[-1]:
+                        idle_periods.pop()
+                        self.save_data(all_data)
                 self.toggle_break()
 
     def update_timers(self):
