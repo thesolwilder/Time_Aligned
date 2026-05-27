@@ -26,7 +26,43 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
-### [2026-02-20] - Feature: PyInstaller --onedir Packaging Setup
+### [2026-05-27] - Bugfix: Crash-corrupted data.json (zeroed file) + atomic-write fix
+
+**Search Keywords**: data loss, corruption, null bytes, zeroed file, crash, atomic write, save_data, fsync, os.replace, tempfile, backup, recovery, data.json
+
+**What happened**: Computer crashed mid-session. On reboot, `c:\Users\theso\Documents\TimeAligned\data.json` came back as 243,453 bytes of pure null bytes (`0x00`). Classic hard-crash corruption: NTFS journaled the new file *size* but the data pages were never flushed to disk, so the file was zeroed.
+
+**Root cause**: `save_data()` in `time_tracker.py` did a non-atomic `open(self.data_file, "w")`, which truncates the file to zero *first*, then writes. The auto-save loop runs this once per minute during an active session (`backup_frequency = 60000ms / 100ms = 600 loops`, see `time_tracker.py:87-89`, invoked at `time_tracker.py:1224-1244`). The crash landed inside one of those write windows → whole file lost.
+
+**Fix applied** ✅ (in source only — NOT yet in the built `TimeAligned.exe`):
+
+- `time_tracker.py` `save_data()` now does an **atomic write**: write to a temp file in the same directory via `tempfile.mkstemp`, `f.flush()` + `os.fsync(f.fileno())`, then `os.replace(tmp, data_file)`. On failure the temp file is cleaned up. A crash mid-save now leaves the previous `data.json` fully intact (worst case: lose the last ~1 min).
+- Added `import tempfile` (`time_tracker.py:5`).
+
+**Data recovery** ✅:
+
+- Live `data.json` was unrecoverable (all zeros). Preserved it as `data.json.corrupted` in the TimeAligned folder (not deleted).
+- Restored 6 sessions by merging the two surviving pre-deletion backups (`backups\data.json.backup_20260525_160728` = 1 unique session, `backups\data.json.backup_20260526_180133` = 5 sessions). Newest recovered session: 2026-05-26 17:53.
+- **Permanently lost**: all sessions tracked after May 26 ~18:01 (i.e. all of May 27, the crash day). They only ever lived in the zeroed `data.json`; the once-a-minute auto-save overwrites `data.json` in place and does NOT write to `backups\`, so there was no snapshot.
+- Consolidated recovery copy saved at `c:\Users\theso\Documents\TimeAligned\recovered_data_20260527.json` so the restored data is preserved independently of the live file.
+
+**⚠️ TODO — double-check later (could not finish this session)**:
+
+1. **Verify the test suite still passes.** `test_backup.py` + `test_data_integrity.py` must be run **from the `tests/` directory** (they import sibling `test_helpers`; running from repo root gives `ModuleNotFoundError: No module named 'test_helpers'`). Result this session: **9 passed, 1 failed**. The 1 failure (`test_data_integrity.py::TestDurationCalculations::test_session_duration_matches_timestamps`) was an **environmental Tcl/Tkinter error** ("Tcl wasn't installed properly", `init.tcl` unreadable) — NOT caused by the save_data change. Confirm this is environment-only on a machine with working Tcl, and run the full suite (`tests/run_all_tests.py`).
+2. **Rebuild the exe.** The fix is source-only. The running app is the prebuilt `TimeAligned.exe` (dated May 25) and still has the old non-atomic save. Rebuild with `pyinstaller time_tracker.spec` to actually get the fix into the app you use.
+3. Consider adding a dedicated test that simulates a crash mid-`save_data` (e.g. raise inside the write) and asserts the previous `data.json` is still intact and parseable.
+
+**Potential follow-up: stronger backup strategy (NOT yet implemented — decision pending)**
+
+The atomic write fixes the crash-zeroing scenario, but the only real backups today are the pre-deletion snapshots (`completion_frame.py:2151-2154`). Those don't run unless you delete a session, which is exactly why May 27 had no snapshot. Options discussed for defense-in-depth (protects against app bugs writing bad data, disk corruption, accidental deletion — none of which atomic write covers):
+
+- **Option A — Per-completion + rotation**: snapshot `data.json` → `backups\` after each successful session completion; keep only the most recent ~15 auto-backups, prune older ones. Frequent restore points, folder stays small. Risk to handle: don't grow the `backups\` folder unbounded (it already has ~50 test-era files).
+- **Option B — Daily rotating snapshot**: one snapshot on the first save of each day, keep last ~14 days. Bounded by time, simplest, and *would have caught the May 27 loss*.
+- **Option C — Both**: per-completion restore points + a daily snapshot kept 14 days. Most thorough.
+
+Recommended starting point: Option B (or B+A). Whatever is chosen, add pruning so the folder is bounded, and snapshot *after* a successful save (so the snapshot contains good data).
+
+
 
 **Search Keywords**: packaging, pyinstaller, exe, dist, build, onedir, icon, iconbitmap, get_resource_path, ico, assets, spec file, distribution, installer
 

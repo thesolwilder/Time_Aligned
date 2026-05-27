@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import time
 import os
+import tempfile
 import json
 from datetime import datetime
 import sys
@@ -287,8 +288,24 @@ class TimeTracker:
                     return
                 all_data = session_data
 
-            with open(self.data_file, "w") as f:
-                json.dump(all_data, f, indent=2)
+            # Atomic write: write to a temp file in the same directory, flush
+            # to disk, then atomically replace the real file. A crash mid-write
+            # leaves the previous data.json fully intact instead of zeroing it.
+            data_dir = os.path.dirname(os.path.abspath(self.data_file))
+            fd, tmp_path = tempfile.mkstemp(
+                dir=data_dir, prefix=".data_", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w") as f:
+                    json.dump(all_data, f, indent=2)
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, self.data_file)
+            except Exception:
+                # Clean up the temp file so we don't leave debris behind
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                raise
         except Exception as error:
             messagebox.showerror(
                 "Save Error",

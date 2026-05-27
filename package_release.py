@@ -87,7 +87,7 @@ def main() -> None:
     print("\nStep 2 — Zipping dist/TimeAligned …")
     zip_path = zip_dist(DIST_DIR, args.version)
 
-    print(f"\n✓ Release package ready: {zip_path}\n")
+    print(f"\n[OK] Release package ready: {zip_path}\n")
 
 
 if __name__ == "__main__":
