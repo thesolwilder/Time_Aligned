@@ -939,92 +939,66 @@ class TestGoogleSheetsUploadFlow(unittest.TestCase):
         """Clean up test files"""
         self.file_manager.cleanup()
 
-    def test_upload_method_exists(self):
-        """Test that completion frame has upload method"""
+    def test_sync_method_exists(self):
+        """Test that the tracker has the Google Sheets sync method"""
         try:
-            from src.completion_frame import CompletionFrame
+            from time_tracker import TimeTracker
 
-            # Verify the upload method exists
-            self.assertTrue(hasattr(CompletionFrame, "_upload_to_google_sheets"))
+            self.assertTrue(hasattr(TimeTracker, "sync_google_sheets"))
         except ImportError as e:
-            self.skipTest(f"Completion frame not available: {e}")
+            self.skipTest(f"Time tracker not available: {e}")
 
     @patch("src.google_sheets_integration.GoogleSheetsUploader")
-    def test_upload_to_google_sheets_calls_uploader(self, mock_uploader_class):
-        """Test that _upload_to_google_sheets actually calls the uploader"""
+    def test_sync_google_sheets_calls_uploader(self, mock_uploader_class):
+        """Test that sync_google_sheets hands every session to the uploader"""
         try:
-            from src.completion_frame import CompletionFrame
+            from time_tracker import TimeTracker
 
-            # Create mock uploader instance
             mock_uploader = Mock()
-            mock_uploader.is_enabled.return_value = True
-            mock_uploader.upload_session.return_value = True
             mock_uploader_class.return_value = mock_uploader
 
-            # Create a mock completion frame instance with minimal setup
-            frame = Mock(spec=CompletionFrame)
-            frame.tracker = Mock()
-            frame.tracker.settings_file = "test_settings.json"
-            frame.session_name = "test_session_123"
+            # Create a mock tracker instance with minimal setup
+            tracker = Mock(spec=TimeTracker)
+            tracker.settings_file = "test_settings.json"
+            tracker.session_active = False
+            all_sessions = {"test_session_123": {"sphere": "Work"}}
+            tracker.load_data.return_value = all_sessions
+            tracker._data_folder.return_value = "data_folder"
 
-            # Create test session data
-            session_data = {
-                "sphere": "Work",
-                "project": "Testing",
-                "date": "2024-01-20",
-                "start_time": "10:00:00",
-                "end_time": "10:30:00",
-                "total_duration": 1800,
-            }
-
-            # Call the real method on our mock frame
-            CompletionFrame._upload_to_google_sheets(frame, session_data)
+            # Call the real method on our mock tracker
+            TimeTracker.sync_google_sheets(tracker)
 
             # Verify GoogleSheetsUploader was instantiated with correct settings file
             mock_uploader_class.assert_called_once_with("test_settings.json")
 
-            # Verify is_enabled was called
-            mock_uploader.is_enabled.assert_called_once()
-
-            # Verify upload_session was called with correct parameters
-            mock_uploader.upload_session.assert_called_once_with(
-                session_data, "test_session_123"
+            # Verify every session was handed over, with the upload log path
+            mock_uploader.sync_sessions.assert_called_once_with(
+                all_sessions,
+                os.path.join("data_folder", "sheets_upload_log.json"),
+                set(),
             )
 
         except ImportError as e:
-            self.skipTest(f"Completion frame not available: {e}")
+            self.skipTest(f"Time tracker not available: {e}")
 
-    @patch("src.google_sheets_integration.GoogleSheetsUploader")
-    def test_upload_skipped_when_disabled(self, mock_uploader_class):
-        """Test that upload is skipped when Google Sheets is disabled"""
-        try:
-            from src.completion_frame import CompletionFrame
+    def test_sync_skipped_when_disabled(self):
+        """Test that nothing is uploaded when Google Sheets is disabled"""
+        from src.google_sheets_integration import GoogleSheetsUploader
 
-            # Create mock uploader that is disabled
-            mock_uploader = Mock()
-            mock_uploader.is_enabled.return_value = False
-            mock_uploader_class.return_value = mock_uploader
+        settings = TestDataGenerator.create_settings_data()
+        settings["google_sheets"] = {"enabled": False}
+        settings_file = self.file_manager.create_test_file(
+            "test_sync_disabled_settings.json", settings
+        )
+        uploader = GoogleSheetsUploader(settings_file)
 
-            # Create a mock completion frame instance
-            frame = Mock(spec=CompletionFrame)
-            frame.tracker = Mock()
-            frame.tracker.settings_file = "test_settings.json"
-            frame.session_name = "test_session_123"
+        with patch.object(uploader, "upload_sessions") as mock_upload:
+            result = uploader.sync_sessions(
+                {"test_session_123": {"sphere": "Work"}}, "unused_log.json", set()
+            )
 
-            # Create test session data
-            session_data = {"sphere": "Work", "project": "Testing"}
-
-            # Call the real method on our mock frame
-            CompletionFrame._upload_to_google_sheets(frame, session_data)
-
-            # Verify is_enabled was called
-            mock_uploader.is_enabled.assert_called_once()
-
-            # Verify upload_session was NOT called since disabled
-            mock_uploader.upload_session.assert_not_called()
-
-        except ImportError as e:
-            self.skipTest(f"Completion frame not available: {e}")
+        self.assertEqual(result, 0)
+        mock_upload.assert_not_called()
 
     @patch("src.google_sheets_integration.build")
     @patch("src.google_sheets_integration.os.path.exists")
@@ -1503,8 +1477,14 @@ class TestGoogleSheetsUploadSession(unittest.TestCase):
         except ImportError:
             self.skipTest("Google Sheets dependencies not installed")
 
+    # Never reach real Google sign-in: a credentials.json in the working folder
+    # would open a browser login and hang the test run
+    @patch(
+        "src.google_sheets_integration.GoogleSheetsUploader.authenticate",
+        return_value=False,
+    )
     @patch("src.google_sheets_integration.messagebox.showerror")
-    def test_upload_session_data_format(self, mock_error):
+    def test_upload_session_data_format(self, mock_error, mock_authenticate):
         """Test that session data is formatted correctly for upload"""
         try:
             from src.google_sheets_integration import GoogleSheetsUploader
@@ -2265,11 +2245,18 @@ class TestGoogleSheetsRealAPIIntegration(unittest.TestCase):
 
     @patch("src.google_sheets_integration.messagebox.showerror")
     @unittest.skipUnless(
-        os.path.exists(
-            os.path.join(os.path.dirname(os.path.dirname(__file__)), "credentials.json")
-        )
-        or os.path.exists(os.path.join(os.path.dirname(__file__), "credentials.json")),
-        "Requires Google API credentials (credentials.json)",
+        # Opt-in: with an expired token this opens a browser sign-in and waits,
+        # which hangs an unattended test run. Set RUN_REAL_GOOGLE_API_TESTS=1.
+        os.environ.get("RUN_REAL_GOOGLE_API_TESTS") == "1"
+        and (
+            os.path.exists(
+                os.path.join(
+                    os.path.dirname(os.path.dirname(__file__)), "credentials.json"
+                )
+            )
+            or os.path.exists(os.path.join(os.path.dirname(__file__), "credentials.json"))
+        ),
+        "Real Google API test: set RUN_REAL_GOOGLE_API_TESTS=1 (needs credentials.json)",
     )
     def test_real_authentication(self, mock_error):
         """Integration test: Test real authentication flow"""

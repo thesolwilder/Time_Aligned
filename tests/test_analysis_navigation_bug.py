@@ -180,7 +180,7 @@ class TestAnalysisNavigationBug(unittest.TestCase):
             # Log performance for monitoring (but don't fail on it)
             # Individual run: ~3.5-4s, full suite: ~4-6s (due to tkinter state accumulation)
             # Primary goal is no freeze/crash, not strict performance timing
-            print(f"\n✅ Navigation test PASSED:")
+            print(f"\n[OK] Navigation test PASSED:")
             print(f"  - Elapsed time: {elapsed:.3f}s")
             print(f"  - Timeline widgets: {widget_count}")
             print(f"  - First instance ID: {first_instance_id}")
@@ -191,7 +191,7 @@ class TestAnalysisNavigationBug(unittest.TestCase):
 
             # Warn if performance degrades significantly (but don't fail test)
             if elapsed > 10.0:
-                print(f"  ⚠️ WARNING: Took {elapsed:.2f}s (slower than expected)")
+                print(f"  [!] WARNING: Took {elapsed:.2f}s (slower than expected)")
 
         except Exception as e:
             elapsed = time.time() - start_time

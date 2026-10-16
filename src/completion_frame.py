@@ -3,7 +3,6 @@ Completion Frame - Displayed when a session ends.
 Allows user to tag actions for active time, breaks, and idle periods.
 """
 
-import json
 import tkinter as tk
 from tkinter import ttk
 from datetime import datetime
@@ -14,6 +13,7 @@ import shutil
 import datetime as dt
 
 from src.ui_helpers import get_frame_background
+from src.file_safety import write_json_atomically
 
 from src.constants import (
     DEFAULT_BACKUP_FOLDER,
@@ -477,8 +477,9 @@ class CompletionFrame(ttk.Frame):
 
                 # Save to file
                 try:
-                    with open(self.tracker.settings_file, "w") as f:
-                        json.dump(self.tracker.settings, f, indent=2)
+                    write_json_atomically(
+                        self.tracker.settings_file, self.tracker.settings
+                    )
                 except Exception as error:
                     messagebox.showerror(
                         "Error", f"Failed to save sphere settings: {error}"
@@ -1397,8 +1398,9 @@ class CompletionFrame(ttk.Frame):
 
                 # Save to file
                 try:
-                    with open(self.tracker.settings_file, "w") as f:
-                        json.dump(self.tracker.settings, f, indent=2)
+                    write_json_atomically(
+                        self.tracker.settings_file, self.tracker.settings
+                    )
                 except Exception as error:
                     messagebox.showerror(
                         "Error", f"Failed to save project settings: {error}"
@@ -1544,8 +1546,9 @@ class CompletionFrame(ttk.Frame):
 
                 # Save to file
                 try:
-                    with open(self.tracker.settings_file, "w") as f:
-                        json.dump(self.tracker.settings, f, indent=2)
+                    write_json_atomically(
+                        self.tracker.settings_file, self.tracker.settings
+                    )
                 except Exception as error:
                     messagebox.showerror(
                         "Error", f"Failed to save break action settings: {error}"
@@ -2035,8 +2038,8 @@ class CompletionFrame(ttk.Frame):
         # Single save operation - minimizes I/O and reduces corruption risk
         self.tracker.save_data(all_data)
 
-        # Upload to Google Sheets if enabled
-        self._upload_to_google_sheets(session)
+        # Upload this session, and any earlier ones still pending, to Google Sheets
+        self.tracker.sync_google_sheets()
 
         # Check if we should navigate
         if not navigate:
@@ -2044,25 +2047,6 @@ class CompletionFrame(ttk.Frame):
 
         # Always navigate to main frame
         self.tracker.show_main_frame()
-
-    def _upload_to_google_sheets(self, session_data):
-        """
-        Upload session data to Google Sheets if enabled
-
-        Args:
-            session_data: The session data dictionary to upload
-        """
-        try:
-            from src.google_sheets_integration import GoogleSheetsUploader
-
-            uploader = GoogleSheetsUploader(self.tracker.settings_file)
-
-            if uploader.is_enabled():
-                uploader.upload_session(session_data, self.session_name)
-        except ImportError:
-            pass
-        except Exception:
-            pass
 
     def skip_and_close(self):
         """Return to main frame, applying defaults to any incomplete data
@@ -2118,6 +2102,9 @@ class CompletionFrame(ttk.Frame):
         # Save if any defaults were applied
         self.tracker.save_data(all_data)
 
+        # Skipped sessions are uploaded too, with the defaults applied above
+        self.tracker.sync_google_sheets()
+
         # Navigate to main frame
         self.tracker.show_main_frame()
 
@@ -2161,13 +2148,12 @@ class CompletionFrame(ttk.Frame):
 
                 del all_data[self.session_name]
 
-                # Write directly so an empty dict is saved correctly.
+                # Write directly (atomically) so an empty dict is saved correctly.
                 # save_data(merge=False) has a safety guard that skips writing
                 # when the dict is empty, which would leave the deleted session
                 # in data.json when it was the last one.
                 try:
-                    with open(self.tracker.data_file, "w") as f:
-                        json.dump(all_data, f, indent=2)
+                    write_json_atomically(self.tracker.data_file, all_data)
                 except Exception as e:
                     messagebox.showerror(
                         "Save Error",

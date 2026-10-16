@@ -29,6 +29,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
+from src.constants import IDLE_AUTO_BREAK_NEVER
 from tests.test_helpers import TestFileManager, TestDataGenerator
 
 
@@ -199,6 +200,78 @@ class TestIdleToBreakBug(unittest.TestCase):
             f"active_duration should be >= 0, got {active_duration}. "
             "Bug: idle duration incorrectly subtracted from active time in CompletionFrame.",
         )
+
+
+class TestAutoBreakNever(unittest.TestCase):
+    """Auto-break set to "Never" (stored as -1) must never start a break.
+
+    Bug: check_idle() compared idle_time >= -1, which is always true, so
+    "Never" behaved as "immediately": 60 s without input became a break
+    100 ms after idle was detected, and the open idle period was discarded.
+    """
+
+    def setUp(self):
+        """Set up a tracker whose settings say auto-break Never"""
+        self.file_manager = TestFileManager()
+
+        settings = TestDataGenerator.create_settings_data()
+        settings["idle_settings"]["idle_threshold"] = 1  # 1 second
+        settings["idle_settings"]["idle_break_threshold"] = IDLE_AUTO_BREAK_NEVER
+
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_auto_break_never_data.json", {}
+        )
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_auto_break_never_settings.json", settings
+        )
+
+        self.root = tk.Tk()
+        self.tracker = TimeTracker(self.root)
+        self.tracker.data_file = self.test_data_file
+        self.tracker.settings_file = self.test_settings_file
+        self.tracker.settings = self.tracker.get_settings()
+
+        # Put the tracker mid-session without start_session(), so no real
+        # pynput listeners run and mouse/keyboard use can't affect the test
+        now = time.time()
+        self.tracker.session_active = True
+        self.tracker.session_start_time = now
+        self.tracker.active_period_start_time = now
+        self.tracker.session_name = "never_session"
+        self.tracker.save_data(
+            {
+                "never_session": {
+                    "sphere": "Coding",
+                    "date": "2026-10-10",
+                    "start_time": "09:00:00",
+                    "start_timestamp": now,
+                    "breaks": [],
+                    "idle_periods": [],
+                }
+            }
+        )
+
+    def tearDown(self):
+        """Clean up after tests."""
+        from tests.test_helpers import safe_teardown_tk_root
+
+        self.tracker.session_active = False
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_never_keeps_idle_without_starting_break(self):
+        """Test that long idle stays idle and no break starts"""
+        self.tracker.last_user_input = time.time() - 3600  # idle for an hour
+
+        self.tracker.check_idle()  # detects idle
+        self.tracker.check_idle()  # would auto-break with the bug
+        self.tracker.check_idle()
+
+        self.assertFalse(self.tracker.break_active, "Never must not start a break")
+        self.assertTrue(self.tracker.session_idle, "Session should still be idle")
+        idle_periods = self.tracker.load_data()["never_session"]["idle_periods"]
+        self.assertEqual(len(idle_periods), 1, "The idle period must stay recorded")
+        self.assertNotIn("end", idle_periods[0], "The idle period must stay open")
 
 
 if __name__ == "__main__":

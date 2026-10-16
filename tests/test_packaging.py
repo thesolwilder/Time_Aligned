@@ -6,9 +6,12 @@ configured for PyInstaller --onedir distribution. These are structural
 tests — they validate the packaging setup, not runtime behaviour.
 """
 
+import fnmatch
 import os
 import sys
+import tempfile
 import unittest
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -30,6 +33,25 @@ class TestGitignore(unittest.TestCase):
     def test_build_folder_excluded(self):
         """build/ PyInstaller temp folder must not be committed."""
         self.assertIn("build/", self.gitignore_content)
+
+    def test_session_data_side_files_excluded(self):
+        """Temp files left by an interrupted save, and copies of an unreadable
+        data.json, hold session data and must not be committed."""
+        patterns = [
+            line.strip()
+            for line in self.gitignore_content.splitlines()
+            if line.strip() and not line.startswith("#")
+        ]
+        for name in [
+            ".data.json.o8r3usrd.tmp",
+            ".settings.json.im360yme.tmp",
+            "data.json.unreadable_20261008_142500",
+        ]:
+            with self.subTest(name=name):
+                self.assertTrue(
+                    any(fnmatch.fnmatch(name, pattern) for pattern in patterns),
+                    f"{name} is not matched by any .gitignore pattern",
+                )
 
 
 class TestAssetsDirectory(unittest.TestCase):
@@ -137,6 +159,47 @@ class TestResourcePathHelper(unittest.TestCase):
             os.path.isfile(icon_path),
             f"Icon not found at resolved path: {icon_path}",
         )
+
+
+class TestReleaseCleanup(unittest.TestCase):
+    """Verify package_release.py strips personal runtime files before zipping.
+
+    Running the built exe from dist/TimeAligned writes data and settings next
+    to it. Anything the cleanup misses ships inside the public release zip.
+    """
+
+    def setUp(self):
+        temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(temp_dir.cleanup)
+        self.dist_dir = Path(temp_dir.name) / "TimeAligned"
+        (self.dist_dir / "_internal").mkdir(parents=True)
+        (self.dist_dir / "TimeAligned.exe").write_bytes(b"exe")
+        (self.dist_dir / "_internal" / "python3.dll").write_bytes(b"dll")
+
+    def test_personal_runtime_files_are_removed(self):
+        """Session data, backups, settings and Google tokens must never ship."""
+        from package_release import clean_runtime_artifacts
+
+        runtime_files = [
+            "data.json",
+            "data.json.unreadable_20261008_142500",
+            ".data.json.o8r3usrd.tmp",  # left by a save interrupted by a crash
+            ".settings.json.im360yme.tmp",
+            "settings.json",
+            "credentials.json",
+            "token.pickle",
+            "sheets_upload_log.json",
+        ]
+        for name in runtime_files:
+            (self.dist_dir / name).write_text("{}")
+        for folder in ["backups", "screenshots"]:
+            (self.dist_dir / folder).mkdir()
+            (self.dist_dir / folder / "data.json.daily_20261008").write_text("{}")
+
+        clean_runtime_artifacts(self.dist_dir)
+
+        remaining = sorted(path.name for path in self.dist_dir.iterdir())
+        self.assertEqual(remaining, ["TimeAligned.exe", "_internal"])
 
 
 if __name__ == "__main__":

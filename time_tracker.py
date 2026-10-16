@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 import time
 import os
-import tempfile
 import json
 from datetime import datetime
 import sys
@@ -10,21 +9,35 @@ import threading
 from PIL import Image, ImageDraw
 import pystray
 from pynput import mouse, keyboard
+import win32api
+import win32event
+import winerror
 
 from src.ui_helpers import ScrollableFrame, get_frame_background, get_taskbar_color
 from src.completion_frame import CompletionFrame
 from src.settings_frame import SettingsFrame
 from src.analysis_frame import AnalysisFrame
 from src.screenshot_capture import ScreenshotCapture
+from src.file_safety import (
+    create_daily_backup,
+    preserve_unreadable_file,
+    write_json_atomically,
+)
 from src.constants import (
     UPDATE_TIMER_INTERVAL_MS,
     ONE_MINUTE_MS,
     DEFAULT_IDLE_THRESHOLD_SECONDS,
     DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS,
+    IDLE_AUTO_BREAK_NEVER,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
     DEFAULT_SETTINGS_FILE,
     DEFAULT_DATA_FILE,
+    DEFAULT_BACKUP_FOLDER,
+    DAILY_BACKUP_RETENTION_COUNT,
+    SHEETS_UPLOAD_LOG_FILE,
+    GOOGLE_SHEETS_STARTUP_SYNC_DELAY_MS,
+    SINGLE_INSTANCE_MUTEX_NAME,
     DEFAULT_SCREENSHOT_FOLDER,
     COLOR_LINK_BLUE,
     COLOR_GRAY_TEXT,
@@ -92,6 +105,8 @@ class TimeTracker:
         # File paths
         self.settings_file = DEFAULT_SETTINGS_FILE
         self.data_file = DEFAULT_DATA_FILE
+        self.daily_backup_error_shown = False  # Warn only once per run
+        self.sheets_warnings_shown = set()  # Google Sheets warnings shown this run
 
         # Load settings
         self.settings = self.get_settings()
@@ -154,11 +169,12 @@ class TimeTracker:
                 "Personal": {"sphere": "General", "is_default": False, "active": True},
             },
             "break_actions": {"Resting": {"is_default": True, "active": True}},
+            # Opt-in: global shortcuts fire in every program (see setup_global_hotkeys)
+            "keyboard_shortcuts": {"enabled": False},
         }
 
         if not os.path.exists(self.settings_file):
-            with open(self.settings_file, "w") as f:
-                json.dump(default_settings, f, indent=2)
+            write_json_atomically(self.settings_file, default_settings)
             return default_settings
 
         try:
@@ -274,13 +290,17 @@ class TimeTracker:
     def save_data(self, session_data, merge=True):
         """Save session data to file
 
+        The write is atomic (see src/file_safety.py): a crash or full disk
+        mid-save leaves the previous data.json intact. The first successful
+        save each day also writes a daily backup.
+
         Args:
             session_data: Data to save
             merge: If True, merge with existing data. If False, replace entirely.
         """
         try:
             if merge:
-                all_data = self.load_data()
+                all_data = self._load_data_for_merge()
                 all_data.update(session_data)
             else:
                 # Safety check: Don't save if replacement data is empty
@@ -288,31 +308,139 @@ class TimeTracker:
                     return
                 all_data = session_data
 
-            # Atomic write: write to a temp file in the same directory, flush
-            # to disk, then atomically replace the real file. A crash mid-write
-            # leaves the previous data.json fully intact instead of zeroing it.
-            data_dir = os.path.dirname(os.path.abspath(self.data_file))
-            fd, tmp_path = tempfile.mkstemp(
-                dir=data_dir, prefix=".data_", suffix=".tmp"
-            )
-            try:
-                with os.fdopen(fd, "w") as f:
-                    json.dump(all_data, f, indent=2)
-                    f.flush()
-                    os.fsync(f.fileno())
-                os.replace(tmp_path, self.data_file)
-            except Exception:
-                # Clean up the temp file so we don't leave debris behind
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                raise
+            write_json_atomically(self.data_file, all_data)
         except Exception as error:
             messagebox.showerror(
                 "Save Error",
                 f"Failed to save session data to {self.data_file}\n\n"
                 f"Error: {error}\n\n"
-                "Your session data may not be saved. Please check file permissions.",
+                "Your session data may not be saved. "
+                "Please check free disk space and file permissions.",
             )
+            return
+
+        self._create_daily_backup(all_data)
+
+    def _load_data_for_merge(self):
+        """Load saved sessions for a merge-save without risking the history.
+
+        load_data() returns {} for a file it cannot read, and merging into that
+        would replace every saved session with just the new one. So a data file
+        that exists but cannot be read is copied aside first, and the user is
+        told where. A 0-byte file has nothing to lose and is treated as new.
+
+        Returns:
+            dict: The saved sessions, or {} if there are none to keep.
+
+        Raises:
+            OSError: If the file can't be opened right now (e.g. locked by
+                antivirus or backup software) or an unreadable file can't be
+                copied aside; save_data then aborts without touching it.
+        """
+        if not os.path.exists(self.data_file) or os.path.getsize(self.data_file) == 0:
+            return {}
+
+        try:
+            with open(self.data_file, "r") as f:
+                return json.load(f)
+        except ValueError:
+            # The content is damaged (e.g. null bytes after a crash). A failure
+            # to open the file at all is not corruption and propagates instead.
+            preserved_path = preserve_unreadable_file(self.data_file)
+            messagebox.showwarning(
+                "Data File Could Not Be Read",
+                f"{os.path.abspath(self.data_file)} could not be read, so it was "
+                f"copied to:\n{os.path.abspath(preserved_path)}\n\n"
+                "New sessions will be saved to a fresh data file. Older sessions "
+                f"can be restored from the daily backups in:\n{self._backup_folder()}",
+            )
+            return {}
+
+    def _data_folder(self):
+        """Return the folder holding the data file"""
+        return os.path.dirname(os.path.abspath(self.data_file))
+
+    def _backup_folder(self):
+        """Return the backups folder that sits next to the data file"""
+        return os.path.join(self._data_folder(), DEFAULT_BACKUP_FOLDER)
+
+    def _create_daily_backup(self, all_data):
+        """Write today's backup of data.json after a successful save.
+
+        A failed backup never blocks saving: the user is warned once per run
+        and the backup is retried on the next save.
+        """
+        try:
+            create_daily_backup(
+                self.data_file,
+                all_data,
+                self._backup_folder(),
+                DAILY_BACKUP_RETENTION_COUNT,
+            )
+        except OSError as error:
+            if not self.daily_backup_error_shown:
+                self.daily_backup_error_shown = True
+                messagebox.showwarning(
+                    "Backup Warning",
+                    "Your session was saved, but today's backup could not be "
+                    f"written to {self._backup_folder()}.\n\nError: {error}",
+                )
+
+    def sync_google_sheets(self):
+        """Upload sessions that are missing from Google Sheets or changed since.
+
+        Runs after every Save or Skip on the completion screen and once at
+        startup, so a session whose upload failed (offline, app closed on the
+        completion screen) is retried automatically. Re-uploaded sessions
+        replace their rows in the sheet instead of duplicating them. The
+        session still being tracked is left out until it ends.
+        """
+        try:
+            from src.google_sheets_integration import GoogleSheetsUploader
+        except ImportError:
+            return  # Google API libraries not installed: uploads unavailable
+
+        try:
+            session_in_progress = (
+                {self.session_name} if self.session_active else set()
+            )
+            upload_log_file = os.path.join(self._data_folder(), SHEETS_UPLOAD_LOG_FILE)
+            uploader = GoogleSheetsUploader(self.settings_file)
+            uploader.sync_sessions(
+                self.load_data(), upload_log_file, session_in_progress
+            )
+        except Exception as error:
+            # The sessions are already saved; an upload problem must never
+            # block Save, Skip or startup. They stay due for the next sync.
+            self._warn_sheets_once(
+                "error",
+                f"Google Sheets upload failed: {error}\n\n"
+                "Your sessions are saved on this computer and will be "
+                "uploaded again next time.",
+            )
+            return
+
+        if uploader.sign_in_needed:
+            self._warn_sheets_once(
+                "sign_in",
+                "Google Sheets needs you to sign in again.\n\n"
+                "Your sessions are saved on this computer. To upload them, "
+                "open Settings > Google Sheets and click Test Connection.",
+            )
+        elif uploader.offline:
+            self._warn_sheets_once(
+                "offline",
+                "Google Sheets upload is waiting for an internet connection.\n\n"
+                "Your sessions are saved on this computer and will upload "
+                "automatically next time.",
+            )
+
+    def _warn_sheets_once(self, reason, message):
+        """Show a Google Sheets warning at most once per run for each reason"""
+        if reason in self.sheets_warnings_shown:
+            return
+        self.sheets_warnings_shown.add(reason)
+        messagebox.showwarning("Google Sheets", message)
 
     def create_widgets(self):
         """Create the main GUI elements for the time tracker interface.
@@ -1159,10 +1287,7 @@ class TimeTracker:
                 self.save_data(all_data)
 
         # Check if idle long enough for auto-break
-        elif (
-            self.session_idle
-            and idle_time >= self.settings["idle_settings"]["idle_break_threshold"]
-        ):
+        elif self.session_idle and self._auto_break_threshold_reached(idle_time):
             if not self.break_active:
                 # Break start time should be idle start time
                 self.auto_break_start_time_from_idle = self.idle_start_time
@@ -1178,6 +1303,16 @@ class TimeTracker:
                         idle_periods.pop()
                         self.save_data(all_data)
                 self.toggle_break()
+
+    def _auto_break_threshold_reached(self, idle_time):
+        """Return True once idle has lasted long enough to start an auto-break.
+
+        The "Never" setting is stored as IDLE_AUTO_BREAK_NEVER (-1); comparing
+        idle_time against it directly would always be true and start a break
+        right after idle is detected.
+        """
+        threshold = self.settings["idle_settings"]["idle_break_threshold"]
+        return threshold != IDLE_AUTO_BREAK_NEVER and idle_time >= threshold
 
     def update_timers(self):
         """Update timer displays and perform periodic background tasks.
@@ -1306,6 +1441,9 @@ class TimeTracker:
 
             # Update screenshot capture settings
             self.screenshot_capture.update_settings(self.settings)
+
+            # Start or stop global shortcuts if that setting changed
+            self.apply_hotkey_setting()
 
             # Show main frame again
             self.main_frame_container._is_alive = True  # Re-enable scrolling
@@ -1808,7 +1946,14 @@ class TimeTracker:
             All hotkey handlers use root.after(0, func) for thread-safe tkinter calls.
             Listener stopped in on_closing() via hotkey_listener.stop().
             Hotkeys are optional - app continues if registration fails.
+            Hotkeys are off unless Settings turns them on: they fire in every
+            program, and Ctrl+Shift+E / B / S / W are also everyday shortcuts
+            in VS Code, Chrome and Word (Ctrl+Shift+E opened VS Code's Explorer
+            and ended the session).
         """
+        if self.hotkey_listener or not self._hotkeys_enabled():
+            return
+
         try:
             # Define hotkey handlers using proper key format
             hotkeys = {
@@ -1824,6 +1969,23 @@ class TimeTracker:
         except Exception:
             # Hotkeys are optional - continue without them if registration fails
             pass
+
+    def _hotkeys_enabled(self):
+        """Return True if global keyboard shortcuts are turned on in Settings"""
+        return self.settings.get("keyboard_shortcuts", {}).get("enabled", False)
+
+    def stop_global_hotkeys(self):
+        """Stop listening for global keyboard shortcuts"""
+        if self.hotkey_listener:
+            self.hotkey_listener.stop()
+            self.hotkey_listener = None
+
+    def apply_hotkey_setting(self):
+        """Start or stop the global shortcuts to match the current settings"""
+        if self._hotkeys_enabled():
+            self.setup_global_hotkeys()
+        else:
+            self.stop_global_hotkeys()
 
     def _hotkey_start_session(self):
         """Hotkey handler: Start new session if none active (Ctrl+Shift+S)."""
@@ -1980,10 +2142,51 @@ class TimeTracker:
             self.root.destroy()
 
 
+def _use_app_folder():
+    """Run the built exe from its own folder, whatever "Start in" says.
+
+    Every data file (data.json, settings.json, backups/, token.pickle, ...)
+    is a relative path, so a shortcut with another "Start in" folder would
+    silently start a separate, empty record.
+    """
+    if getattr(sys, "frozen", False):
+        os.chdir(os.path.dirname(sys.executable))
+
+
+def _claim_single_instance():
+    """Hold a named lock so only one copy of the app runs at a time.
+
+    Two copies would both react to the global shortcuts and both write the
+    same data.json, double-recording hours.
+
+    Returns:
+        The lock handle (keep it referenced while the app runs), or None if
+        another copy already holds it.
+    """
+    instance_lock = win32event.CreateMutex(None, False, SINGLE_INSTANCE_MUTEX_NAME)
+    if win32api.GetLastError() == winerror.ERROR_ALREADY_EXISTS:
+        return None
+    return instance_lock
+
+
 def main():
+    _use_app_folder()
+    instance_lock = _claim_single_instance()
     root = tk.Tk()
+    if instance_lock is None:
+        root.withdraw()
+        messagebox.showinfo(
+            "Time Aligned",
+            "Time Aligned is already running.\n\n"
+            "Click its icon in the system tray to show it.",
+        )
+        root.destroy()
+        return
+
     app = TimeTracker(root)
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
+    # Retry any Google Sheets uploads that didn't finish last time
+    root.after(GOOGLE_SHEETS_STARTUP_SYNC_DELAY_MS, app.sync_google_sheets)
     root.mainloop()
 
 

@@ -65,10 +65,15 @@ class ScreenshotCapture:
         self.monitor_thread.start()
 
     def stop_monitoring(self):
-        """Stop monitoring window focus changes"""
+        """Stop monitoring window focus changes and forget the session folder.
+
+        Without forgetting the folder, restarting monitoring between sessions
+        (closing Settings does this) captured into the finished session.
+        """
         self.monitoring = False
         if self.monitor_thread:
             self.monitor_thread.join(timeout=2)
+        self.current_screenshot_folder = None
 
     def set_current_session(self, session_key, period_type="active", period_index=0):
         """Set the current session and period for organizing screenshots"""

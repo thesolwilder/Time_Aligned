@@ -6,7 +6,7 @@ Usage:
 
 Steps:
   1. Removes runtime-generated files from dist/TimeAligned that should NOT ship:
-       data.json, settings.json, screenshots/
+       session data, settings, backups/, screenshots/ and Google credentials
   2. Zips the clean dist/TimeAligned/ folder into dist/TimeAligned-vX.Y.Z.zip
 """
 
@@ -23,10 +23,16 @@ from pathlib import Path
 DIST_DIR = Path("dist") / "TimeAligned"
 
 # Files / folders inside DIST_DIR that are created at runtime and must NOT ship
+# (glob patterns, matched against DIST_DIR)
 RUNTIME_ARTIFACTS = [
     "data.json",
+    "data.json.unreadable_*",
+    ".*.tmp",  # temp files left by an interrupted save (src/file_safety.py)
     "settings.json",
     "credentials.json",
+    "token.pickle",
+    "sheets_upload_log.json",
+    "backups",
     "screenshots",
 ]
 
@@ -34,14 +40,13 @@ RUNTIME_ARTIFACTS = [
 def clean_runtime_artifacts(dist_dir: Path) -> None:
     """Remove runtime-generated files / folders from the dist directory."""
     removed = []
-    for name in RUNTIME_ARTIFACTS:
-        target = dist_dir / name
-        if target.exists():
+    for pattern in RUNTIME_ARTIFACTS:
+        for target in dist_dir.glob(pattern):
             if target.is_dir():
                 shutil.rmtree(target)
             else:
                 target.unlink()
-            removed.append(name)
+            removed.append(target.name)
 
     if removed:
         print(f"  Removed runtime artifacts: {', '.join(removed)}")

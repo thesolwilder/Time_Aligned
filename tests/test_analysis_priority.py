@@ -602,8 +602,12 @@ class TestAnalysisCardRangeCustomization(unittest.TestCase):
         analysis = AnalysisFrame(self.content_frame(), tracker, self.root)
         analysis.card_ranges = ["Last 7 Days", "Last 14 Days", "All Time"]
 
-        # Mock the file write to raise an error
-        with patch("builtins.open", side_effect=IOError("Permission denied")):
+        # Mock the file write to raise an error (settings are written atomically,
+        # not via builtins.open, so the error is injected at the write helper)
+        with patch(
+            "src.analysis_frame.write_json_atomically",
+            side_effect=OSError("Permission denied"),
+        ):
             with patch("tkinter.messagebox.showerror") as mock_error:
                 analysis.save_card_ranges()
 

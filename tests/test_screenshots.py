@@ -284,6 +284,23 @@ class TestScreenshotSessionManagement(unittest.TestCase):
 
         self.assertIsNone(capture.current_screenshot_folder)
 
+    @patch("os.makedirs")
+    def test_stop_monitoring_forgets_session_folder(self, mock_makedirs):
+        """Regression: nothing may be captured into a session after it ends.
+
+        Bug: stop_monitoring kept the finished session's folder, and closing
+        Settings restarted monitoring, so window switches between sessions
+        were saved into the old session's folder.
+        """
+        with open(self.test_settings_file, "r") as f:
+            settings = json.load(f)
+        capture = ScreenshotCapture(settings, self.test_data_file)
+        capture.set_current_session("2026-02-16_143022", "active", 0)
+
+        capture.stop_monitoring()
+
+        self.assertIsNone(capture.current_screenshot_folder)
+
     def test_get_screenshot_folder_path(self):
         """Test get_screenshot_folder_path returns current folder"""
         with open(self.test_settings_file, "r") as f:

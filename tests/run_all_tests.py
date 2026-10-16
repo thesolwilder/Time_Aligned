@@ -206,6 +206,8 @@ def run_all_tests(verbosity=2, pattern="test_*.py"):
     print(f"Skipped: {len(result.skipped)}")
     print(f"Total time: {total_seconds:.2f} seconds ({total_seconds/60:.2f} minutes)")
 
+    return result
+
 
 def run_specific_test(test_name, verbosity=2):
     """

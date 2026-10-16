@@ -321,6 +321,37 @@ class TestCompletionFrameSaveSkipDelete(unittest.TestCase):
         self.assertNotIn("only_session_key", updated_data)
         self.assertEqual(len(updated_data), 0)
 
+    @patch("src.completion_frame.messagebox.showerror")
+    @patch("src.completion_frame.messagebox.showinfo")
+    @patch("src.completion_frame.messagebox.askyesno", return_value=True)
+    @patch("shutil.copy2")
+    def test_delete_session_disk_full_keeps_data_file_intact(
+        self, mock_copy, mock_askyesno, mock_showinfo, mock_showerror
+    ):
+        """Regression test: a failed write during delete must not empty data.json.
+
+        Bug: the delete path rewrote data.json with open(..., "w"), which empties
+        the file before writing. A crash or full disk mid-write lost every
+        session, the same failure that zeroed data.json on May 27.
+        """
+        tracker = TimeTracker(self.root)
+        tracker.data_file = self.test_data_file
+        tracker.settings_file = self.test_settings_file
+        with open(self.test_data_file, "rb") as f:
+            original_bytes = f.read()
+
+        session_to_delete = list(tracker.load_data().keys())[0]
+        frame = CompletionFrame(self.root, tracker, session_to_delete)
+        self.root.update()
+
+        disk_full = OSError(28, "No space left on device")
+        with patch("json.dump", side_effect=disk_full):
+            frame._delete_session()
+
+        with open(self.test_data_file, "rb") as f:
+            self.assertEqual(f.read(), original_bytes)
+        mock_showerror.assert_called_once()
+
     @patch("src.completion_frame.messagebox.showinfo")
     @patch("src.completion_frame.messagebox.askyesno", return_value=True)
     @patch("shutil.copy2")
@@ -400,8 +431,8 @@ class TestCompletionFrameGoogleSheets(unittest.TestCase):
         # Verify Google Sheets is disabled
         self.assertFalse(settings["google_sheets"]["enabled"])
 
-    def test_completion_frame_has_upload_method(self):
-        """Test that completion frame has Google Sheets upload method"""
+    def test_completion_frame_tracker_has_sync_method(self):
+        """Test that the completion frame's tracker can sync to Google Sheets"""
         tracker = TimeTracker(self.root)
         tracker.data_file = self.test_data_file
         tracker.settings_file = self.test_settings_file
@@ -410,8 +441,8 @@ class TestCompletionFrameGoogleSheets(unittest.TestCase):
 
         frame = CompletionFrame(self.root, tracker, session_name)
 
-        # Verify method exists
-        self.assertTrue(hasattr(frame, "_upload_to_google_sheets"))
+        # Verify the method Save and Skip call exists
+        self.assertTrue(hasattr(frame.tracker, "sync_google_sheets"))
 
 
 if __name__ == "__main__":

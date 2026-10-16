@@ -3216,5 +3216,38 @@ class TestProjectRenameSessionUpdate(unittest.TestCase):
         mock_save.assert_not_called()
 
 
+class TestKeyboardShortcutsToggle(unittest.TestCase):
+    """The global keyboard shortcuts checkbox saves an opt-in setting"""
+
+    def setUp(self):
+        """Set up test fixtures"""
+        self.file_manager = TestFileManager()
+        self.test_settings_file = self.file_manager.create_test_file(
+            "test_shortcuts_settings.json", TestDataGenerator.create_settings_data()
+        )
+        self.root = tk.Tk()
+        self.tracker = MockTracker(self.test_settings_file)
+        self.frame = SettingsFrame(self.root, self.tracker, self.root)
+
+    def tearDown(self):
+        """Clean up test files"""
+        safe_teardown_tk_root(self.root)
+        self.file_manager.cleanup()
+
+    def test_checkbox_starts_unchecked(self):
+        """Test that shortcuts are off when the setting is missing"""
+        self.assertFalse(self.frame.keyboard_shortcuts_var.get())
+
+    def test_checking_the_box_saves_the_setting(self):
+        """Test that turning shortcuts on is written to settings.json"""
+        self.frame.keyboard_shortcuts_var.set(True)
+
+        self.frame.save_keyboard_shortcuts_setting()
+
+        with open(self.test_settings_file, "r") as f:
+            saved_settings = json.load(f)
+        self.assertTrue(saved_settings["keyboard_shortcuts"]["enabled"])
+
+
 if __name__ == "__main__":
     unittest.main()

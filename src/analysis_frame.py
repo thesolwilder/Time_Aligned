@@ -1,11 +1,11 @@
 import math
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, simpledialog
-import json
 import csv
 from datetime import datetime, timedelta
 
 from src.ui_helpers import ScrollableFrame, get_frame_background
+from src.file_safety import write_json_atomically
 from src.constants import (
     COLOR_ACTIVE_LIGHT_GREEN,
     COLOR_BREAK_LIGHT_ORANGE,
@@ -248,8 +248,7 @@ class AnalysisFrame(ttk.Frame):
         self.tracker.settings["analysis_settings"]["card_ranges"] = self.card_ranges
 
         try:
-            with open(self.tracker.settings_file, "w") as f:
-                json.dump(self.tracker.settings, f, indent=2)
+            write_json_atomically(self.tracker.settings_file, self.tracker.settings)
         except Exception as error:
             messagebox.showerror("Error", f"Failed to save settings: {error}")
 

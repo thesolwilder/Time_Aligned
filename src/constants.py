@@ -25,6 +25,8 @@ ONE_MINUTE_SECONDS = SECONDS_PER_MINUTE
 
 UPDATE_TIMER_INTERVAL_MS = 100  # milliseconds between UI updates
 IDLE_CHECK_INTERVAL_SECONDS = 0.5  # seconds between idle checks
+GOOGLE_SHEETS_STARTUP_SYNC_DELAY_MS = 2000  # let the window open before uploading
+GOOGLE_SIGN_IN_TIMEOUT_SECONDS = 180  # Test Connection gives up waiting for the browser
 
 # =============================================================================
 # Default Idle Settings
@@ -32,6 +34,7 @@ IDLE_CHECK_INTERVAL_SECONDS = 0.5  # seconds between idle checks
 
 DEFAULT_IDLE_THRESHOLD_SECONDS = 60  # seconds before considering idle
 DEFAULT_IDLE_BREAK_THRESHOLD_SECONDS = 300  # seconds of idle before auto-break
+IDLE_AUTO_BREAK_NEVER = -1  # idle_break_threshold value meaning "Never" auto-break
 
 # =============================================================================
 # UI Color Palette
@@ -114,6 +117,9 @@ DEFAULT_DATA_FILE = "data.json"
 DEFAULT_SCREENSHOT_FOLDER = "screenshots"
 DEFAULT_BACKUP_FOLDER = "backups"
 DEFAULT_GOOGLE_CREDENTIALS_FILE = "credentials.json"
+DAILY_BACKUP_RETENTION_COUNT = 14  # daily data.json backups kept in the backup folder
+SHEETS_UPLOAD_LOG_FILE = "sheets_upload_log.json"  # sessions sent to Google Sheets
+SINGLE_INSTANCE_MUTEX_NAME = "Local\\TimeAligned_SingleInstance"  # one running copy
 
 # =============================================================================
 # Resource Path Helper (PyInstaller compatibility)

@@ -13,7 +13,11 @@ DEBUGGING_GUIDE.MD
 # App settings and user data
 settings.json
 data.json
+sheets_upload_log.json
 time_track_timer.txt
+# Temp files from an interrupted save, and copies of an unreadable data.json
+.*.tmp
+*.unreadable_*
 
 # Screenshots - contains potentially sensitive information
 screenshots/
@@ -63,3 +67,7 @@ verify_*.py
 *SUMMARY.md
 *_GUIDE.md
 *_FOR_*.md
+
+# Local notes (not tracked)
+scratchpad.txt
+MANUAL_TEST_PLAN.md

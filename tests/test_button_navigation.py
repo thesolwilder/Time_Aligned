@@ -30,6 +30,8 @@ class TestButtonNavigation(unittest.TestCase):
         settings = TestDataGenerator.create_settings_data()
 
         self.test_data_file = "test_navigation_data.json"
+        # Track it so cleanup also removes the daily backups save_data writes
+        self.file_manager.test_files.append(self.test_data_file)
         self.test_settings_file = self.file_manager.create_test_file(
             "test_navigation_settings.json", settings
         )
@@ -234,11 +236,12 @@ class TestButtonNavigation(unittest.TestCase):
         # Get initial session name
         initial_session = self.tracker.session_view_frame.session_name
 
-        # Mock the messagebox to auto-confirm
+        # Mock the messagebox to auto-confirm and shutil.copy2 to avoid creating backup files
         with patch("tkinter.messagebox.askyesno", return_value=True):
             with patch("tkinter.messagebox.showinfo"):
-                # Call delete
-                self.tracker.session_view_frame._delete_session()
+                with patch("shutil.copy2"):
+                    # Call delete
+                    self.tracker.session_view_frame._delete_session()
 
         # Session should have been deleted from data
         all_data = self.tracker.load_data()

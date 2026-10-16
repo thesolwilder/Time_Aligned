@@ -17,6 +17,7 @@ import re
 
 from src.ui_helpers import ScrollableFrame, sanitize_name, get_frame_background
 from src.google_sheets_integration import GoogleSheetsUploader
+from src.file_safety import write_json_atomically
 from src.constants import (
     COLOR_LINK_BLUE,
     COLOR_GRAY_TEXT,
@@ -24,6 +25,7 @@ from src.constants import (
     COLOR_SUCCESS_GREEN,
     COLOR_INFO_BLUE,
     DEFAULT_SCREENSHOT_FOLDER,
+    IDLE_AUTO_BREAK_NEVER,
     FONT_LINK,
     FONT_TITLE,
     FONT_TIMER_SMALL,
@@ -118,8 +120,7 @@ class SettingsFrame(ttk.Frame):
     def save_settings(self):
         """Save settings to file"""
         try:
-            with open(self.tracker.settings_file, "w") as f:
-                json.dump(self.tracker.settings, f, indent=2)
+            write_json_atomically(self.tracker.settings_file, self.tracker.settings)
         except Exception as error:
             messagebox.showerror("Error", f"Failed to save settings: {error}")
 
@@ -1188,7 +1189,7 @@ class SettingsFrame(ttk.Frame):
 
         idle_break_var = tk.StringVar(master=self.root)
         current_threshold = idle_settings.get("idle_break_threshold", 300)
-        if current_threshold == -1:
+        if current_threshold == IDLE_AUTO_BREAK_NEVER:
             idle_break_var.set("Never")
         else:
             idle_break_var.set(str(current_threshold))
@@ -1255,7 +1256,9 @@ class SettingsFrame(ttk.Frame):
 
             break_val = idle_break_var.get()
             if break_val == "Never":
-                self.tracker.settings["idle_settings"]["idle_break_threshold"] = -1
+                self.tracker.settings["idle_settings"][
+                    "idle_break_threshold"
+                ] = IDLE_AUTO_BREAK_NEVER
             else:
                 self.tracker.settings["idle_settings"]["idle_break_threshold"] = int(
                     break_val
@@ -1742,12 +1745,26 @@ class SettingsFrame(ttk.Frame):
         )
         self.row += 1
 
+        # Opt-in: the shortcuts fire in every program (applied on leaving Settings)
+        self.keyboard_shortcuts_var = tk.BooleanVar(
+            master=self.root,
+            value=self.tracker.settings.get("keyboard_shortcuts", {}).get(
+                "enabled", False
+            ),
+        )
+        ttk.Checkbutton(
+            shortcuts_frame,
+            text="Enable global keyboard shortcuts",
+            variable=self.keyboard_shortcuts_var,
+            command=self.save_keyboard_shortcuts_setting,
+        ).grid(row=0, column=0, columnspan=2, pady=(0, 5), sticky=tk.W)
+
         # Header
         ttk.Label(
             shortcuts_frame,
-            text="Use these shortcuts anywhere to control Time Aligned:",
+            text="When enabled, these shortcuts control Time Aligned from any program:",
             font=FONT_NORMAL,
-        ).grid(row=0, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
+        ).grid(row=1, column=0, columnspan=2, pady=(0, 10), sticky=tk.W)
 
         # Shortcuts list
         shortcuts = [
@@ -1757,7 +1774,7 @@ class SettingsFrame(ttk.Frame):
             ("Ctrl + Shift + W", "Show/hide main window"),
         ]
 
-        row = 1
+        row = 2
         for hotkey, description in shortcuts:
             # Hotkey in bold/monospace
             hotkey_label = ttk.Label(
@@ -1777,7 +1794,9 @@ class SettingsFrame(ttk.Frame):
         # Note about system-wide functionality
         note_label = ttk.Label(
             shortcuts_frame,
-            text="💡 Tip: These shortcuts work system-wide, even when the window is hidden!",
+            text="Off by default: they work in every program, even when the window is\n"
+            "hidden, so they also trigger when another program uses the same keys\n"
+            "(Ctrl+Shift+E opens the Explorer in VS Code). Applied when you leave Settings.",
             font=FONT_SMALL_ITALIC,
             foreground=COLOR_GRAY_TEXT,
         )
@@ -1790,6 +1809,13 @@ class SettingsFrame(ttk.Frame):
         # Force scroll region update
         if hasattr(self, "update_scrollregion"):
             self.update_scrollregion()
+
+    def save_keyboard_shortcuts_setting(self):
+        """Save the global keyboard shortcuts on/off choice"""
+        self.tracker.settings["keyboard_shortcuts"] = {
+            "enabled": self.keyboard_shortcuts_var.get()
+        }
+        self.save_settings()
 
     def create_csv_export_section(self, parent):
         """Create CSV export section"""

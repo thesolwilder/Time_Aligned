@@ -361,6 +361,7 @@ class TestFileManager:
             try:
                 if os.path.exists(filepath):
                     os.remove(filepath)
+                self._remove_daily_backups(filepath)
             except Exception as e:
                 print(f"Warning: Could not remove test file {filepath}: {e}")
 
@@ -376,6 +377,26 @@ class TestFileManager:
 
         self.test_files.clear()
         self.test_dirs.clear()
+
+    @staticmethod
+    def _remove_daily_backups(filepath):
+        """Remove the daily backups save_data() wrote for a tracked data file"""
+        # Imported here so test_helpers stays importable without src on sys.path
+        from src.constants import DEFAULT_BACKUP_FOLDER
+        from src.file_safety import DAILY_BACKUP_MARKER
+
+        backup_folder = os.path.join(
+            os.path.dirname(os.path.abspath(filepath)), DEFAULT_BACKUP_FOLDER
+        )
+        if not os.path.isdir(backup_folder):
+            return
+
+        backup_prefix = os.path.basename(filepath) + DAILY_BACKUP_MARKER
+        for name in os.listdir(backup_folder):
+            if name.startswith(backup_prefix):
+                os.remove(os.path.join(backup_folder, name))
+        if not os.listdir(backup_folder):
+            os.rmdir(backup_folder)
 
 
 class MockScreenshot:

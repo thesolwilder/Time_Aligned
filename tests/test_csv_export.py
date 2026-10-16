@@ -784,7 +784,10 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
 
     @patch("tkinter.filedialog.asksaveasfilename")
     @patch("tkinter.messagebox.showinfo")
-    def test_secondary_project_exported_to_csv(self, mock_info, mock_file_dialog):
+    @patch("os.startfile")  # Mock Windows file explorer opening
+    def test_secondary_project_exported_to_csv(
+        self, mock_startfile, mock_info, mock_file_dialog
+    ):
         """Test that secondary project information is included in CSV export"""
         temp_dir = tempfile.mkdtemp()
         try:
@@ -828,7 +831,10 @@ class TestSecondaryProjectActionExport(unittest.TestCase):
 
     @patch("tkinter.filedialog.asksaveasfilename")
     @patch("tkinter.messagebox.showinfo")
-    def test_secondary_action_exported_to_csv(self, mock_info, mock_file_dialog):
+    @patch("os.startfile")  # Mock Windows file explorer opening
+    def test_secondary_action_exported_to_csv(
+        self, mock_startfile, mock_info, mock_file_dialog
+    ):
         """Test that secondary action information is included in CSV export"""
         temp_dir = tempfile.mkdtemp()
         try:

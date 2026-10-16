@@ -9,11 +9,12 @@ import tkinter as tk
 import json
 import os
 import sys
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from time_tracker import TimeTracker
-from test_helpers import TestFileManager
+from test_helpers import TestFileManager, safe_teardown_tk_root
 
 
 class TestCorruptedDataFiles(unittest.TestCase):
@@ -286,6 +287,107 @@ class TestDataIntegrity(unittest.TestCase):
         # Should be able to load it back
         loaded = tracker.load_data()
         self.assertEqual(len(loaded), len(valid_data))
+
+
+class TestUnreadableDataFileProtection(unittest.TestCase):
+    """A data.json that can't be read must never be silently overwritten.
+
+    Regression for the May 27 crash, which left data.json as null bytes.
+    load_data() returns {} for such a file, so the next merge-save (e.g.
+    starting a session) replaced the user's entire history with one session.
+    """
+
+    PRESERVED_PREFIX = "test_unreadable_data.json.unreadable_"
+    ZEROED_BYTES = b"\x00" * 1024
+
+    def setUp(self):
+        """Set up a tracker whose data file is zeroed like after the crash"""
+        self.root = tk.Tk()
+        self.file_manager = TestFileManager()
+        self.test_data_file = self.file_manager.create_test_file(
+            "test_unreadable_data.json"
+        )
+        with open(self.test_data_file, "wb") as f:
+            f.write(self.ZEROED_BYTES)
+
+        self.tracker = TimeTracker(self.root)
+        self.tracker.data_file = self.test_data_file
+
+    def tearDown(self):
+        """Clean up after tests"""
+        safe_teardown_tk_root(self.root)
+        for name in self._preserved_copies():
+            os.remove(os.path.join(self.file_manager.test_data_dir, name))
+        self.file_manager.cleanup()
+
+    def _preserved_copies(self):
+        return [
+            name
+            for name in os.listdir(self.file_manager.test_data_dir)
+            if name.startswith(self.PRESERVED_PREFIX)
+        ]
+
+    @patch("time_tracker.messagebox.showwarning")
+    def test_merge_save_preserves_unreadable_file_and_warns(self, mock_warning):
+        """Test that the unreadable file is copied aside before being replaced"""
+        self.tracker.save_data({"new_session": {"date": "2026-10-08"}})
+
+        copies = self._preserved_copies()
+        self.assertEqual(len(copies), 1)
+        copy_path = os.path.join(self.file_manager.test_data_dir, copies[0])
+        with open(copy_path, "rb") as f:
+            self.assertEqual(f.read(), self.ZEROED_BYTES)
+        mock_warning.assert_called_once()
+        self.assertIn("new_session", self.tracker.load_data())
+
+    @patch("time_tracker.messagebox.showerror")
+    @patch("time_tracker.messagebox.showwarning")
+    def test_save_aborted_when_unreadable_file_cannot_be_preserved(
+        self, mock_warning, mock_error
+    ):
+        """Test that nothing is overwritten if the copy cannot be made"""
+        with patch("shutil.copy2", side_effect=OSError("No space left on device")):
+            self.tracker.save_data({"new_session": {"date": "2026-10-08"}})
+
+        with open(self.test_data_file, "rb") as f:
+            self.assertEqual(f.read(), self.ZEROED_BYTES)
+        mock_error.assert_called_once()
+
+    @patch("time_tracker.messagebox.showerror")
+    @patch("time_tracker.messagebox.showwarning")
+    def test_locked_data_file_aborts_save_instead_of_replacing_it(
+        self, mock_warning, mock_error
+    ):
+        """Test that a read error (e.g. an antivirus lock) is not corruption.
+
+        Treating it as corruption copied the file aside and replaced data.json
+        with only the new session, hiding the history behind a warning.
+        """
+        old_data = {"old_session": {"date": "2026-10-01"}}
+        with open(self.test_data_file, "w") as f:
+            json.dump(old_data, f)
+
+        with patch(
+            "time_tracker.open", create=True, side_effect=PermissionError("locked")
+        ):
+            self.tracker.save_data({"new_session": {"date": "2026-10-10"}})
+
+        with open(self.test_data_file, "r") as f:
+            self.assertEqual(json.load(f), old_data)
+        self.assertEqual(self._preserved_copies(), [])
+        mock_warning.assert_not_called()
+        mock_error.assert_called_once()
+
+    @patch("time_tracker.messagebox.showwarning")
+    def test_empty_data_file_is_treated_as_new(self, mock_warning):
+        """Test that a 0-byte file (nothing to lose) saves without a warning"""
+        open(self.test_data_file, "w").close()
+
+        self.tracker.save_data({"new_session": {"date": "2026-10-08"}})
+
+        mock_warning.assert_not_called()
+        self.assertEqual(self._preserved_copies(), [])
+        self.assertIn("new_session", self.tracker.load_data())
 
 
 if __name__ == "__main__":

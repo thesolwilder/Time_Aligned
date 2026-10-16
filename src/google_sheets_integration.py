@@ -2,27 +2,59 @@
 Google Sheets Integration Module
 
 This module handles uploading session data to Google Sheets.
-It appends new session data to the configured spreadsheet.
+Each session's rows are replaced when it is uploaded again, and an upload
+log next to data.json records what was sent so failed uploads are retried.
 """
 
 import os
 import json
+import hashlib
 import pickle
 import re
 from datetime import datetime
 from tkinter import messagebox
+from google.auth.exceptions import TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from src.constants import DEFAULT_SETTINGS_FILE
+from src.constants import DEFAULT_SETTINGS_FILE, GOOGLE_SIGN_IN_TIMEOUT_SECONDS
+from src.file_safety import write_json_atomically
 
 # Scopes for Google Sheets API
 # Use read-only scope for viewing, full scope for editing
 SCOPES_FULL = ["https://www.googleapis.com/auth/spreadsheets"]
 SCOPES_READONLY = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+
+# Sheet columns, in order. Column A (Session ID) is how a session's existing
+# rows are found again when it is re-uploaded.
+SHEET_HEADERS = [
+    "Session ID",
+    "Date",
+    "Sphere",
+    "Session Start Time",
+    "Session End Time",
+    "Session Total Duration (min)",
+    "Session Active Duration (min)",
+    "Session Break Duration (min)",
+    "Type",
+    "Primary Action",
+    "Primary Percentage",
+    "Primary Duration (min)",
+    "Primary Comment",
+    "Secondary Action",
+    "Secondary Percentage",
+    "Secondary Duration (min)",
+    "Secondary Comment",
+    "Activity Start",
+    "Activity End",
+    "Active Notes",
+    "Break Notes",
+    "Idle Notes",
+    "Session Notes",
+]
 
 
 def escape_for_sheets(text):
@@ -51,6 +83,44 @@ def escape_for_sheets(text):
     return text
 
 
+def _rows_fingerprint(rows):
+    """Return a short hash of a session's sheet rows, to detect changes"""
+    serialized_rows = json.dumps(rows, sort_keys=True).encode("utf-8")
+    return hashlib.sha256(serialized_rows).hexdigest()
+
+
+def _load_upload_log(upload_log_file, destination):
+    """Return {session_id: rows fingerprint} for sessions sent to destination.
+
+    The log is only a cache: if it is missing, unreadable, or was written for
+    another spreadsheet or tab, every session is uploaded again, which
+    replaces its rows rather than duplicating them.
+    """
+    try:
+        with open(upload_log_file, "r", encoding="utf-8") as f:
+            upload_log = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(upload_log, dict) or upload_log.get("destination") != destination:
+        return {}
+    sessions = upload_log.get("sessions")
+    return sessions if isinstance(sessions, dict) else {}
+
+
+def _row_ranges_bottom_up(row_indexes):
+    """Group row indexes into contiguous (start, end) ranges, last range first.
+
+    Deleting the last range first keeps the indexes of the others valid.
+    """
+    ranges = []
+    for index in sorted(row_indexes):
+        if ranges and ranges[-1][1] == index:
+            ranges[-1][1] = index + 1
+        else:
+            ranges.append([index, index + 1])
+    return [tuple(row_range) for row_range in reversed(ranges)]
+
+
 class GoogleSheetsUploader:
     """Handles uploading session data to Google Sheets"""
 
@@ -68,6 +138,9 @@ class GoogleSheetsUploader:
         self.service = None
         self.read_only = read_only
         self.scopes = SCOPES_READONLY if read_only else SCOPES_FULL
+        # Set by a non-interactive authenticate() so the caller can tell the user
+        self.sign_in_needed = False  # saved login missing or no longer valid
+        self.offline = False  # Google couldn't be reached to refresh the login
 
     def _load_settings(self):
         """Load settings from file with proper error handling.
@@ -217,9 +290,16 @@ class GoogleSheetsUploader:
         dangerous_chars = ["<", ">", '"', "'", "\\", "/", "|", "?", "*"]
         return not any(char in sheet_name for char in dangerous_chars)
 
-    def authenticate(self):
+    def authenticate(self, interactive=True):
         """
         Authenticate with Google Sheets API
+
+        Args:
+            interactive: True when the user asked for it (Test Connection).
+                Automatic uploads pass False: they never open the browser
+                sign-in, which waits on the UI thread and froze the app when
+                offline or when the tab was closed. They set sign_in_needed or
+                offline instead, so the caller can tell the user.
 
         Returns:
             bool: True if authentication successful, False otherwise
@@ -265,10 +345,24 @@ class GoogleSheetsUploader:
             if creds and creds.expired and creds.refresh_token:
                 try:
                     creds.refresh(Request())
+                except TransportError:
+                    # Offline: keep the saved login; uploads retry next sync
+                    self.offline = True
+                    if interactive:
+                        messagebox.showerror(
+                            "Google Sheets Authentication",
+                            "Could not reach Google. Check your internet "
+                            "connection and try again.",
+                        )
+                    return False
                 except Exception as error:
                     creds = None
 
             if not creds:
+                if not interactive:
+                    self.sign_in_needed = True
+                    return False
+
                 if not os.path.exists(credentials_file):
                     messagebox.showerror(
                         "Google Sheets Authentication",
@@ -283,7 +377,9 @@ class GoogleSheetsUploader:
                     flow = InstalledAppFlow.from_client_secrets_file(
                         credentials_file, self.scopes
                     )
-                    creds = flow.run_local_server(port=0)
+                    creds = flow.run_local_server(
+                        port=0, timeout_seconds=GOOGLE_SIGN_IN_TIMEOUT_SECONDS
+                    )
                 except ValueError as error:
                     messagebox.showerror(
                         "Google Sheets Authentication",
@@ -354,32 +450,7 @@ class GoogleSheetsUploader:
         if not self.service:
             return False
 
-        # Define expected headers
-        expected_headers = [
-            "Session ID",
-            "Date",
-            "Sphere",
-            "Session Start Time",
-            "Session End Time",
-            "Session Total Duration (min)",
-            "Session Active Duration (min)",
-            "Session Break Duration (min)",
-            "Type",
-            "Primary Action",
-            "Primary Percentage",
-            "Primary Duration (min)",
-            "Primary Comment",
-            "Secondary Action",
-            "Secondary Percentage",
-            "Secondary Duration (min)",
-            "Secondary Comment",
-            "Activity Start",
-            "Activity End",
-            "Active Notes",
-            "Break Notes",
-            "Idle Notes",
-            "Session Notes",
-        ]
+        expected_headers = SHEET_HEADERS
 
         try:
             spreadsheet_id = self.get_spreadsheet_id()
@@ -497,11 +568,28 @@ class GoogleSheetsUploader:
 
     def upload_session(self, session_data, session_id):
         """
-        Upload a session to Google Sheets with detailed format matching CSV export
+        Upload one session, replacing any rows it already has in the sheet
 
         Args:
             session_data: Dictionary containing session data
             session_id: Unique identifier for the session
+
+        Returns:
+            bool: True if upload successful, False otherwise
+        """
+        return self.upload_sessions({session_id: session_data})
+
+    def upload_sessions(self, sessions, interactive=True):
+        """
+        Upload sessions to Google Sheets with detailed format matching CSV export
+
+        Each session's existing rows (matched by Session ID in column A) are
+        deleted before its current rows are appended, so uploading a session
+        again replaces it instead of duplicating it.
+
+        Args:
+            sessions: Dictionary mapping session ID to session data
+            interactive: False for automatic uploads (see authenticate)
 
         Returns:
             bool: True if upload successful, False otherwise
@@ -514,7 +602,7 @@ class GoogleSheetsUploader:
 
         # Authenticate if needed
         if not self.service:
-            if not self.authenticate():
+            if not self.authenticate(interactive=interactive):
                 return False
 
         # Ensure headers exist
@@ -522,278 +610,12 @@ class GoogleSheetsUploader:
             return False
 
         try:
-            # Extract session-level data
-            date = session_data.get("date", "")
-            sphere = session_data.get("sphere", "")
-            start_time = session_data.get("start_time", "")
-            end_time = session_data.get("end_time", "")
-
-            # Convert durations from seconds to minutes
-            total_duration = round(session_data.get("total_duration", 0) / 60, 2)
-            active_duration = round(session_data.get("active_duration", 0) / 60, 2)
-            break_duration = round(session_data.get("break_duration", 0) / 60, 2)
-
-            # Get session comments
-            session_comments = session_data.get("session_comments", {})
-            active_notes = escape_for_sheets(session_comments.get("active_notes", ""))
-            break_notes = escape_for_sheets(session_comments.get("break_notes", ""))
-            idle_notes = escape_for_sheets(session_comments.get("idle_notes", ""))
-            session_notes = escape_for_sheets(session_comments.get("session_notes", ""))
-
-            # Process active periods, breaks, and idle periods
-            active_periods = session_data.get("active", [])
-            breaks = session_data.get("breaks", [])
-            idle_periods = session_data.get("idle_periods", [])
-
-            # Prepare all rows to upload
             rows = []
+            for session_id, session_data in sessions.items():
+                rows.extend(self._build_session_rows(session_data, session_id))
 
-            # Process active periods
-            if active_periods:
-                for active in active_periods:
-                    # Extract primary and secondary project information
-                    primary_project = ""
-                    primary_comment = ""
-                    primary_percentage = 100
-                    primary_period_duration = active.get("duration", 0)
-                    secondary_project = ""
-                    secondary_comment = ""
-                    secondary_percentage = ""
-                    secondary_period_duration = ""
-
-                    if active.get("project"):
-                        # Single project case
-                        primary_project = escape_for_sheets(active.get("project", ""))
-                        primary_comment = escape_for_sheets(active.get("comment", ""))
-                    else:
-                        # Multiple projects case
-                        for project_item in active.get("projects", []):
-                            if project_item.get("project_primary", True):
-                                primary_project = escape_for_sheets(
-                                    project_item.get("name", "")
-                                )
-                                primary_comment = escape_for_sheets(
-                                    project_item.get("comment", "")
-                                )
-                                primary_percentage = project_item.get("percentage", 100)
-                                primary_period_duration = project_item.get(
-                                    "duration", 0
-                                )
-                            else:
-                                secondary_project = escape_for_sheets(
-                                    project_item.get("name", "")
-                                )
-                                secondary_comment = escape_for_sheets(
-                                    project_item.get("comment", "")
-                                )
-                                secondary_percentage = project_item.get(
-                                    "percentage", ""
-                                )
-                                secondary_period_duration = project_item.get(
-                                    "duration", 0
-                                )
-
-                    row = [
-                        session_id,
-                        date,
-                        sphere,
-                        start_time,
-                        end_time,
-                        total_duration,
-                        active_duration,
-                        break_duration,
-                        "active",
-                        primary_project,
-                        primary_percentage,
-                        round(primary_period_duration / 60, 2),
-                        primary_comment,
-                        secondary_project,
-                        secondary_percentage,
-                        (
-                            round(secondary_period_duration / 60, 2)
-                            if secondary_period_duration != ""
-                            else ""
-                        ),
-                        secondary_comment,
-                        active.get("start", ""),
-                        active.get("end", ""),
-                        active_notes,
-                        break_notes,
-                        idle_notes,
-                        session_notes,
-                    ]
-                    rows.append(row)
-
-            # Process breaks
-            if breaks:
-                for brk in breaks:
-                    # Extract primary and secondary action information
-                    primary_action = ""
-                    primary_comment = ""
-                    primary_percentage = 100
-                    primary_period_duration = brk.get("duration", 0)
-                    secondary_action = ""
-                    secondary_comment = ""
-                    secondary_percentage = ""
-                    secondary_period_duration = ""
-
-                    if brk.get("action"):
-                        # Single action case
-                        primary_action = escape_for_sheets(brk.get("action", ""))
-                        primary_comment = escape_for_sheets(brk.get("comment", ""))
-                    else:
-                        # Multiple actions case
-                        for action_item in brk.get("actions", []):
-                            if action_item.get("break_primary", True):
-                                primary_action = escape_for_sheets(
-                                    action_item.get("name", "")
-                                )
-                                primary_comment = escape_for_sheets(
-                                    action_item.get("comment", "")
-                                )
-                                primary_percentage = action_item.get("percentage", 100)
-                                primary_period_duration = action_item.get("duration", 0)
-                            else:
-                                secondary_action = escape_for_sheets(
-                                    action_item.get("name", "")
-                                )
-                                secondary_comment = escape_for_sheets(
-                                    action_item.get("comment", "")
-                                )
-                                secondary_percentage = action_item.get("percentage", "")
-                                secondary_period_duration = action_item.get(
-                                    "duration", 0
-                                )
-
-                    row = [
-                        session_id,
-                        date,
-                        sphere,
-                        start_time,
-                        end_time,
-                        total_duration,
-                        active_duration,
-                        break_duration,
-                        "break",
-                        primary_action,
-                        primary_percentage,
-                        round(primary_period_duration / 60, 2),
-                        primary_comment,
-                        secondary_action,
-                        secondary_percentage,
-                        (
-                            round(secondary_period_duration / 60, 2)
-                            if secondary_period_duration != ""
-                            else ""
-                        ),
-                        secondary_comment,
-                        brk.get("start", ""),
-                        "",  # activity_end
-                        active_notes,
-                        break_notes,
-                        idle_notes,
-                        session_notes,
-                    ]
-                    rows.append(row)
-
-            # Process idle periods
-            if idle_periods:
-                for idle in idle_periods:
-                    # Extract primary and secondary action information
-                    primary_action = ""
-                    primary_comment = ""
-                    primary_percentage = 100
-                    primary_period_duration = idle.get("duration", 0)
-                    secondary_action = ""
-                    secondary_comment = ""
-                    secondary_percentage = ""
-                    secondary_period_duration = ""
-
-                    if idle.get("action"):
-                        # Single action case
-                        primary_action = escape_for_sheets(idle.get("action", ""))
-                        primary_comment = escape_for_sheets(idle.get("comment", ""))
-                    else:
-                        # Multiple actions case
-                        for action_item in idle.get("actions", []):
-                            if action_item.get("idle_primary", True):
-                                primary_action = escape_for_sheets(
-                                    action_item.get("name", "")
-                                )
-                                primary_comment = escape_for_sheets(
-                                    action_item.get("comment", "")
-                                )
-                                primary_percentage = action_item.get("percentage", 100)
-                                primary_period_duration = action_item.get("duration", 0)
-                            else:
-                                secondary_action = escape_for_sheets(
-                                    action_item.get("name", "")
-                                )
-                                secondary_comment = escape_for_sheets(
-                                    action_item.get("comment", "")
-                                )
-                                secondary_percentage = action_item.get("percentage", "")
-                                secondary_period_duration = action_item.get("duration", 0)
-
-                    row = [
-                        session_id,
-                        date,
-                        sphere,
-                        start_time,
-                        end_time,
-                        total_duration,
-                        active_duration,
-                        break_duration,
-                        "idle",
-                        primary_action,
-                        primary_percentage,
-                        round(primary_period_duration / 60, 2),
-                        primary_comment,
-                        secondary_action,
-                        secondary_percentage,
-                        (
-                            round(secondary_period_duration / 60, 2)
-                            if secondary_period_duration != ""
-                            else ""
-                        ),
-                        secondary_comment,
-                        idle.get("start", ""),
-                        idle.get("end", ""),
-                        active_notes,
-                        break_notes,
-                        idle_notes,
-                        session_notes,
-                    ]
-                    rows.append(row)
-
-            # If no active periods, breaks, or idle, create summary row
-            if not active_periods and not breaks and not idle_periods:
-                row = [
-                    session_id,
-                    date,
-                    sphere,
-                    start_time,
-                    end_time,
-                    total_duration,
-                    active_duration,
-                    break_duration,
-                    "session_summary",
-                    "",  # primary_action
-                    "",  # primary_percentage
-                    "",  # primary_duration
-                    "",  # primary_comment
-                    "",  # secondary_action
-                    "",  # secondary_percentage
-                    "",  # secondary_duration
-                    "",  # secondary_comment
-                    "",  # activity_start
-                    "",  # activity_end
-                    active_notes,
-                    break_notes,
-                    idle_notes,
-                    session_notes,
-                ]
-                rows.append(row)
+            # Remove rows these sessions already have, so re-uploads replace them
+            self._delete_session_rows(set(sessions))
 
             # Append all rows to sheet
             if rows:
@@ -873,6 +695,423 @@ class GoogleSheetsUploader:
                 f"• Check that the session data is valid",
             )
             return False
+
+    def _build_session_rows(self, session_data, session_id):
+        """
+        Build the sheet rows for one session: one row per active period, break
+        and idle period, or a single summary row if it has none
+
+        Args:
+            session_data: Dictionary containing session data
+            session_id: Unique identifier for the session
+
+        Returns:
+            list: Rows in SHEET_HEADERS column order
+        """
+        # Extract session-level data
+        date = session_data.get("date", "")
+        sphere = session_data.get("sphere", "")
+        start_time = session_data.get("start_time", "")
+        end_time = session_data.get("end_time", "")
+
+        # Convert durations from seconds to minutes
+        total_duration = round(session_data.get("total_duration", 0) / 60, 2)
+        active_duration = round(session_data.get("active_duration", 0) / 60, 2)
+        break_duration = round(session_data.get("break_duration", 0) / 60, 2)
+
+        # Get session comments
+        session_comments = session_data.get("session_comments", {})
+        active_notes = escape_for_sheets(session_comments.get("active_notes", ""))
+        break_notes = escape_for_sheets(session_comments.get("break_notes", ""))
+        idle_notes = escape_for_sheets(session_comments.get("idle_notes", ""))
+        session_notes = escape_for_sheets(session_comments.get("session_notes", ""))
+
+        # Process active periods, breaks, and idle periods
+        active_periods = session_data.get("active", [])
+        breaks = session_data.get("breaks", [])
+        idle_periods = session_data.get("idle_periods", [])
+
+        # Prepare all rows to upload
+        rows = []
+
+        # Process active periods
+        if active_periods:
+            for active in active_periods:
+                # Extract primary and secondary project information
+                primary_project = ""
+                primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = active.get("duration", 0)
+                secondary_project = ""
+                secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
+
+                if active.get("project"):
+                    # Single project case
+                    primary_project = escape_for_sheets(active.get("project", ""))
+                    primary_comment = escape_for_sheets(active.get("comment", ""))
+                else:
+                    # Multiple projects case
+                    for project_item in active.get("projects", []):
+                        if project_item.get("project_primary", True):
+                            primary_project = escape_for_sheets(
+                                project_item.get("name", "")
+                            )
+                            primary_comment = escape_for_sheets(
+                                project_item.get("comment", "")
+                            )
+                            primary_percentage = project_item.get("percentage", 100)
+                            primary_period_duration = project_item.get(
+                                "duration", 0
+                            )
+                        else:
+                            secondary_project = escape_for_sheets(
+                                project_item.get("name", "")
+                            )
+                            secondary_comment = escape_for_sheets(
+                                project_item.get("comment", "")
+                            )
+                            secondary_percentage = project_item.get(
+                                "percentage", ""
+                            )
+                            secondary_period_duration = project_item.get(
+                                "duration", 0
+                            )
+
+                row = [
+                    session_id,
+                    date,
+                    sphere,
+                    start_time,
+                    end_time,
+                    total_duration,
+                    active_duration,
+                    break_duration,
+                    "active",
+                    primary_project,
+                    primary_percentage,
+                    round(primary_period_duration / 60, 2),
+                    primary_comment,
+                    secondary_project,
+                    secondary_percentage,
+                    (
+                        round(secondary_period_duration / 60, 2)
+                        if secondary_period_duration != ""
+                        else ""
+                    ),
+                    secondary_comment,
+                    active.get("start", ""),
+                    active.get("end", ""),
+                    active_notes,
+                    break_notes,
+                    idle_notes,
+                    session_notes,
+                ]
+                rows.append(row)
+
+        # Process breaks
+        if breaks:
+            for brk in breaks:
+                # Extract primary and secondary action information
+                primary_action = ""
+                primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = brk.get("duration", 0)
+                secondary_action = ""
+                secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
+
+                if brk.get("action"):
+                    # Single action case
+                    primary_action = escape_for_sheets(brk.get("action", ""))
+                    primary_comment = escape_for_sheets(brk.get("comment", ""))
+                else:
+                    # Multiple actions case
+                    for action_item in brk.get("actions", []):
+                        if action_item.get("break_primary", True):
+                            primary_action = escape_for_sheets(
+                                action_item.get("name", "")
+                            )
+                            primary_comment = escape_for_sheets(
+                                action_item.get("comment", "")
+                            )
+                            primary_percentage = action_item.get("percentage", 100)
+                            primary_period_duration = action_item.get("duration", 0)
+                        else:
+                            secondary_action = escape_for_sheets(
+                                action_item.get("name", "")
+                            )
+                            secondary_comment = escape_for_sheets(
+                                action_item.get("comment", "")
+                            )
+                            secondary_percentage = action_item.get("percentage", "")
+                            secondary_period_duration = action_item.get(
+                                "duration", 0
+                            )
+
+                row = [
+                    session_id,
+                    date,
+                    sphere,
+                    start_time,
+                    end_time,
+                    total_duration,
+                    active_duration,
+                    break_duration,
+                    "break",
+                    primary_action,
+                    primary_percentage,
+                    round(primary_period_duration / 60, 2),
+                    primary_comment,
+                    secondary_action,
+                    secondary_percentage,
+                    (
+                        round(secondary_period_duration / 60, 2)
+                        if secondary_period_duration != ""
+                        else ""
+                    ),
+                    secondary_comment,
+                    brk.get("start", ""),
+                    "",  # activity_end
+                    active_notes,
+                    break_notes,
+                    idle_notes,
+                    session_notes,
+                ]
+                rows.append(row)
+
+        # Process idle periods
+        if idle_periods:
+            for idle in idle_periods:
+                # Extract primary and secondary action information
+                primary_action = ""
+                primary_comment = ""
+                primary_percentage = 100
+                primary_period_duration = idle.get("duration", 0)
+                secondary_action = ""
+                secondary_comment = ""
+                secondary_percentage = ""
+                secondary_period_duration = ""
+
+                if idle.get("action"):
+                    # Single action case
+                    primary_action = escape_for_sheets(idle.get("action", ""))
+                    primary_comment = escape_for_sheets(idle.get("comment", ""))
+                else:
+                    # Multiple actions case
+                    for action_item in idle.get("actions", []):
+                        if action_item.get("idle_primary", True):
+                            primary_action = escape_for_sheets(
+                                action_item.get("name", "")
+                            )
+                            primary_comment = escape_for_sheets(
+                                action_item.get("comment", "")
+                            )
+                            primary_percentage = action_item.get("percentage", 100)
+                            primary_period_duration = action_item.get("duration", 0)
+                        else:
+                            secondary_action = escape_for_sheets(
+                                action_item.get("name", "")
+                            )
+                            secondary_comment = escape_for_sheets(
+                                action_item.get("comment", "")
+                            )
+                            secondary_percentage = action_item.get("percentage", "")
+                            secondary_period_duration = action_item.get("duration", 0)
+
+                row = [
+                    session_id,
+                    date,
+                    sphere,
+                    start_time,
+                    end_time,
+                    total_duration,
+                    active_duration,
+                    break_duration,
+                    "idle",
+                    primary_action,
+                    primary_percentage,
+                    round(primary_period_duration / 60, 2),
+                    primary_comment,
+                    secondary_action,
+                    secondary_percentage,
+                    (
+                        round(secondary_period_duration / 60, 2)
+                        if secondary_period_duration != ""
+                        else ""
+                    ),
+                    secondary_comment,
+                    idle.get("start", ""),
+                    idle.get("end", ""),
+                    active_notes,
+                    break_notes,
+                    idle_notes,
+                    session_notes,
+                ]
+                rows.append(row)
+
+        # If no active periods, breaks, or idle, create summary row
+        if not active_periods and not breaks and not idle_periods:
+            row = [
+                session_id,
+                date,
+                sphere,
+                start_time,
+                end_time,
+                total_duration,
+                active_duration,
+                break_duration,
+                "session_summary",
+                "",  # primary_action
+                "",  # primary_percentage
+                "",  # primary_duration
+                "",  # primary_comment
+                "",  # secondary_action
+                "",  # secondary_percentage
+                "",  # secondary_duration
+                "",  # secondary_comment
+                "",  # activity_start
+                "",  # activity_end
+                active_notes,
+                break_notes,
+                idle_notes,
+                session_notes,
+            ]
+            rows.append(row)
+
+        return rows
+
+    def _delete_session_rows(self, session_ids):
+        """
+        Delete every sheet row whose Session ID (column A) is in session_ids
+
+        Args:
+            session_ids: Set of session IDs whose rows should be removed
+        """
+        spreadsheet_id = self.get_spreadsheet_id()
+        result = (
+            self.service.spreadsheets()
+            .values()
+            .get(spreadsheetId=spreadsheet_id, range=f"{self.get_sheet_name()}!A:A")
+            .execute()
+        )
+
+        # Index 0 is the header row; empty rows come back as []
+        matching_rows = [
+            index
+            for index, row in enumerate(result.get("values", []))
+            if index > 0 and row and row[0] in session_ids
+        ]
+        if not matching_rows:
+            return
+
+        sheet_id = self._get_sheet_id()
+        requests = [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "dimension": "ROWS",
+                        "startIndex": start,
+                        "endIndex": end,
+                    }
+                }
+            }
+            for start, end in _row_ranges_bottom_up(matching_rows)
+        ]
+        self.service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id, body={"requests": requests}
+        ).execute()
+
+    def _get_sheet_id(self):
+        """
+        Get the numeric ID of the configured sheet (row deletion needs it)
+
+        Returns:
+            int: The sheet's ID
+
+        Raises:
+            ValueError: If the spreadsheet has no sheet with the configured name
+        """
+        sheet_name = self.get_sheet_name()
+        metadata = (
+            self.service.spreadsheets()
+            .get(
+                spreadsheetId=self.get_spreadsheet_id(),
+                fields="sheets.properties(sheetId,title)",
+            )
+            .execute()
+        )
+        for sheet in metadata.get("sheets", []):
+            properties = sheet.get("properties", {})
+            if properties.get("title") == sheet_name:
+                return properties["sheetId"]
+        raise ValueError(f"Sheet '{sheet_name}' not found in the spreadsheet")
+
+    def sync_sessions(self, all_data, upload_log_file, skip_session_ids=()):
+        """
+        Upload every session whose sheet rows are missing or out of date
+
+        The upload log maps each uploaded session to a fingerprint of the rows
+        sent, for one spreadsheet and tab. Sessions never uploaded, changed
+        since, whose upload failed, or logged for another destination don't
+        match and are uploaded (replacing their old rows) on this sync.
+        Sessions without an end (a session still being written, or one cut
+        off by a crash) are left out until they have one. Automatic syncs
+        never open the browser sign-in; see sign_in_needed and offline.
+
+        Args:
+            all_data: Dictionary mapping session ID to session data
+            upload_log_file: Path of the upload log (JSON)
+            skip_session_ids: Sessions to leave out, e.g. one still in progress
+
+        Returns:
+            int | None: Number of sessions uploaded (0 if none were due), or
+                None if the upload failed; they stay due for the next sync.
+        """
+        if not self.is_enabled():
+            return 0
+
+        destination = f"{self.get_spreadsheet_id()}/{self.get_sheet_name()}"
+        upload_log = _load_upload_log(upload_log_file, destination)
+        due_sessions = {}
+        fingerprints = {}
+        for session_id, session_data in all_data.items():
+            if (
+                session_id in skip_session_ids
+                or not isinstance(session_data, dict)
+                or "end_timestamp" not in session_data
+            ):
+                continue
+            rows = self._build_session_rows(session_data, session_id)
+            fingerprint = _rows_fingerprint(rows)
+            if upload_log.get(session_id) != fingerprint:
+                due_sessions[session_id] = session_data
+                fingerprints[session_id] = fingerprint
+
+        if not due_sessions:
+            return 0
+        if not self.upload_sessions(due_sessions, interactive=False):
+            return None
+
+        # Forget deleted sessions, then record what was just uploaded
+        upload_log = {
+            session_id: fingerprint
+            for session_id, fingerprint in upload_log.items()
+            if session_id in all_data
+        }
+        upload_log.update(fingerprints)
+        try:
+            write_json_atomically(
+                upload_log_file, {"destination": destination, "sessions": upload_log}
+            )
+        except OSError:
+            # The rows are in the sheet; without the log they are simply sent
+            # again next sync, replacing themselves rather than duplicating.
+            pass
+        return len(due_sessions)
 
     def test_connection(self):
         """
