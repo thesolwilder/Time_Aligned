@@ -1,10 +1,10 @@
 # Development Guide - Time Aligned
 
-**⚠️ CRITICAL: AI AGENTS MUST FOLLOW THESE DIRECTIVES**
+**CRITICAL: AI AGENTS MUST FOLLOW THESE DIRECTIVES**
 
-## 🧠 DECISION LOG
+## DECISION LOG
 
-### ⚠️ DIRECTIVE 1: READ BEFORE ANY ACTION
+### DIRECTIVE 1: READ BEFORE ANY ACTION
 
 **BEFORE making ANY code changes**, you MUST read [DECISION_LOG.md](DECISION_LOG.md) to:
 
@@ -13,7 +13,7 @@
 - Avoid repeating failed approaches
 - Learn from past successful patterns
 
-**🔍 CRITICAL: Search for Related Entries**
+**CRITICAL: Search for Related Entries**
 
 When working on a specific task (bug fix, feature, or test), you MUST:
 
@@ -39,7 +39,7 @@ When working on a specific task (bug fix, feature, or test), you MUST:
 
 **Why this matters**: DECISION_LOG.md contains solutions to problems you WILL encounter. Not searching it wastes time repeating failed approaches.
 
-### ⚠️ DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
+### DIRECTIVE 2: UPDATE AFTER EVERY CHANGE
 
 **AFTER completing ANY code changes**, you MUST update [DECISION_LOG.md](DECISION_LOG.md) with:
 
@@ -122,11 +122,11 @@ def test_function_name_expected_behavior():
 - Full data export workflow
 - Settings changes affecting behavior
 
-## � FORBIDDEN PATTERNS — NEVER USE THESE IN TKINTER TESTS
+## FORBIDDEN PATTERNS: NEVER USE THESE IN TKINTER TESTS
 
 **Search keywords: forbidden pattern, addCleanup root destroy, Tcl_AsyncDelete, TclError init.tcl, wrong thread**
 
-| ❌ FORBIDDEN                                 | ✅ REQUIRED REPLACEMENT                              |
+| FORBIDDEN                                    | REQUIRED REPLACEMENT                                 |
 | -------------------------------------------- | ---------------------------------------------------- |
 | `self.addCleanup(self.root.destroy)`         | `tearDown()` with `safe_teardown_tk_root(self.root)` |
 | `self.root.destroy()` called directly        | `safe_teardown_tk_root(self.root)` in `tearDown()`   |
@@ -143,12 +143,12 @@ def test_function_name_expected_behavior():
 
 ---
 
-> ⚠️ **AGENT ENVIRONMENT TCLERROR — DO NOT TRY TO FIX THIS**
+> **AGENT ENVIRONMENT TCLERROR: DO NOT TRY TO FIX THIS**
 >
 > **Search keywords: TclError agent env, tcl_findLibrary, pytest suite TclError, agent tcl error, TclError invalid command, pytest TclError fail**
 >
 > When running Tkinter tests via **pytest** in the agent/CI environment with many test
-> classes, you may see 1–2 tests FAIL with:
+> classes, you may see 1-2 tests FAIL with:
 >
 > ```
 > TclError: invalid command name "tcl_findLibrary"
@@ -160,13 +160,13 @@ def test_function_name_expected_behavior():
 >
 > **DO NOT:**
 >
-> - ❌ Modify the teardown pattern — it is already correct with `safe_teardown_tk_root`
-> - ❌ Switch to `setUpClass`/`tearDownClass` — tried and abandoned, makes things worse
-> - ❌ Add `addCleanup` patterns — FORBIDDEN (see above)
-> - ❌ Treat it as a real test failure requiring code fixes
-> - ❌ Waste time "debugging" it
+> - Modify the teardown pattern (it is already correct with `safe_teardown_tk_root`)
+> - Switch to `setUpClass`/`tearDownClass` (tried and abandoned, makes things worse)
+> - Add `addCleanup` patterns: FORBIDDEN (see above)
+> - Treat it as a real test failure requiring code fixes
+> - Waste time "debugging" it
 >
-> **CORRECT VERIFICATION — always use one of these two methods:**
+> **CORRECT VERIFICATION. Always use one of these two methods:**
 >
 > ```bash
 > # Option 1: Run file as a script (most reliable):
@@ -177,13 +177,13 @@ def test_function_name_expected_behavior():
 > ```
 >
 > User confirmed: running as a script gives `OK` for all tests even when pytest shows failures.
-> The user does not want to be reminded of this again — **check the script output first**.
+> The user does not want to be reminded of this again; **check the script output first**.
 
 ---
 
-## �📋 TDD Test Template (USE THIS FOR ALL NEW TESTS)
+## TDD Test Template (USE THIS FOR ALL NEW TESTS)
 
-**⚠️ CRITICAL: Use this exact template when creating new Tkinter UI tests**
+**CRITICAL: Use this exact template when creating new Tkinter UI tests**
 
 Search keywords: **TDD template, test template, tkinter test, setUp tearDown**
 
@@ -216,7 +216,7 @@ class TestYourFeature(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+        # DO NOT USE: self.addCleanup(self.root.destroy)
 
         # Create test settings/data files
         settings = TestDataGenerator.create_settings_data()
@@ -253,17 +253,17 @@ if __name__ == "__main__":
 
 **Key Points**:
 
-- ✅ Import `safe_teardown_tk_root` in `tearDown()` method
-- ✅ Use `TestFileManager` for test file cleanup (via `addCleanup`)
-- ✅ Use `TestDataGenerator` for creating test data
-- ✅ **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
-- ✅ Always call `safe_teardown_tk_root(self.root)` in tearDown
-- ✅ Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
-- ✅ **NEVER** use hardcoded dates without setting `selected_card = 2` (see Date Handling section below)
+- Import `safe_teardown_tk_root` in `tearDown()` method
+- Use `TestFileManager` for test file cleanup (via `addCleanup`)
+- Use `TestDataGenerator` for creating test data
+- **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
+- Always call `safe_teardown_tk_root(self.root)` in tearDown
+- Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
+- **NEVER** use hardcoded dates without setting `selected_card = 2` (see Date Handling section below)
 
-## 📅 Date Handling in Tests
+## Date Handling in Tests
 
-**⚠️ CRITICAL: Hardcoded dates cause test failures over time**
+**CRITICAL: Hardcoded dates cause test failures over time**
 
 ### The Problem
 
@@ -320,7 +320,7 @@ frame.update_timeline()
 
 ### Common Pitfalls
 
-❌ **DON'T**: Use hardcoded dates without setting `selected_card`
+**DON'T**: Use hardcoded dates without setting `selected_card`
 
 ```python
 date = "2026-01-22"  # Will fail after 2026-01-29 (8 days later)
@@ -328,7 +328,7 @@ date = "2026-01-22"  # Will fail after 2026-01-29 (8 days later)
 frame.update_timeline()  # FAILS: No data visible!
 ```
 
-✅ **DO**: Set `selected_card = 2` for hardcoded dates
+**DO**: Set `selected_card = 2` for hardcoded dates
 
 ```python
 date = "2026-01-22"  # Specific date for test consistency
@@ -336,7 +336,7 @@ frame.selected_card = 2  # All Time - ensures always visible
 frame.update_timeline()  # WORKS: Data visible regardless of test run date
 ```
 
-✅ **DO**: Use `datetime.now()` for dynamic tests
+**DO**: Use `datetime.now()` for dynamic tests
 
 ```python
 today = datetime.now().strftime("%Y-%m-%d")  # Always current
@@ -382,7 +382,7 @@ tests/
 
 ### Running Tests
 
-**⚠️ CRITICAL: Run tests ONCE with all needed output to avoid multiple executions**
+**CRITICAL: Run tests ONCE with all needed output to avoid multiple executions**
 
 When running tests, capture comprehensive output in a single execution:
 
@@ -410,10 +410,10 @@ python -W ignore -m coverage run tests/run_all_tests.py; python -m coverage repo
 
 **Why Run Only Relevant Tests?**
 
-- ✅ Faster feedback during development
-- ✅ Focus on what you're changing
-- ✅ Reduces context switching
-- ✅ Full suite reserved for pre-commit validation
+- Faster feedback during development
+- Focus on what you're changing
+- Reduces context switching
+- Full suite reserved for pre-commit validation
 
 ### Adding a New Feature
 
@@ -472,10 +472,10 @@ python -W ignore::DeprecationWarning -W ignore::ResourceWarning -m coverage run 
 
 **Why use run_all_tests.py instead of unittest directly?**
 
-- ✅ Properly discovers all test files in the tests directory
-- ✅ Handles test dependencies and imports correctly
-- ✅ Provides formatted test summary output
-- ❌ Running `unittest` directly can cause import and path errors
+- Properly discovers all test files in the tests directory
+- Handles test dependencies and imports correctly
+- Provides formatted test summary output
+- Running `unittest` directly can cause import and path errors
 
 **Output**: You'll see test progress followed by a summary and coverage report.
 
@@ -534,10 +534,10 @@ python -W ignore::DeprecationWarning -W ignore::ResourceWarning -m coverage run 
 
 When following TDD, the "red" phase should produce a **test failure**, not a test **error**:
 
-- ✅ **FAILURE (F)**: Test runs but assertion fails - THIS IS CORRECT
+- **FAILURE (F)**: Test runs but assertion fails - THIS IS CORRECT
   - Example: `AssertionError: Expected 5 but got None`
   - Means: Test logic is valid, implementation is missing/incomplete
-- ❌ **ERROR (E)**: Test crashes with exception - THIS IS WRONG
+- **ERROR (E)**: Test crashes with exception - THIS IS WRONG
   - Example: `ImportError`, `AttributeError`, `NameError`
   - Means: Test has bugs or references non-existent code
   - **Fix the test first** before implementing the feature
@@ -552,12 +552,12 @@ When following TDD, the "red" phase should produce a **test failure**, not a tes
 4. **Run relevant test file** - `python tests/test_<module>.py` - Should now show PASS (.)
 5. **Refactor** - Improve while keeping tests green
 
-**⚠️ CRITICAL: Test Naming Convention**
+**CRITICAL: Test Naming Convention**
 
 **DO NOT** use "TDD RED PHASE" or similar labels in test names/docstrings:
 
-- ❌ **WRONG**: `"""TDD RED PHASE TEST: Verify session notes appear in UI"""`
-- ✅ **CORRECT**: `"""Verify session notes appear in UI"""`
+- **WRONG**: `"""TDD RED PHASE TEST: Verify session notes appear in UI"""`
+- **CORRECT**: `"""Verify session notes appear in UI"""`
 
 **Why**: Once the test passes, the "RED PHASE" label becomes misleading and causes confusion. The test name should describe WHAT it tests, not WHEN it was written.
 
@@ -578,7 +578,7 @@ def test_session_notes_displays_in_correct_column():
 
 **Solution**: Create minimal scaffolding (empty functions, basic classes) so tests can run and fail properly.
 
-### Do's ✅
+### Do's
 
 - Write tests BEFORE implementation (TDD)
 - Ensure red phase shows FAIL (F), not ERROR (E)
@@ -590,7 +590,7 @@ def test_session_notes_displays_in_correct_column():
 - Test edge cases and error conditions
 - Keep tests independent (no shared state)
 
-### Don'ts ❌
+### Don'ts
 
 - Don't test implementation details
 - Don't write tests after the fact (TDD violation)
@@ -648,11 +648,11 @@ widget.get.return_value = "test value"
 
 ### Testing Tkinter UI Components
 
-**⚠️ CRITICAL: Known Tkinter Testing Limitations**
+**CRITICAL: Known Tkinter Testing Limitations**
 
 When writing tests for Tkinter UI components, be aware of these platform and environment limitations:
 
-#### 🔴 MOST CRITICAL: Tkinter Test Teardown Pattern (ALWAYS USE THIS)
+#### MOST CRITICAL: Tkinter Test Teardown Pattern (ALWAYS USE THIS)
 
 **Search keywords**: teardown, safe_teardown_tk_root, tkinter crashes, Tcl_AsyncDelete
 
@@ -664,12 +664,12 @@ class TestMyFeature(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+        # DO NOT USE: self.addCleanup(self.root.destroy)
 
     def tearDown(self):
         """Clean up after tests"""
         from test_helpers import safe_teardown_tk_root
-        safe_teardown_tk_root(self.root)  # ✅ REQUIRED!
+        safe_teardown_tk_root(self.root)  # REQUIRED!
         self.file_manager.cleanup()
 ```
 
@@ -683,20 +683,20 @@ class TestMyFeature(unittest.TestCase):
 4. Forces garbage collection to clean up tkinter variables
 5. Suppresses all tearDown errors
 
-**❌ WRONG PATTERNS (DO NOT USE)**:
+**WRONG PATTERNS (DO NOT USE)**:
 
 ```python
-# ❌ WRONG #1: Using addCleanup
+# WRONG #1: Using addCleanup
 self.addCleanup(self.root.destroy)  # Causes crashes!
 
-# ❌ WRONG #2: Manual try/except
+# WRONG #2: Manual try/except
 def tearDown(self):
     try:
         self.root.destroy()  # Doesn't cancel callbacks!
     except:
         pass
 
-# ❌ WRONG #3: Direct destroy
+# WRONG #3: Direct destroy
 def tearDown(self):
     self.root.destroy()  # Will crash!
 ```
@@ -706,14 +706,14 @@ def tearDown(self):
 **Always specify the master parameter** when creating Tkinter variables:
 
 ```python
-# ✅ CORRECT
+# CORRECT
 self.status_filter = tk.StringVar(master=self.root, value="active")
 range_var = tk.StringVar(master=self.root, value="default")
 
 # In dialogs where dialog is a Toplevel
 name_var = tk.StringVar(master=dialog, value="")
 
-# ❌ WRONG - Attaches to global Tk singleton!
+# WRONG - Attaches to global Tk singleton!
 self.status_filter = tk.StringVar(value="active")  # Will cause crashes
 ```
 
@@ -724,13 +724,13 @@ self.status_filter = tk.StringVar(value="active")  # Will cause crashes
 **Never mix `pack()` and `grid()` in the same container**:
 
 ```python
-# ❌ WRONG - Causes TclError
+# WRONG - Causes TclError
 label = tk.Label(frame, text="Test")
 label.pack()
 button = tk.Button(frame, text="Click")
 button.grid(row=0, column=0)  # TclError: cannot use geometry manager grid
 
-# ✅ CORRECT - Use one geometry manager per container
+# CORRECT - Use one geometry manager per container
 label.pack()
 button.pack()
 ```
@@ -740,10 +740,10 @@ button.pack()
 **Use `winfo_reqwidth()` instead of `winfo_width()` in tests**:
 
 ```python
-# ❌ WRONG - Returns 1 in headless tests
+# WRONG - Returns 1 in headless tests
 actual_width = widget.winfo_width()  # Returns 1px before window is drawn
 
-# ✅ CORRECT - Returns requested width based on content
+# CORRECT - Returns requested width based on content
 actual_width = widget.winfo_reqwidth()  # Works in headless tests
 ```
 
@@ -756,11 +756,11 @@ actual_width = widget.winfo_reqwidth()  # Works in headless tests
 ```python
 # When accessing timeline row children:
 
-# ❌ WRONG - Filters out Text widgets
+# WRONG - Filters out Text widgets
 row_labels = [w for w in row.winfo_children() if isinstance(w, tk.Label)]
 comment_widget = row_labels[8]  # IndexError! Comment columns are Text widgets
 
-# ✅ CORRECT - Get all widgets and handle both types
+# CORRECT - Get all widgets and handle both types
 row_widgets = list(row.winfo_children())
 widget = row_widgets[8]
 if isinstance(widget, tk.Text):
@@ -783,7 +783,7 @@ width_chars = label.cget("width")  # Returns 20
 # Rendered dimensions (actual pixels)
 width_pixels = label.winfo_reqwidth()  # Returns pixel width based on font
 
-# ✅ Test both when alignment matters
+# Test both when alignment matters
 self.assertEqual(header.cget("width"), data.cget("width"))  # Config match
 self.assertEqual(header.winfo_reqwidth(), data.winfo_reqwidth())  # Pixel match
 ```
@@ -880,7 +880,7 @@ def test_widget_width(self):
 - **Credentials**: `.gitignore` - never commit!
 - **Test credentials**: `tests/credentials.json` and `tests/token.pickle` exist for Google Sheets integration tests but are gitignored
 
-**⚠️ IMPORTANT: Test Google Sheets Files**
+**IMPORTANT: Test Google Sheets Files**
 
 The `tests/` directory contains duplicate Google Sheets authentication files:
 

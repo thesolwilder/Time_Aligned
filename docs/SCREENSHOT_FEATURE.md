@@ -129,7 +129,7 @@ This will:
 
 ## Privacy Notes
 
-⚠️ **Important Privacy Considerations:**
+**Important Privacy Considerations:**
 
 - Screenshots capture EVERYTHING visible on your screen
 - May include sensitive information (passwords, private messages, banking, etc.)

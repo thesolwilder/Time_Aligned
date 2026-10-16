@@ -84,7 +84,7 @@ python tests/run_all_tests.py --help
 
 ## Data Accuracy Priorities
 
-### ✓ Time Recording Accuracy
+### Time Recording Accuracy
 
 All duration calculations validated to within 1 second tolerance. Tests verify:
 
@@ -92,7 +92,7 @@ All duration calculations validated to within 1 second tolerance. Tests verify:
 - Durations match elapsed time
 - Multiple periods don't overlap
 
-### ✓ Backup Saves
+### Backup Saves
 
 Backup mechanism tested to ensure:
 
@@ -100,7 +100,7 @@ Backup mechanism tested to ensure:
 - Data persists correctly
 - Sessions recoverable after crash
 
-### ✓ Analysis Filtering
+### Analysis Filtering
 
 Date range calculations verified for:
 
@@ -108,7 +108,7 @@ Date range calculations verified for:
 - Correct session inclusion/exclusion
 - Accurate aggregation of totals
 
-### ✓ Screenshot Timing
+### Screenshot Timing
 
 Screenshot timing logic validated:
 
@@ -116,7 +116,7 @@ Screenshot timing logic validated:
 - Window/process change detection
 - Settings respected (enabled/disabled)
 
-### ✓ Idle Detection
+### Idle Detection
 
 Idle tracking verified:
 
@@ -124,7 +124,7 @@ Idle tracking verified:
 - Periods recorded with start/end times
 - Multiple idle periods handled
 
-### ✓ Default Settings
+### Default Settings
 
 Settings retrieval tested:
 
@@ -216,12 +216,12 @@ When tests fail, you'll see:
 2. Import `unittest`, `tkinter`, and `test_helpers`
 3. Add `sys.path.insert` to ensure imports resolve from the project root
 4. Create TestCase class
-5. Add `setUp()` — create `tk.Tk()` root + `TestFileManager`, register `addCleanup`
-6. Add `tearDown()` — call `safe_teardown_tk_root` **then** `file_manager.cleanup()`
+5. Add `setUp()`: create `tk.Tk()` root + `TestFileManager`, register `addCleanup`
+6. Add `tearDown()`: call `safe_teardown_tk_root` **then** `file_manager.cleanup()`
 7. Write test methods (must start with `test_`)
 8. Use assertions to verify behavior
 
-> ⚠️ **Tkinter note**: Always use `safe_teardown_tk_root()` to destroy the tk root. Never use `self.addCleanup(self.root.destroy)` — it causes crashes in the test suite.
+> **Tkinter note**: Always use `safe_teardown_tk_root()` to destroy the tk root. Never use `self.addCleanup(self.root.destroy)`; it causes crashes in the test suite.
 
 Example:
 
@@ -241,7 +241,7 @@ class TestNewFeature(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+        # DO NOT USE: self.addCleanup(self.root.destroy)
 
         settings = TestDataGenerator.create_settings_data()
         self.test_settings_file = self.file_manager.create_test_file(
@@ -279,7 +279,7 @@ Tests are designed to run quickly so you can:
 Ensure you're running from the project root:
 
 ```bash
-cd c:\Users\theso\Documents\Coding_Projects\time_aligned
+cd path\to\time_aligned
 python tests/run_all_tests.py
 ```
 

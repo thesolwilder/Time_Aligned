@@ -34,7 +34,7 @@ The tray icon changes color based on your current state:
 
 Right-click the tray icon to access:
 
-- **Show/Hide Window** (also double-click) - Toggle main window visibility
+- **Show/Hide Window** (also a left-click on the icon) - Toggle main window visibility
 - **Start Session** - Quick start a new tracking session
 - **Start Break** - Begin a break (only available during active session)
 - **End Break** - End current break (only when on break)
@@ -45,19 +45,19 @@ Right-click the tray icon to access:
 
 ## Global Keyboard Shortcuts
 
-Control Time Aligned from anywhere with these hotkeys:
+The shortcuts are off by default. To turn them on, open **Settings → Global Keyboard Shortcuts** and check **Enable global keyboard shortcuts**; the change takes effect when you leave Settings. Then you can control Time Aligned from anywhere with these hotkeys:
 
 - **Ctrl+Shift+S** - Start a new session
 - **Ctrl+Shift+B** - Toggle break (start/end)
 - **Ctrl+Shift+E** - End current session
 - **Ctrl+Shift+W** - Show/hide main window
 
-_Note: These work system-wide, even when the window is hidden!_
+_Note: Once turned on, they work system-wide, even when the window is hidden. They also fire when another program uses the same keys (Ctrl+Shift+E opens the Explorer in VS Code)._
 
 ### Benefits
 
 1. **Background Operation**
-   - Minimize to tray instead of taskbar
+   - Hide the window to the tray instead of the taskbar
    - Keep tracking without visible windows
    - Reduce desktop clutter
 
@@ -71,16 +71,17 @@ _Note: These work system-wide, even when the window is hidden!_
    - Hover tooltip shows current timer
    - Always visible in notification area
 
-4. **Keyboard Power User**
-   - Control everything with hotkeys
-   - Never touch the mouse
-   - Fastest possible workflow
+4. **Keyboard Shortcuts** (once turned on)
+   - Start, break and end sessions, and show or hide the window
+   - No need to touch the mouse
 
 ## Usage Tips
 
 ### For Super Users
 
-1. **Minimize on start**: Start a session, then hide the window (`Ctrl+Shift+W`)
+These tips use the global keyboard shortcuts, so turn them on first (see above).
+
+1. **Hide on start**: Start a session, then hide the window (`Ctrl+Shift+W`)
 2. **Tray-only workflow**: Use only tray menu or hotkeys for all controls
 3. **Check status**: Hover over icon to see current time
 4. **Quick breaks**: Press `Ctrl+Shift+B` when stepping away
@@ -89,7 +90,7 @@ _Note: These work system-wide, even when the window is hidden!_
 ### Window Behavior
 
 - Closing the window (X button) still asks for confirmation if session is active
-- Use "Show/Hide Window" or `Ctrl+Shift+W` to minimize without quitting
+- Use "Show/Hide Window" or `Ctrl+Shift+W` (when shortcuts are on) to hide the window without quitting
 - Window automatically appears when:
   - Opening Settings or Analysis
   - Ending a session (to show completion frame)
@@ -100,7 +101,7 @@ _Note: These work system-wide, even when the window is hidden!_
 - Global hotkeys via `pynput.keyboard.GlobalHotKeys`
 - Runs in separate thread (non-blocking)
 - Icon updates every 100ms with timer
-- Cross-platform compatible (Windows, macOS, Linux)
+- Windows only (the app uses pywin32)
 
 ## Troubleshooting
 
@@ -122,6 +123,7 @@ _Note: These work system-wide, even when the window is hidden!_
 
 **Hotkeys don't work:**
 
+- Check that they're turned on in **Settings → Global Keyboard Shortcuts** (they're off by default)
 - Ensure pynput is installed
 - Check if another app is using the same shortcuts
 - Hotkeys work globally, even when window is hidden

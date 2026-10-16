@@ -1,6 +1,6 @@
 # GitHub Copilot Instructions
 
-**🤖 AI Agents: These are standing orders for all work on this repository.**
+**AI Agents: These are standing orders for all work on this repository.**
 
 ## Primary Directive
 
@@ -121,13 +121,13 @@ Following DEVELOPMENT.md bug fix workflow:
 5. Run full test suite (no regressions)
 6. Add edge case tests if needed
 
-**⛔ TKINTER TEST TEARDOWN — FORBIDDEN PATTERN (checked every time):**
+**TKINTER TEST TEARDOWN: FORBIDDEN PATTERN (checked every time):**
 
 ```python
-# ❌ FORBIDDEN — causes TclError in subsequent tests:
+# FORBIDDEN: causes TclError in subsequent tests:
 self.addCleanup(self.root.destroy)
 
-# ✅ REQUIRED — always use this instead:
+# REQUIRED: always use this instead:
 def tearDown(self):
     from tests.test_helpers import safe_teardown_tk_root
     safe_teardown_tk_root(self.root)
@@ -161,13 +161,13 @@ Add comprehensive tests following DEVELOPMENT.md:
 3. Integration tests for interactions
 4. E2E tests for workflows
 
-**⛔ TKINTER TEST TEARDOWN — FORBIDDEN PATTERN (checked every time):**
+**TKINTER TEST TEARDOWN: FORBIDDEN PATTERN (checked every time):**
 
 ```python
-# ❌ FORBIDDEN — causes TclError in subsequent tests:
+# FORBIDDEN: causes TclError in subsequent tests:
 self.addCleanup(self.root.destroy)
 
-# ✅ REQUIRED — always use this instead:
+# REQUIRED: always use this instead:
 def tearDown(self):
     from tests.test_helpers import safe_teardown_tk_root
     safe_teardown_tk_root(self.root)

@@ -1,25 +1,25 @@
 # About Time Aligned
 
-**Time Aligned** is a comprehensive desktop time tracker for Windows — built to help you understand where your time actually goes. Track work sessions, breaks, and idle time with automatic detection, then analyze your productivity across projects and spheres.
+**Time Aligned** is a comprehensive desktop time tracker for Windows, built to help you understand where your time actually goes. Track work sessions, breaks, and idle time with automatic detection, then analyze your productivity across projects and spheres.
 
 All data is stored locally. Google Sheets upload is opt-in. No account required.
 
 ---
 
-## ✨ Features
+## Features
 
 ### Core Tracking
 
 - Start, pause, and end work sessions with a single click
 - Separate break and idle time from active work
-- Auto idle detection — configurable threshold, optional auto-break
+- Auto idle detection: configurable threshold, optional auto-break
 - Tag any period with a secondary project and time split for more accurate records
-- Editable history — go back and update past sessions at any time
+- Editable history: go back and update past sessions at any time
 - Note taking on individual periods and overall sessions
 
 ### Headless Operation
 
-- Global hotkeys (`Ctrl+Shift+S` / `B` / `E` / `W`) — run fully in the background from the system tray
+- Global hotkeys (`Ctrl+Shift+S` / `B` / `E` / `W`): run fully in the background from the system tray. Off by default; turn them on in Settings → Global Keyboard Shortcuts
 - Tray icon changes colour with your current state (active / break / idle)
 
 ### Analysis
@@ -31,29 +31,29 @@ All data is stored locally. Google Sheets upload is opt-in. No account required.
 
 ### Integrations
 
-- **Google Sheets** — sessions auto-upload on save (opt-in, OAuth 2.0)
-- **Screenshot capture** — captures on focus change or at timed intervals (opt-in)
-- **Auto backup** — continuous saves during a session; timestamped backup created on deletion
+- **Google Sheets**: sessions upload when you save or skip them; saving a session again replaces its rows, and missed uploads are retried (opt-in, OAuth 2.0)
+- **Screenshot capture**: captures on focus change or at timed intervals, only during a session (opt-in)
+- **Auto backup**: continuous, crash-safe saves during a session; a daily backup (the 14 most recent are kept); a timestamped copy before a session is deleted
 
 ### Security
 
-- All sphere, project, and action names are sanitized to strip dangerous characters
-- Folder paths validated to block directory traversal attempts
-- Data escaped before Google Sheets upload to prevent formula injection
-- Credential and settings files are gitignored and never committed
+- Sphere, project and break action names added in Settings are sanitized to strip dangerous characters
+- The credentials file path is checked for directory traversal before use
+- Project and action names, comments and notes are escaped before Google Sheets upload to prevent formula injection
+- Credential and settings files are gitignored
 
 ---
 
-## 🚀 Installation
+## Installation
 
-1. Download `TimeAligned-vX.Y.Z.zip` from the [latest release](https://github.com/thesolwilder/Time_Aligned-/releases/latest)
-2. Extract the folder anywhere — e.g. `C:\Program Files\TimeAligned`
+1. Download `TimeAligned-vX.Y.Z.zip` from the [latest release](https://github.com/thesolwilder/Time_Aligned/releases/latest)
+2. Extract it into a folder you can write to, such as `Documents`; this creates `Documents\TimeAligned`. Not `C:\Program Files`: the app keeps its data next to `TimeAligned.exe`
 3. Run **TimeAligned.exe**
-4. No installer needed — fully portable
+4. No installer needed, fully portable
 
 ---
 
-### ⚠️ Chrome Download Warning
+### Chrome Download Warning
 
 Chrome's Enhanced Safe Browsing blocks unsigned executables and may cancel the download entirely. To fix this temporarily:
 
@@ -63,30 +63,30 @@ Chrome's Enhanced Safe Browsing blocks unsigned executables and may cancel the d
 4. When Chrome warns you, click the **downloads arrow** → **flag icon** → **Keep anyway**
 5. After downloading, you can switch back to **Enhanced protection** in the same settings page
 
-> **Alternatively**, use **Microsoft Edge** — it handles GitHub release zips without blocking the download.
+> **Alternatively**, use **Microsoft Edge**. It handles GitHub release zips without blocking the download.
 
 ---
 
-### ⚠️ Windows SmartScreen Warning
+### Windows SmartScreen Warning
 
 On first run Windows may show _"Windows protected your PC"_:
 
 1. Click **More info**
 2. Click **Run anyway**
 
-This appears because the exe is not yet code-signed. The app contains no malware —
-you can verify by scanning the zip at [VirusTotal](https://www.virustotal.com) before running.
+This appears because the exe is not yet code-signed. The app contains no malware.
+You can verify by scanning the zip at [VirusTotal](https://www.virustotal.com) before running.
 
 ---
 
-## 📋 System Requirements
+## System Requirements
 
-- Windows 10 or later
-- No Python installation needed — everything is bundled in the zip
+- 64-bit Windows 10 or later
+- No Python installation needed; everything is bundled in the zip
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 | Guide                                         | Description                                   |
 | --------------------------------------------- | --------------------------------------------- |
@@ -97,10 +97,10 @@ you can verify by scanning the zip at [VirusTotal](https://www.virustotal.com) b
 
 ---
 
-## 📄 License
+## License
 
-[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/) — Free for personal, non-commercial use.
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/): Free for personal, non-commercial use.
 
-- ✅ Free to use for personal purposes
-- ✅ Free to modify and share with attribution
-- ❌ Commercial use requires explicit written permission
+- Free to use for personal purposes
+- Free to modify and share with attribution
+- Commercial use requires explicit written permission

@@ -24,7 +24,7 @@ python scaffold_project.py .
 
 ## What It Creates
 
-### 📁 Directory Structure
+### Directory Structure
 
 ```
 your-project/
@@ -43,7 +43,7 @@ your-project/
 └── [language-specific configs]    # pytest.ini, vitest.config, etc.
 ```
 
-### 📝 Files Created
+### Files Created
 
 1. **DEVELOPMENT.md** - Comprehensive development guide
    - TDD workflow (import → unit → integration → E2E)
@@ -108,11 +108,11 @@ python scaffold_project.py ../simple-js-tool --language javascript --no-tdd
 
 ### Immediate Benefits
 
-1. ✅ **Standardized TDD workflow** across all projects
-2. ✅ **AI agents automatically follow your standards** (no reminders needed)
-3. ✅ **Slash commands** for common tasks (/dev-feature, /dev-bug)
-4. ✅ **Consistent project structure**
-5. ✅ **Testing setup pre-configured**
+1. **Standardized TDD workflow** across all projects
+2. **AI agents automatically follow your standards** (no reminders needed)
+3. **Slash commands** for common tasks (/dev-feature, /dev-bug)
+4. **Consistent project structure**
+5. **Testing setup pre-configured**
 
 ### Using Shortcuts in New Projects
 
@@ -254,12 +254,12 @@ cd my-new-project
 
 | Method                       | Setup Time | Ease of Use | Customization | Sharing               |
 | ---------------------------- | ---------- | ----------- | ------------- | --------------------- |
-| **Python Script** (provided) | ⚡ Instant | ⭐⭐⭐⭐⭐  | ⭐⭐⭐⭐⭐    | Share script          |
-| **GitHub Template**          | ⏱️ 10 min  | ⭐⭐⭐⭐⭐  | ⭐⭐⭐        | Built-in              |
-| **Cookiecutter**             | ⏱️ 30 min  | ⭐⭐⭐⭐    | ⭐⭐⭐⭐⭐    | Community             |
-| **Shell Script**             | ⏱️ 20 min  | ⭐⭐⭐⭐    | ⭐⭐⭐⭐      | Share script          |
-| **VS Code Extension**        | ⏱️ 2 hours | ⭐⭐⭐⭐⭐  | ⭐⭐⭐        | Extension marketplace |
-| **Degit**                    | ⏱️ 5 min   | ⭐⭐⭐⭐⭐  | ⭐⭐⭐        | GitHub                |
+| **Python Script** (provided) | Instant    | 5/5         | 5/5           | Share script          |
+| **GitHub Template**          | 10 min     | 5/5         | 3/5           | Built-in              |
+| **Cookiecutter**             | 30 min     | 4/5         | 5/5           | Community             |
+| **Shell Script**             | 20 min     | 4/5         | 4/5           | Share script          |
+| **VS Code Extension**        | 2 hours    | 5/5         | 3/5           | Extension marketplace |
+| **Degit**                    | 5 min      | 5/5         | 3/5           | GitHub                |
 
 ---
 
@@ -386,7 +386,7 @@ Store script in Dropbox/OneDrive/Google Drive, symlink to PATH
 2. **Test shortcuts:**
    - Open Copilot Chat (Ctrl+I)
    - Type `/dev-feature` and press Tab
-   - See the magic! ✨
+   - See the magic!
 
 3. **Customize templates** in `scaffold_project.py` to match your preferences
 
@@ -413,4 +413,4 @@ A: Create multiple template configs or add CLI flags for variations.
 
 ---
 
-**Happy scaffolding! 🚀**
+**Happy scaffolding!**

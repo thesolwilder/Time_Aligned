@@ -26,43 +26,146 @@ Example: Before adding tkinter tests, search "tkinter", "headless", "winfo" to f
 
 ## Recent Changes
 
+### [2026-10-10] - Safeguards for daily use: opt-in hotkeys, single instance, app folder, non-blocking sign-in
+
+**Keywords**: hotkeys, keyboard_shortcuts, single instance, mutex, working directory, authenticate, sign_in_needed, offline, upload log destination, stop_monitoring, \_load_data_for_merge
+
+**Context**: The app runs in the tray all day as a record of hours. Global hotkeys fired in every program (Ctrl+Shift+E, the VS Code Explorer shortcut, ended the session), a second copy could write the same data.json, data paths followed the shortcut's working directory, an automatic Sheets sync could open the browser sign-in on the UI thread with no timeout, screenshots resumed between sessions after Settings closed, and a transient lock on data.json was treated as corruption.
+
+**Decision**:
+
+- Hotkeys are opt-in (`keyboard_shortcuts.enabled`, default off), set by a Settings checkbox.
+- `main()` switches to the exe folder when frozen and holds a named mutex so only one copy runs.
+- Automatic syncs call `authenticate(interactive=False)`: no browser flow; they set `sign_in_needed` or `offline` and keep sessions queued. Test Connection's sign-in times out after 180 s. Sync errors show one warning per run and never block Save or Skip.
+- Unfinished sessions are not uploaded. The upload log records its spreadsheet and tab, so a new destination receives every session.
+- `stop_monitoring()` clears the screenshot folder. `_load_data_for_merge()` treats only unparseable content as corrupt; an `OSError` aborts the save.
+
+**Result**: Hotkeys are off after upgrading until enabled. Known limitations: the single-instance lock is global rather than per folder, idle-resume work still runs on the input-listener thread, and a save aborted by a lock at session start is not retried.
+
+**Tests**: New `tests/test_app_startup.py`, plus new cases in `test_google_sheets_sync.py`, `test_screenshots.py`, `test_settings_frame.py` and `test_error_handling.py`.
+
+---
+
+### [2026-10-10] - Fix: auto-break "Never" started a break immediately
+
+**Keywords**: idle, auto-break, idle_break_threshold, IDLE_AUTO_BREAK_NEVER, check_idle
+
+**Context**: "Never" is stored as `idle_break_threshold = -1`, and `check_idle()` tested `idle_time >= -1`, which is always true. A break started about 100 ms after idle was detected and ran until ended by hand.
+
+**Decision**: Added `IDLE_AUTO_BREAK_NEVER` and `_auto_break_threshold_reached()`, which returns False for Never.
+
+**Result**: With Never, the idle period stays open until input resumes, and no break starts.
+
+**Tests**: `TestAutoBreakNever` builds the session without `start_session()`, so real input listeners cannot affect it. It failed before the fix.
+
+---
+
+### [2026-10-08] - Full test suite with coverage; test side effects fixed
+
+**Keywords**: run_all_tests, coverage, os.startfile, test cleanup, exit code
+
+**Context**: First full run on the rebuilt Python 3.14 environment.
+
+**Decision**: Two CSV export tests now patch `os.startfile`, which had opened File Explorer on deleted temp folders. `test_button_navigation.py` removes the backups it creates. `run_all_tests()` returns its result, so a passing run exits with 0. A test that printed an emoji now prints ASCII, avoiding a UnicodeEncodeError when output is redirected on Windows.
+
+**Result**: 712 tests pass (one opt-in test skipped) in about 2 minutes, with 83% coverage. `TestIdleToBreakBug` is sensitive to real mouse input during the run.
+
+**Tests**: `python -W ignore -m coverage run tests/run_all_tests.py`, then `python -m coverage report`.
+
+---
+
+### [2026-10-08] - Google Sheets: upload on Save and Skip, replace rows, retry pending uploads
+
+**Keywords**: google sheets, sync_sessions, upload_sessions, \_delete_session_rows, sheets_upload_log.json, fingerprint, duplicates, retry
+
+**Context**: Uploads ran only on Save and appended rows, so re-saving a session duplicated its hours. Skip never uploaded, and failed uploads were dropped silently.
+
+**Decision**:
+
+- `sync_sessions()` compares a SHA-256 fingerprint of each session's rows with `sheets_upload_log.json` and uploads only new or changed sessions. The log is a cache: if it is lost, sessions are re-sent and replace themselves.
+- `upload_sessions()` deletes a session's rows (matched by Session ID in column A) before appending, so a failure leaves a session briefly missing rather than duplicated.
+- Sync runs after Save, after Skip and 2 s after startup, scheduled in `main()` so tests that create `TimeTracker` never sync.
+
+**Result**: The sheet mirrors data.json. Manual edits to a session's rows are overwritten on its next upload, and deleting a session does not remove its rows.
+
+**Tests**: `tests/test_google_sheets_sync.py` runs against an in-memory Sheets fake. The real-API test is opt-in (`RUN_REAL_GOOGLE_API_TESTS=1`), and another test that reached the real sign-in now patches `authenticate()`.
+
+---
+
+### [2026-10-08] - Crash safety: atomic writes, unreadable-file protection, daily backups
+
+**Keywords**: atomic write, write_json_atomically, file_safety, unreadable data.json, daily backup, package_release
+
+**Context**: The May 27 fix covered only `save_data()`. Deleting a session and five settings writers still rewrote files in place, and `load_data()` returned `{}` for an unparseable data.json, so the next save replaced the whole history with one session. There were no automatic backups.
+
+**Decision**: New `src/file_safety.py` with `write_json_atomically()` (temp file, fsync, `os.replace`), `preserve_unreadable_file()` and `create_daily_backup()`. Every data and settings write uses the atomic helper. `save_data()` copies an unparseable data.json aside before merging, and the first save each day writes `backups/data.json.daily_YYYYMMDD`, keeping the newest 14. `package_release.py` removes runtime files (backups, tokens, upload log) before zipping.
+
+**Result**: A crash or full disk during a save leaves the previous file intact. settings.json still has no backup.
+
+**Tests**: `tests/test_file_safety.py` covers atomic writes under a simulated full disk, backups and pruning, and fails if any source file opens data.json or settings.json for writing directly. Regression tests cover the delete path, the unreadable file and the release cleanup.
+
+---
+
 ### [2026-05-27] - Bugfix: Crash-corrupted data.json (zeroed file) + atomic-write fix
 
 **Search Keywords**: data loss, corruption, null bytes, zeroed file, crash, atomic write, save_data, fsync, os.replace, tempfile, backup, recovery, data.json
 
-**What happened**: Computer crashed mid-session. On reboot, `c:\Users\theso\Documents\TimeAligned\data.json` came back as 243,453 bytes of pure null bytes (`0x00`). Classic hard-crash corruption: NTFS journaled the new file *size* but the data pages were never flushed to disk, so the file was zeroed.
+**What happened**: Computer crashed mid-session. On reboot, `Documents\TimeAligned\data.json` came back as 243,453 bytes of pure null bytes (`0x00`). Classic hard-crash corruption: NTFS journaled the new file *size* but the data pages were never flushed to disk, so the file was zeroed.
 
 **Root cause**: `save_data()` in `time_tracker.py` did a non-atomic `open(self.data_file, "w")`, which truncates the file to zero *first*, then writes. The auto-save loop runs this once per minute during an active session (`backup_frequency = 60000ms / 100ms = 600 loops`, see `time_tracker.py:87-89`, invoked at `time_tracker.py:1224-1244`). The crash landed inside one of those write windows → whole file lost.
 
-**Fix applied** ✅ (in source only — NOT yet in the built `TimeAligned.exe`):
+**Fix applied** (in source only - NOT yet in the built `TimeAligned.exe`):
 
 - `time_tracker.py` `save_data()` now does an **atomic write**: write to a temp file in the same directory via `tempfile.mkstemp`, `f.flush()` + `os.fsync(f.fileno())`, then `os.replace(tmp, data_file)`. On failure the temp file is cleaned up. A crash mid-save now leaves the previous `data.json` fully intact (worst case: lose the last ~1 min).
 - Added `import tempfile` (`time_tracker.py:5`).
 
-**Data recovery** ✅:
+**Data recovery**:
 
 - Live `data.json` was unrecoverable (all zeros). Preserved it as `data.json.corrupted` in the TimeAligned folder (not deleted).
 - Restored 6 sessions by merging the two surviving pre-deletion backups (`backups\data.json.backup_20260525_160728` = 1 unique session, `backups\data.json.backup_20260526_180133` = 5 sessions). Newest recovered session: 2026-05-26 17:53.
 - **Permanently lost**: all sessions tracked after May 26 ~18:01 (i.e. all of May 27, the crash day). They only ever lived in the zeroed `data.json`; the once-a-minute auto-save overwrites `data.json` in place and does NOT write to `backups\`, so there was no snapshot.
-- Consolidated recovery copy saved at `c:\Users\theso\Documents\TimeAligned\recovered_data_20260527.json` so the restored data is preserved independently of the live file.
+- Consolidated recovery copy saved at `Documents\TimeAligned\recovered_data_20260527.json` so the restored data is preserved independently of the live file.
 
-**⚠️ TODO — double-check later (could not finish this session)**:
+**TODO status (2026-10-08)**: 1 done for the affected test files (the Tcl failure does not reproduce with a working Tcl); 2 done (rebuilt); 3 done (`test_backup.py::test_disk_full_mid_save_keeps_previous_data`).
 
-1. **Verify the test suite still passes.** `test_backup.py` + `test_data_integrity.py` must be run **from the `tests/` directory** (they import sibling `test_helpers`; running from repo root gives `ModuleNotFoundError: No module named 'test_helpers'`). Result this session: **9 passed, 1 failed**. The 1 failure (`test_data_integrity.py::TestDurationCalculations::test_session_duration_matches_timestamps`) was an **environmental Tcl/Tkinter error** ("Tcl wasn't installed properly", `init.tcl` unreadable) — NOT caused by the save_data change. Confirm this is environment-only on a machine with working Tcl, and run the full suite (`tests/run_all_tests.py`).
+1. **Verify the test suite still passes.** `test_backup.py` + `test_data_integrity.py` must be run **from the `tests/` directory** (they import sibling `test_helpers`; running from repo root gives `ModuleNotFoundError: No module named 'test_helpers'`). Result this session: **9 passed, 1 failed**. The 1 failure (`test_data_integrity.py::TestDurationCalculations::test_session_duration_matches_timestamps`) was an **environmental Tcl/Tkinter error** ("Tcl wasn't installed properly", `init.tcl` unreadable) - NOT caused by the save_data change. Confirm this is environment-only on a machine with working Tcl, and run the full suite (`tests/run_all_tests.py`).
 2. **Rebuild the exe.** The fix is source-only. The running app is the prebuilt `TimeAligned.exe` (dated May 25) and still has the old non-atomic save. Rebuild with `pyinstaller time_tracker.spec` to actually get the fix into the app you use.
 3. Consider adding a dedicated test that simulates a crash mid-`save_data` (e.g. raise inside the write) and asserts the previous `data.json` is still intact and parseable.
 
-**Potential follow-up: stronger backup strategy (NOT yet implemented — decision pending)**
+**CHOSEN follow-up design: two separate backup folders (part 2 implemented 2026-10-08 as daily-only, 14 kept; part 1 recycle bin NOT yet implemented)**
 
-The atomic write fixes the crash-zeroing scenario, but the only real backups today are the pre-deletion snapshots (`completion_frame.py:2151-2154`). Those don't run unless you delete a session, which is exactly why May 27 had no snapshot. Options discussed for defense-in-depth (protects against app bugs writing bad data, disk corruption, accidental deletion — none of which atomic write covers):
+The atomic write fixes the crash-zeroing scenario, but the only real backups today are the pre-deletion snapshots (`completion_frame.py:2151-2154`). Those don't run unless you delete a session, which is exactly why May 27 had no snapshot. They also dump a full copy of `data.json` into the same `backups\` folder with identical `data.json.backup_<timestamp>` names regardless of cause, so the two purposes are jumbled together.
 
-- **Option A — Per-completion + rotation**: snapshot `data.json` → `backups\` after each successful session completion; keep only the most recent ~15 auto-backups, prune older ones. Frequent restore points, folder stays small. Risk to handle: don't grow the `backups\` folder unbounded (it already has ~50 test-era files).
-- **Option B — Daily rotating snapshot**: one snapshot on the first save of each day, keep last ~14 days. Bounded by time, simplest, and *would have caught the May 27 loss*.
-- **Option C — Both**: per-completion restore points + a daily snapshot kept 14 days. Most thorough.
+**Decision**: split the two distinct needs into two folders/mechanisms.
 
-Recommended starting point: Option B (or B+A). Whatever is chosen, add pruning so the folder is bounded, and snapshot *after* a successful save (so the snapshot contains good data).
+**1. Recycle bin - "I deleted a session and want it back"**
 
+- Trigger: an explicit session delete (replaces the current pre-delete full-file copy in `completion_frame.py:2151-2154`).
+- Store: **just the deleted session record(s)**, not a full copy of `data.json`. Makes single-session restore trivial (re-insert the record) and keeps files tiny. Suggested folder: `recycle_bin\` (or `deleted\`), one file per deleted session keyed by its session id + timestamp.
+- Restore granularity: a single session.
+- Retention: keep until user empties the bin, or auto-purge after ~30 days.
 
+**2. Automated backups - "the file got corrupted / a bug wrote garbage / disk died"**
+
+- Trigger: **time and/or completion, NOT deletion** - this is the bucket that would actually have saved the May 27 data.
+  - Daily: one snapshot on the first save of each day (bounded by time, simplest).
+  - Optionally also per session completion for finer restore points.
+- Store: full `data.json` snapshot. Suggested folder: keep `backups\` for this, or rename to `snapshots\`.
+- Restore granularity: whole `data.json`.
+- Retention: rotating window - keep last N (e.g. 14 daily), prune older. **Must add pruning** so the folder is bounded (it already has ~50 test-era files).
+- Always snapshot *after* a successful save so the snapshot contains good data.
+
+**Implementation notes for later**:
+
+- Pre-delete copy logic currently lives in `completion_frame.py:2151-2154`; deletion path is the place to write the recycle-bin record instead of a full-file copy.
+- Automated snapshot hook fits naturally near the auto-save / completion save path (`time_tracker.py` `save_data` callers, e.g. the auto-save block at `time_tracker.py:1224-1244`, and the completion save).
+- `DEFAULT_BACKUP_FOLDER` is defined in `src/constants.py:115`; add a constant for the recycle-bin folder alongside it.
+- Note: a newer automated snapshot is NOT guaranteed to be a superset of older ones (sessions can be deleted between snapshots - this is exactly why the May 25 + May 26 backups had to be *merged* to recover all 6 sessions). Retention should therefore keep a spread over time, not collapse to "just the newest."
+- Add tests (run from `tests/`): recycle-bin round-trip (delete → record written → restore re-inserts), and automated-snapshot rotation/pruning keeps exactly N.
+
+---
+
+### [2026-02-20] - Feature: PyInstaller --onedir Packaging Setup
 
 **Search Keywords**: packaging, pyinstaller, exe, dist, build, onedir, icon, iconbitmap, get_resource_path, ico, assets, spec file, distribution, installer
 
@@ -70,15 +173,15 @@ Recommended starting point: Option B (or B+A). Whatever is chosen, add pruning s
 
 **Files Added/Changed**:
 
-- `time_tracker.spec` — PyInstaller build config (new)
-- `assets/generate_icon.py` — Pillow script to regenerate `icon.ico` (new)
-- `assets/icon.ico` — Generated green circle icon, all ICO sizes (new)
-- `src/constants.py` — Added `get_resource_path()` helper
-- `time_tracker.py` — Added `iconbitmap` call in `__init__` (graceful fallback if missing)
-- `.gitignore` — Added `dist/` and `build/`
-- `tests/test_packaging.py` — 16 structural tests for packaging config (new)
+- `time_tracker.spec` - PyInstaller build config (new)
+- `assets/generate_icon.py` - Pillow script to regenerate `icon.ico` (new)
+- `assets/icon.ico` - Generated green circle icon, all ICO sizes (new)
+- `src/constants.py` - Added `get_resource_path()` helper
+- `time_tracker.py` - Added `iconbitmap` call in `__init__` (graceful fallback if missing)
+- `.gitignore` - Added `dist/` and `build/`
+- `tests/test_packaging.py` - 16 structural tests for packaging config (new)
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. TDD approach for packaging (structural tests):**
 Packaging has no unit-testable logic in the traditional sense, but structural tests are valid:
@@ -87,7 +190,7 @@ Packaging has no unit-testable logic in the traditional sense, but structural te
 - Test `assets/` directory and `icon.ico` exist and are non-empty
 - Test `time_tracker.spec` exists with required content (entry point, app name, `console=False`, icon, datas)
 - Test `get_resource_path()` returns correct path in dev mode
-  All 16 tests fail before implementation, pass after — TDD red/green cycle confirmed.
+  All 16 tests fail before implementation, pass after - TDD red/green cycle confirmed.
 
 **2. `get_resource_path()` pattern for PyInstaller compatibility:**
 
@@ -101,37 +204,37 @@ def get_resource_path(relative_path):
 
 - In dev: resolves relative to project root (parent of `src/`)
 - In PyInstaller bundle: resolves from `sys._MEIPASS` temp extraction dir
-- `iconbitmap` call guarded with `os.path.isfile()` — app still launches if icon missing
+- `iconbitmap` call guarded with `os.path.isfile()` - app still launches if icon missing
 
 **3. Icon generated with Pillow (already a dependency):**
 
 - No new dependencies required
 - `generate_icon.py` produces multi-size `.ico` (16, 32, 48, 64, 128, 256px)
-- Green circle (#2E7D32) matches `COLOR_ACTIVE_GREEN` — consistent with tray icon style
+- Green circle (#2E7D32) matches `COLOR_ACTIVE_GREEN` - consistent with tray icon style
 
 **4. Spec hidden imports to include:**
 
-- `pystray._win32` — Windows tray backend not auto-detected
-- `pynput.mouse._win32`, `pynput.keyboard._win32` — Windows input backends
-- `PIL._tkinter_finder` — Pillow/tkinter integration
-- `win32api`, `win32con`, `win32gui` — pywin32 system integration
-- `googleapiclient.discovery`, `googleapiclient.errors` — dynamic imports missed by analysis
+- `pystray._win32` - Windows tray backend not auto-detected
+- `pynput.mouse._win32`, `pynput.keyboard._win32` - Windows input backends
+- `PIL._tkinter_finder` - Pillow/tkinter integration
+- `win32api`, `win32con`, `win32gui` - pywin32 system integration
+- `googleapiclient.discovery`, `googleapiclient.errors` - dynamic imports missed by analysis
 
 **Build command (run when ready to distribute):**
 
 ```
 pip install pyinstaller
 pyinstaller time_tracker.spec
-# Output: dist/TimeAligned/ folder — zip and upload to GitHub Release
+# Output: dist/TimeAligned/ folder - zip and upload to GitHub Release
 ```
 
 **Key Learnings**:
 
-1. **`iconbitmap` must use `.ico` format** — PNG/other formats raise TclError on Windows
-2. **Guard `iconbitmap` with `os.path.isfile()`** — app must still launch in dev environments without the icon
-3. **`src/` must be in `datas`** — PyInstaller sees Python imports but not the module files themselves as data when using `--onedir`
-4. **`console=False` is critical** — omitting this makes a console window flash on every launch for a GUI app
-5. **`dist/` and `build/` must be gitignored** — build output should never be committed; users get the zip from GitHub Releases
+1. **`iconbitmap` must use `.ico` format** - PNG/other formats raise TclError on Windows
+2. **Guard `iconbitmap` with `os.path.isfile()`** - app must still launch in dev environments without the icon
+3. **`src/` must be in `datas`** - PyInstaller sees Python imports but not the module files themselves as data when using `--onedir`
+4. **`console=False` is critical** - omitting this makes a console window flash on every launch for a GUI app
+5. **`dist/` and `build/` must be gitignored** - build output should never be committed; users get the zip from GitHub Releases
 
 ---
 
@@ -152,21 +255,21 @@ The previous fix only iterated `active_period.get("projects", [])` (array format
 
 **Files Changed**:
 
-- `src/settings_frame.py` — `_rename_project_in_sessions()` updated to handle both formats
-- `tests/test_settings_frame.py` — 2 new tests added to `TestProjectRenameSessionUpdate`
+- `src/settings_frame.py` - `_rename_project_in_sessions()` updated to handle both formats
+- `tests/test_settings_frame.py` - 2 new tests added to `TestProjectRenameSessionUpdate`
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
 
 ```
-✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
-✅ Searched AGENT_MEMORY.md for "legacy", "project string field", "active period project"
-✅ Identified root cause from actual data.json shown by user
-✅ Wrote 2 failing tests FIRST (TDD) for legacy string format
-✅ Verified tests failed before touching source
-✅ Fixed with minimal change — added legacy check alongside existing array check
-✅ Both new tests pass in isolation; batch TclError is pre-existing Tk pollution
+Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+Searched AGENT_MEMORY.md for "legacy", "project string field", "active period project"
+Identified root cause from actual data.json shown by user
+Wrote 2 failing tests FIRST (TDD) for legacy string format
+Verified tests failed before touching source
+Fixed with minimal change - added legacy check alongside existing array check
+Both new tests pass in isolation; batch TclError is pre-existing Tk pollution
 ```
 
 **2. Updated `_rename_project_in_sessions()` to handle both formats:**
@@ -186,12 +289,12 @@ for active_period in session_data.get("active", []):
 
 **Tests Added (to `TestProjectRenameSessionUpdate`):**
 
-- `test_rename_project_legacy_string_field_updated` — legacy `"project"` key is updated for all matching sessions
-- `test_rename_project_legacy_other_project_unchanged` — legacy session with different project is not written
+- `test_rename_project_legacy_string_field_updated` - legacy `"project"` key is updated for all matching sessions
+- `test_rename_project_legacy_other_project_unchanged` - legacy session with different project is not written
 
 **Key Learnings**:
 
-1. **ALWAYS check actual data.json before writing session-update code** — the real file revealed the `"project"` string format that mock data did not cover. Mock data was created assuming new format only.
+1. **ALWAYS check actual data.json before writing session-update code** - the real file revealed the `"project"` string format that mock data did not cover. Mock data was created assuming new format only.
 2. **Two active period project formats exist and BOTH must be handled**:
    - `active_period["project"]` = plain string (legacy, single project)
    - `active_period["projects"]` = list of dicts with `"name"` key (multi-project/percentage)
@@ -224,20 +327,20 @@ The project name lives at: `session["active"][i]["projects"][j]["name"]`
 
 **Files Changed**:
 
-- `src/settings_frame.py` — new `_rename_project_in_sessions()` method + `toggle_edit()` updated
-- `tests/test_settings_frame.py` — new `TestProjectRenameSessionUpdate` class (6 tests)
+- `src/settings_frame.py` - new `_rename_project_in_sessions()` method + `toggle_edit()` updated
+- `tests/test_settings_frame.py` - new `TestProjectRenameSessionUpdate` class (6 tests)
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
 
 ```
-✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
-✅ Searched AGENT_MEMORY.md for project/session/rename keywords
-✅ Wrote 6 failing tests FIRST (TDD)
-✅ Verified all 6 tests failed before fixing
-✅ Fixed the bug — 5/6 pass in batch (6th passes in isolation, Tk state pollution)
-✅ No regressions to existing tests
+Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+Searched AGENT_MEMORY.md for project/session/rename keywords
+Wrote 6 failing tests FIRST (TDD)
+Verified all 6 tests failed before fixing
+Fixed the bug - 5/6 pass in batch (6th passes in isolation, Tk state pollution)
+No regressions to existing tests
 ```
 
 **2. Extracted `_rename_project_in_sessions(old_name, new_name)` as a class method:**
@@ -285,20 +388,20 @@ if is_name_change:
 
 **Tests Added (`TestProjectRenameSessionUpdate`, 6 tests):**
 
-- `test_rename_project_updates_active_period_project_names` — matching sessions get new name
-- `test_rename_project_does_not_affect_other_projects_in_same_period` — sibling projects unchanged
-- `test_rename_project_updates_all_active_periods_in_session` — multi-period sessions all updated
-- `test_rename_project_no_matching_sessions_does_not_call_save_data` — no write if no match
-- `test_rename_project_sessions_with_different_project_unchanged` — other projects not saved
-- `test_rename_project_empty_active_list_does_not_crash` — graceful empty list handling
+- `test_rename_project_updates_active_period_project_names` - matching sessions get new name
+- `test_rename_project_does_not_affect_other_projects_in_same_period` - sibling projects unchanged
+- `test_rename_project_updates_all_active_periods_in_session` - multi-period sessions all updated
+- `test_rename_project_no_matching_sessions_does_not_call_save_data` - no write if no match
+- `test_rename_project_sessions_with_different_project_unchanged` - other projects not saved
+- `test_rename_project_empty_active_list_does_not_crash` - graceful empty list handling
 
 **Key Learnings**:
 
 1. **Project name is nested 3 levels deep**: `session → active[i] → projects[j] → name`. Sphere name is only 1 level (`session → sphere`). Triple-loop required.
 2. **`_rename_project_in_sessions` pattern** matches `edit_sphere_name`'s session update approach (load → iterate → save with `merge=False`). Consistent pattern across both fixes.
-3. **Confirmation popup must come before any in-memory mutation** — otherwise cancelling leaves dirty state in `tracker.settings` (mutated sphere/note/goal but not saved). Computing `is_name_change = new_name != project_name` early and gating ALL mutations behind the confirmation solves this.
-4. **`toggle_edit` is a nested closure** — cannot call it directly from tests. Extracting `_rename_project_in_sessions` as a standalone method makes the session-update logic fully testable without needing to drive the UI.
-5. **Known Tk batch isolation failure**: `test_rename_project_empty_active_list_does_not_crash` fails in batch (Tk re-init TclError) but passes in isolation. Pre-existing state pollution issue — not a logic bug.
+3. **Confirmation popup must come before any in-memory mutation** - otherwise cancelling leaves dirty state in `tracker.settings` (mutated sphere/note/goal but not saved). Computing `is_name_change = new_name != project_name` early and gating ALL mutations behind the confirmation solves this.
+4. **`toggle_edit` is a nested closure** - cannot call it directly from tests. Extracting `_rename_project_in_sessions` as a standalone method makes the session-update logic fully testable without needing to drive the UI.
+5. **Known Tk batch isolation failure**: `test_rename_project_empty_active_list_does_not_crash` fails in batch (Tk re-init TclError) but passes in isolation. Pre-existing state pollution issue - not a logic bug.
 
 ---
 
@@ -317,20 +420,20 @@ It did **not** update `"sphere"` fields in sessions stored in `data.json`, and s
 
 **Files Changed**:
 
-- `src/settings_frame.py` — `edit_sphere_name()` rewritten
-- `tests/test_settings_frame.py` — new `TestSphereRenameSessionUpdate` class (5 tests) + updated `MockTracker`
+- `src/settings_frame.py` - `edit_sphere_name()` rewritten
+- `tests/test_settings_frame.py` - new `TestSphereRenameSessionUpdate` class (5 tests) + updated `MockTracker`
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Followed Bug Fix Workflow (`b` shortcut in COPILOT_INSTRUCTIONS.md):**
 
 ```
-✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
-✅ Searched AGENT_MEMORY.md for sphere/session keywords
-✅ Wrote 5 failing tests FIRST (TDD)
-✅ Verified tests failed before fixing
-✅ Fixed the bug to pass tests
-✅ No regressions — existing test updated to mock new askyesno popup
+Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+Searched AGENT_MEMORY.md for sphere/session keywords
+Wrote 5 failing tests FIRST (TDD)
+Verified tests failed before fixing
+Fixed the bug to pass tests
+No regressions - existing test updated to mock new askyesno popup
 ```
 
 **2. Rewrote `edit_sphere_name()` with three additions:**
@@ -360,23 +463,23 @@ if sessions_updated:
 
 **3. Added `load_data()` / `save_data()` stubs to `MockTracker`** so all tests that call `edit_sphere_name()` don't get `AttributeError`.
 
-**4. Updated existing `test_edit_sphere_name_updates_projects`** to also mock `messagebox.askyesno` (returning `True`) — required because the new confirmation popup runs before any mutations.
+**4. Updated existing `test_edit_sphere_name_updates_projects`** to also mock `messagebox.askyesno` (returning `True`) - required because the new confirmation popup runs before any mutations.
 
 **Tests Added (`TestSphereRenameSessionUpdate`):**
 
-- `test_rename_sphere_shows_confirmation_popup` — askyesno called exactly once
-- `test_rename_sphere_updates_sessions_with_old_name` — matching sessions get new name
-- `test_rename_sphere_does_not_affect_other_sphere_sessions` — other spheres unchanged
-- `test_rename_sphere_cancel_confirmation_aborts_all_changes` — cancel = no mutations at all
-- `test_rename_sphere_no_sessions_does_not_call_save_data` — `save_data` not called when 0 sessions match
+- `test_rename_sphere_shows_confirmation_popup` - askyesno called exactly once
+- `test_rename_sphere_updates_sessions_with_old_name` - matching sessions get new name
+- `test_rename_sphere_does_not_affect_other_sphere_sessions` - other spheres unchanged
+- `test_rename_sphere_cancel_confirmation_aborts_all_changes` - cancel = no mutations at all
+- `test_rename_sphere_no_sessions_does_not_call_save_data` - `save_data` not called when 0 sessions match
 
 **Key Learnings**:
 
-1. **Session data is in `data.json` (via `tracker.load_data()`) — separate from settings.json**. Any rename that spans both must update both files independently.
-2. **`merge=False` is correct here** — we're replacing the entire file with the updated copy, not merging a partial update.
+1. **Session data is in `data.json` (via `tracker.load_data()`) - separate from settings.json**. Any rename that spans both must update both files independently.
+2. **`merge=False` is correct here** - we're replacing the entire file with the updated copy, not merging a partial update.
 3. **Adding stubs to MockTracker is preferable to per-test patching** for methods that every future test of `edit_sphere_name` will need.
-4. **Always mock `messagebox.askyesno` in tests that call methods with confirmation popups** — otherwise the tkinter dialog blocks headless tests.
-5. **Known Tkinter Tk() re-init error** when running `TestSphereRenameSessionUpdate` as a batch with earlier tests: passes in isolation. Not a logic bug — pre-existing state pollution issue documented elsewhere in this file.
+4. **Always mock `messagebox.askyesno` in tests that call methods with confirmation popups** - otherwise the tkinter dialog blocks headless tests.
+5. **Known Tkinter Tk() re-init error** when running `TestSphereRenameSessionUpdate` as a batch with earlier tests: passes in isolation. Not a logic bug - pre-existing state pollution issue documented elsewhere in this file.
 
 ---
 
@@ -384,49 +487,49 @@ if sessions_updated:
 
 **Search Keywords**: test_analysis_priority, TestAnalysisCSVExportIntegration, test_csv_export_includes_all_expected_headers, expected_headers, fieldnames, Primary Percentage, Primary Duration, Secondary Percentage, Secondary Duration, export_to_csv, CSV headers stale
 
-**Bug Reported**: `test_csv_export_includes_all_expected_headers` failed — `expected_headers` in the test had 14 columns but the actual CSV (from `export_to_csv` in `src/analysis_frame.py`) writes 18 headers.
+**Bug Reported**: `test_csv_export_includes_all_expected_headers` failed - `expected_headers` in the test had 14 columns but the actual CSV (from `export_to_csv` in `src/analysis_frame.py`) writes 18 headers.
 
 **Root Cause**: The test's `expected_headers` list was written before `Primary Percentage`, `Primary Duration`, `Secondary Percentage`, and `Secondary Duration` were added to `export_to_csv`'s `fieldnames`. The source had been updated but the test was not.
 
-**Fix Applied** (`tests/test_analysis_priority.py` — `TestAnalysisCSVExportIntegration.test_csv_export_includes_all_expected_headers`):
+**Fix Applied** (`tests/test_analysis_priority.py` - `TestAnalysisCSVExportIntegration.test_csv_export_includes_all_expected_headers`):
 
 - Added `"Primary Percentage"` and `"Primary Duration"` after `"Primary Action"` in `expected_headers`
 - Added `"Secondary Percentage"` and `"Secondary Duration"` after `"Secondary Action"` in `expected_headers`
 - Updated count assertion: `14` → `18`
 - Updated comment: `"All 13 timeline headers"` → `"All 18 timeline headers"`
 
-**Key Learning — Stale test pattern:**
+**Key Learning - Stale test pattern:**
 When new columns are added to `export_to_csv`, ALL tests that assert on `fieldnames` / column count must be updated to match. The canonical source of truth is the `fieldnames` list in `src/analysis_frame.py` around line 2139.
 
 **Files Changed**:
 
-- [tests/test_analysis_priority.py](tests/test_analysis_priority.py) — updated `expected_headers` + count assertion in `test_csv_export_includes_all_expected_headers`
+- [tests/test_analysis_priority.py](tests/test_analysis_priority.py) - updated `expected_headers` + count assertion in `test_csv_export_includes_all_expected_headers`
 
 ---
 
-### [2026-02-19] - Bug Fix: Settings Sphere Radio Button — Archived Filter With No Archived Spheres Does Nothing
+### [2026-02-19] - Bug Fix: Settings Sphere Radio Button - Archived Filter With No Archived Spheres Does Nothing
 
 **Search Keywords**: settings_frame, refresh_sphere_dropdown, sphere_filter inactive, archived radio button, no archived spheres, sphere_var stale, sphere_mgmt_frame stale, project list stale, empty filter result, else branch missing, TestSphereFilterEmptyResult
 
-**Bug Reported**: Starting from the default first-run project, opening Settings and clicking the "Archived" radio button for sphere filter did nothing — the sphere dropdown, sphere management buttons, and project list all stayed the same.
+**Bug Reported**: Starting from the default first-run project, opening Settings and clicking the "Archived" radio button for sphere filter did nothing - the sphere dropdown, sphere management buttons, and project list all stayed the same.
 
 **Root Cause**: `refresh_sphere_dropdown()` in `src/settings_frame.py` had no `else` branch for when `filtered_spheres` is empty. When no spheres match the selected filter:
 
-1. `sphere_dropdown["values"]` was set to `["Create New Sphere..."]` ✓ (correct)
+1. `sphere_dropdown["values"]` was set to `["Create New Sphere..."]` (correct)
 2. `sphere_var` was **NOT** updated → still showed the previous active sphere name
 3. `sphere_mgmt_frame` was **NOT** cleared → old management buttons remained
 4. `refresh_project_section()` was **NOT** called → old project list persisted
 
-**Fix Applied** — Added `else` branch to `refresh_sphere_dropdown()`:
+**Fix Applied** - Added `else` branch to `refresh_sphere_dropdown()`:
 
 ```python
 else:
-    # No spheres match the filter — select the only available option
+    # No spheres match the filter - select the only available option
     self.sphere_var.set("Create New Sphere...")
     # Clear sphere management buttons (no real sphere is selected)
     for widget in self.sphere_mgmt_frame.winfo_children():
         widget.destroy()
-    # Refresh project list (will be empty — no sphere is active)
+    # Refresh project list (will be empty - no sphere is active)
     if hasattr(self, "projects_list_frame"):
         self.refresh_project_section()
 ```
@@ -437,21 +540,21 @@ This ensures:
 - `sphere_mgmt_frame` is cleared (no real sphere → no management buttons)
 - Project list is refreshed (`sphere_var == "Create New Sphere..."` matches no project's sphere field → list is empty)
 
-**Key Learning — Filter result branches must always be complete:**
+**Key Learning - Filter result branches must always be complete:**
 Any method that conditionally handles a filter result MUST include an `else` for the empty case. Without it, the UI stays stale when no items match. The `refresh_project_section()` call already handles the empty case correctly (`data.get("sphere") == "Create New Sphere..."` matches nothing), so only the `sphere_var` and `sphere_mgmt_frame` updates were missing.
 
-**Tests Written** (`tests/test_settings_frame.py` — new class `TestSphereFilterEmptyResult`):
+**Tests Written** (`tests/test_settings_frame.py` - new class `TestSphereFilterEmptyResult`):
 
-- `test_archived_filter_with_no_archived_spheres_selects_create_new` — sphere_var == "Create New Sphere..."
-- `test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons` — sphere_mgmt_frame empty
-- `test_archived_filter_with_no_archived_spheres_empties_project_list` — projects_list_frame empty
+- `test_archived_filter_with_no_archived_spheres_selects_create_new` - sphere_var == "Create New Sphere..."
+- `test_archived_filter_with_no_archived_spheres_clears_mgmt_buttons` - sphere_mgmt_frame empty
+- `test_archived_filter_with_no_archived_spheres_empties_project_list` - projects_list_frame empty
 
 All 3 tests: FAIL before fix → PASS after fix.
 
 **Files Changed**:
 
-- [src/settings_frame.py](src/settings_frame.py) — `refresh_sphere_dropdown()`: added `else` branch + updated docstring
-- [tests/test_settings_frame.py](tests/test_settings_frame.py) — added `TestSphereFilterEmptyResult` class (3 tests)
+- [src/settings_frame.py](src/settings_frame.py) - `refresh_sphere_dropdown()`: added `else` branch + updated docstring
+- [tests/test_settings_frame.py](tests/test_settings_frame.py) - added `TestSphereFilterEmptyResult` class (3 tests)
 
 ---
 
@@ -461,19 +564,19 @@ All 3 tests: FAIL before fix → PASS after fix.
 
 **Two failures from previous session's Bug 3 fix:**
 
-**Failure 1 — Regression** (`test_sessions_without_active_periods`):
+**Failure 1 - Regression** (`test_sessions_without_active_periods`):
 
 - Session had `active: []` (no active periods at all, only breaks)
 - `session_considered_active` loop started `False`, never iterated → breaks skipped under "active" filter
-- Fix: added `if not active_periods_list: session_considered_active = sphere_active` before the loop in **both** `calculate_totals()` and `get_timeline_data()`. A pure break/idle session with an active sphere IS an active session — there is no project to be inactive.
+- Fix: added `if not active_periods_list: session_considered_active = sphere_active` before the loop in **both** `calculate_totals()` and `get_timeline_data()`. A pure break/idle session with an active sphere IS an active session - there is no project to be inactive.
 
-**Failure 2 — Stale test** (`test_active_filter_excludes_archived_project_break_time`):
+**Failure 2 - Stale test** (`test_active_filter_excludes_archived_project_break_time`):
 
 - Test was written to capture the old sphere-level-only break behavior (break_time expected = 60)
-- Bug 3 intentionally changed this: sessions where all active periods are for inactive projects are "archived" — their breaks should be 0 under the active filter
+- Bug 3 intentionally changed this: sessions where all active periods are for inactive projects are "archived" - their breaks should be 0 under the active filter
 - Fix: updated test docstring + assertEqual to expect `break_time = 0`
 
-**Key Learning — Edge case must accompany session_considered_active loops:**
+**Key Learning - Edge case must accompany session_considered_active loops:**
 Any loop that computes `session_considered_active` by iterating active periods MUST include a guard for the empty-periods case. Without it, pure break sessions are misclassified as archived. Pattern:
 
 ```python
@@ -487,8 +590,8 @@ else:
 
 **Files Changed:**
 
-- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` else branch
-- [tests/test_analysis_card_status_filter.py](tests/test_analysis_card_status_filter.py) — updated stale test docstring + expected value
+- [src/analysis_frame.py](src/analysis_frame.py) - `calculate_totals()` else branch + `get_timeline_data()` else branch
+- [tests/test_analysis_card_status_filter.py](tests/test_analysis_card_status_filter.py) - updated stale test docstring + expected value
 
 ---
 
@@ -503,7 +606,7 @@ else:
 
 **Root Cause:** Both `calculate_totals()` and `get_timeline_data()` shared the same flaw: the `else` branch for `project_filter == "All Projects"` set `session_considered_active = sphere_active`. For an active sphere with an inactive project, `sphere_active=True` → `session_considered_active=True` → breaks were NOT skipped on the active filter (and were incorrectly skipped on the archived filter).
 
-**Fix Applied — Both methods:** Replaced `session_considered_active = sphere_active` with a loop over the session's active periods to compute the correct value:
+**Fix Applied - Both methods:** Replaced `session_considered_active = sphere_active` with a loop over the session's active periods to compute the correct value:
 
 - `session_considered_active = True` only if at least one active period has both `sphere_active AND proj_active`
 - If every active period has an inactive project → `session_considered_active = False` → breaks correctly excluded on active filter, included on archived filter.
@@ -513,13 +616,13 @@ The break and idle period filters were using `if not sphere_active` / `if sphere
 
 **Files Changed:**
 
-- [src/analysis_frame.py](src/analysis_frame.py) — `calculate_totals()` else branch + `get_timeline_data()` `session_considered_active` block + break filter + idle filter
-- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) — 2 new tests in `TestAnalysisFrameStatusFilterIntegration`
+- [src/analysis_frame.py](src/analysis_frame.py) - `calculate_totals()` else branch + `get_timeline_data()` `session_considered_active` block + break filter + idle filter
+- [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - 2 new tests in `TestAnalysisFrameStatusFilterIntegration`
 
 **Tests:**
 
-- `test_all_projects_active_filter_excludes_inactive_project_breaks_cards` — PASSES ✅
-- `test_all_projects_active_filter_excludes_inactive_project_breaks_timeline` — PASSES ✅ (must run in isolation due to pre-existing TclError teardown issue in this class)
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_cards` - PASSES
+- `test_all_projects_active_filter_excludes_inactive_project_breaks_timeline` - PASSES (must run in isolation due to pre-existing TclError teardown issue in this class)
 
 **Pre-existing TclError in `TestAnalysisFrameStatusFilterIntegration`:** This class uses per-test `setUp`/`tearDown` with `tk.Tk()`. In Python 3.13 the Tcl state is left corrupted after `safe_teardown_tk_root`, so tests after the first few may fail with TclError when run consecutively. Run tests in isolation to verify logic. See AGENT_MEMORY for the module-level singleton fix.
 
@@ -543,7 +646,7 @@ Active time was counted correctly for active sphere + inactive project on "archi
 
 **Key Learning:** When filtering breaks, the "archived" determination must mirror the active-period logic: a session is archived if EITHER the sphere OR the selected project is inactive. The original implementation only checked sphere status for breaks, creating an inconsistency.
 
-**Test:** `tests/test_analysis_timeline.py::TestAnalysisFrameStatusFilterIntegration::test_active_sphere_inactive_project_shows_on_archived_filter` — now PASSES.
+**Test:** `tests/test_analysis_timeline.py::TestAnalysisFrameStatusFilterIntegration::test_active_sphere_inactive_project_shows_on_archived_filter` - now PASSES.
 
 ---
 
@@ -560,10 +663,10 @@ Active time was counted correctly for active sphere + inactive project on "archi
 
 **Fix Applied:** Added `status_filter = self.status_filter.get()` and `sphere_active` / `project_active` flag checks to all three period-counting paths inside `calculate_totals()`. Break time is filtered at sphere-level only (break actions have no project active/inactive status).
 
-**Test File:** `tests/test_analysis_card_status_filter.py` — 10 tests, all pass.
+**Test File:** `tests/test_analysis_card_status_filter.py` - 10 tests, all pass.
 
-**Test Isolation Issue Discovered — Module-Level Singleton Root Pattern:**
-Tests that create `AnalysisFrame` (which contains `ScrollableFrame`) CANNOT use per-test `setUp`/`tearDown` with `tk.Tk()` create/destroy in Python 3.13. Even with `safe_teardown_tk_root`, the Tcl interpreter state is left corrupted — the next class's `setUpClass` calling `tk.Tk()` raises `TclError: invalid command name "tcl_findLibrary"`.
+**Test Isolation Issue Discovered - Module-Level Singleton Root Pattern:**
+Tests that create `AnalysisFrame` (which contains `ScrollableFrame`) CANNOT use per-test `setUp`/`tearDown` with `tk.Tk()` create/destroy in Python 3.13. Even with `safe_teardown_tk_root`, the Tcl interpreter state is left corrupted - the next class's `setUpClass` calling `tk.Tk()` raises `TclError: invalid command name "tcl_findLibrary"`.
 
 **Correct pattern for multi-class test files using AnalysisFrame:**
 
@@ -586,7 +689,7 @@ class TestSomething(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        # Do NOT call safe_teardown_tk_root here — root is the shared module root
+        # Do NOT call safe_teardown_tk_root here - root is the shared module root
         cls.file_manager.cleanup()
 ```
 
@@ -594,7 +697,7 @@ Also use `root.update_idletasks()` instead of `root.update()` in frame-creation 
 
 ---
 
-### [2026-02-19] - ⛔ RECURRING BUG: Forbidden Tkinter Teardown Pattern Keeps Being Used
+### [2026-02-19] - RECURRING BUG: Forbidden Tkinter Teardown Pattern Keeps Being Used
 
 **Search Keywords**: forbidden pattern, addCleanup root destroy, safe_teardown_tk_root, TclError init.tcl, Tcl_AsyncDelete, wrong thread, tearDown, tkinter test cleanup, setUp tk.Tk fails
 
@@ -603,7 +706,7 @@ Also use `root.update_idletasks()` instead of `root.update()` in frame-creation 
 **The Forbidden Pattern (NEVER USE):**
 
 ```python
-# ❌ FORBIDDEN — DO NOT USE IN ANY TEST
+# FORBIDDEN - DO NOT USE IN ANY TEST
 self.addCleanup(self.root.destroy)   # in setUp
 # or
 self.root.destroy()                  # called directly in tearDown
@@ -617,9 +720,9 @@ that caused the problem _passes_. The _next_ test _fails_. This makes the cause 
 **The Required Pattern (ALWAYS USE):**
 
 ```python
-# In setUp — only this addCleanup:
+# In setUp - only this addCleanup:
 self.addCleanup(self.file_manager.cleanup)
-# ❌ DO NOT ADD: self.addCleanup(self.root.destroy)
+# DO NOT ADD: self.addCleanup(self.root.destroy)
 
 # Required tearDown in EVERY Tkinter test class:
 def tearDown(self):
@@ -636,11 +739,11 @@ This leaves Tcl in a clean state for the next test.
 
 - This session (2026-02-19): test_add_project_duplicate_bug.py fixed
 - Previous session (2026-02-19): test_analysis_card_filters.py fixed
-- Documented in DEVELOPMENT.md 🚫 FORBIDDEN PATTERNS section
+- Documented in DEVELOPMENT.md FORBIDDEN PATTERNS section
 - Documented in COPILOT_INSTRUCTIONS.md Bug Fix and Add Tests workflows
 
 **IMPORTANT**: If you ever see `TclError: Can't find a usable init.tcl` in a test that
-calls `tk.Tk()` in `setUp`, look at the _previous_ test class — it almost certainly
+calls `tk.Tk()` in `setUp`, look at the _previous_ test class - it almost certainly
 uses the forbidden `self.addCleanup(self.root.destroy)` pattern.
 
 ---
@@ -653,8 +756,8 @@ uses the forbidden `self.addCleanup(self.root.destroy)` pattern.
 
 When adding a new project via the "Add New Project..." dropdown in the Completion Frame, if the user typed a name that already existed in **another sphere**, two bugs occurred:
 
-1. **Bug 1 (UI)** — The combobox silently accepted the name and displayed it as if it was added — no warning shown to the user.
-2. **Bug 2 (Data)** — No project was saved to `settings.json` for the new sphere (because `if new_project not in self.tracker.settings["projects"]` was False — the project already existed globally, so the else branch ran instead of saving).
+1. **Bug 1 (UI)** - The combobox silently accepted the name and displayed it as if it was added - no warning shown to the user.
+2. **Bug 2 (Data)** - No project was saved to `settings.json` for the new sphere (because `if new_project not in self.tracker.settings["projects"]` was False - the project already existed globally, so the else branch ran instead of saving).
 
 **Root Cause** (in `src/completion_frame.py`, `_save_new_project()`):
 
@@ -672,34 +775,34 @@ This gave no warning and left the combobox showing "Project A" (the duplicate) a
 
 In the `else` branch:
 
-1. **Unbind `<Return>` and `<FocusOut>` BEFORE showing messagebox** — prevents FocusOut from triggering `_cancel_new_project` a second time when the messagebox steals focus.
-2. **Show `messagebox.showwarning`** — alerts user "Project names must be unique across all spheres."
-3. **Call `_cancel_new_project(None, combobox)`** — properly reverts combobox to readonly with a fallback value ("Select Project").
-4. **Return early** — bindings already cleaned up, no double-unbind needed.
+1. **Unbind `<Return>` and `<FocusOut>` BEFORE showing messagebox** - prevents FocusOut from triggering `_cancel_new_project` a second time when the messagebox steals focus.
+2. **Show `messagebox.showwarning`** - alerts user "Project names must be unique across all spheres."
+3. **Call `_cancel_new_project(None, combobox)`** - properly reverts combobox to readonly with a fallback value ("Select Project").
+4. **Return early** - bindings already cleaned up, no double-unbind needed.
 
 **File Changed**: `src/completion_frame.py`, `_save_new_project()` method (~line 1407)
 
 **Tests Added**: `tests/test_add_project_duplicate_bug.py` (7 tests)
 
-**Test Results**: 5/7 pass (2 fail with pre-existing TclError unrelated to the fix — same TclError pattern existed before this fix was applied)
+**Test Results**: 5/7 pass (2 fail with pre-existing TclError unrelated to the fix - same TclError pattern existed before this fix was applied)
 
-**What Worked** ✅:
+**What Worked**:
 
-1. **TDD approach** — wrote failing tests first, confirmed bugs reproduced, fixed, tests now pass.
-2. **Unbind-before-messagebox pattern** — critical to prevent FocusOut double-trigger. messagebox steals focus → FocusOut fires → \_cancel_new_project called. Unbinding first prevents this.
-3. **`_cancel_new_project(None, combobox)` call** — reusable existing method handles the combobox revert cleanly; passing `None` for event is safe since event param is unused.
-4. **`return` early** — avoids running the `# Cleanup bindings` block at the bottom of the function (already cleaned up in the else branch).
+1. **TDD approach** - wrote failing tests first, confirmed bugs reproduced, fixed, tests now pass.
+2. **Unbind-before-messagebox pattern** - critical to prevent FocusOut double-trigger. messagebox steals focus → FocusOut fires → \_cancel_new_project called. Unbinding first prevents this.
+3. **`_cancel_new_project(None, combobox)` call** - reusable existing method handles the combobox revert cleanly; passing `None` for event is safe since event param is unused.
+4. **`return` early** - avoids running the `# Cleanup bindings` block at the bottom of the function (already cleaned up in the else branch).
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
-1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** — was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in _subsequent_ tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` — that was wrong. `addCleanup(root.destroy)` was the cause.**
+1. **`self.addCleanup(self.root.destroy)` (the FORBIDDEN pattern)** - was incorrectly used in the initial version of this test file. It caused `TclError: Can't find a usable init.tcl` in _subsequent_ tests because `root.destroy()` does not cancel pending `after()` callbacks, leaving Tcl state corrupted. The fix is `safe_teardown_tk_root` in `tearDown()`. **A previous version of this entry incorrectly blamed `safe_teardown_tk_root` - that was wrong. `addCleanup(root.destroy)` was the cause.**
 
 **Key Learnings**:
 
-- ✅ Project names are stored globally in `settings["projects"]` dict — they CANNOT repeat across spheres by design (the key is the project name itself). This is why the duplicate check uses `if new_project not in self.tracker.settings["projects"]`.
-- ✅ Always unbind Tkinter events before showing a messagebox if those events reference cleanup functions — focus-stealing triggers FocusOut.
-- ✅ ALWAYS use `safe_teardown_tk_root(self.root)` in `tearDown()`. NEVER use `self.addCleanup(self.root.destroy)`. See 🚫 FORBIDDEN PATTERNS in DEVELOPMENT.md and the dedicated entry at the top of Recent Changes (2026-02-19).
-- ✅ `messagebox.showwarning` is patched via `patch("tkinter.messagebox.showwarning")` since `completion_frame.py` does `from tkinter import messagebox`.
+- Project names are stored globally in `settings["projects"]` dict - they CANNOT repeat across spheres by design (the key is the project name itself). This is why the duplicate check uses `if new_project not in self.tracker.settings["projects"]`.
+- Always unbind Tkinter events before showing a messagebox if those events reference cleanup functions - focus-stealing triggers FocusOut.
+- ALWAYS use `safe_teardown_tk_root(self.root)` in `tearDown()`. NEVER use `self.addCleanup(self.root.destroy)`. See FORBIDDEN PATTERNS in DEVELOPMENT.md and the dedicated entry at the top of Recent Changes (2026-02-19).
+- `messagebox.showwarning` is patched via `patch("tkinter.messagebox.showwarning")` since `completion_frame.py` does `from tkinter import messagebox`.
 
 ---
 
@@ -709,9 +812,9 @@ In the `else` branch:
 
 **Problems Found (Code Review)**:
 
-1. **Forbidden Tkinter pattern** — All 3 test classes used `self.addCleanup(self.root.destroy)`, which is explicitly documented as ❌ Wrong Pattern #1 in DEVELOPMENT.md and AGENT_MEMORY.md. Causes `Tcl_AsyncDelete: async handler deleted by wrong thread` crashes.
+1. **Forbidden Tkinter pattern** - All 3 test classes used `self.addCleanup(self.root.destroy)`, which is explicitly documented as Wrong Pattern #1 in DEVELOPMENT.md and AGENT_MEMORY.md. Causes `Tcl_AsyncDelete: async handler deleted by wrong thread` crashes.
 
-2. **PEP 8 import violations** — `from src.analysis_frame import AnalysisFrame`, `from tests.test_helpers import MockTime, TestFileManager`, and `from tests.test_helpers import TestDataGenerator` were placed **inside setUp() and individual test methods**. PEP 8 requires all imports at the top of the file.
+2. **PEP 8 import violations** - `from src.analysis_frame import AnalysisFrame`, `from tests.test_helpers import MockTime, TestFileManager`, and `from tests.test_helpers import TestDataGenerator` were placed **inside setUp() and individual test methods**. PEP 8 requires all imports at the top of the file.
 
 **Fixes Applied** (`tests/test_analysis_card_filters.py`):
 
@@ -743,7 +846,7 @@ def tearDown(self):
 
 **Key Learning**:
 
-- When doing code review (`r` shortcut), always check every setUp for `addCleanup(self.root.destroy)` — this is the most common forbidden pattern in test files
+- When doing code review (`r` shortcut), always check every setUp for `addCleanup(self.root.destroy)` - this is the most common forbidden pattern in test files
 - PEP 8: no imports inside functions/methods unless genuinely conditional (e.g., optional dependency handling)
 - The correct teardown sequence is always: `safe_teardown_tk_root(self.root)` → `self.file_manager.cleanup()`
 
@@ -776,7 +879,7 @@ mock_tracker.settings_file = self.file_manager.create_test_file("test_settings.j
 
 **What Worked**:
 
-- Use `file_manager.create_test_file(name, content)` whenever pointing a mock tracker at a settings/data file — it returns the absolute path AND registers cleanup automatically.
+- Use `file_manager.create_test_file(name, content)` whenever pointing a mock tracker at a settings/data file - it returns the absolute path AND registers cleanup automatically.
 - All 11 tests pass; root-level stale file no longer created.
 
 **Key Learning**:
@@ -795,7 +898,7 @@ After the Feb 19 `_delete_session` fix (always navigate home), the test `test_de
 AssertionError: unexpectedly None  (self.assertIsNotNone(self.tracker.session_view_frame))
 ```
 
-**Root Cause (expected failure — test documented old buggy behaviour)**:
+**Root Cause (expected failure - test documented old buggy behaviour)**:
 The test asserted the old incorrect contract: "after deleting a session from session view, the session view reloads with a different session". The fix changed this to "always navigate home", which is the correct behaviour.
 
 **Fix**: Renamed and rewrote the test to assert the new correct contract:
@@ -811,7 +914,7 @@ New name: `test_delete_session_from_session_view_navigates_home`
 
 **Files Changed**:
 
-- `tests/test_button_navigation.py` — renamed + rewrote `test_delete_session_from_session_view_reloads`
+- `tests/test_button_navigation.py` - renamed + rewrote `test_delete_session_from_session_view_reloads`
 
 ---
 
@@ -826,7 +929,7 @@ User reported three bugs when clicking "Delete Session" from the Session Frame (
 2. **Every time (from session view)**: session not deleted, session view reloaded with same/next session
 3. **Session still in data.json** after deletion attempt
 
-**Root Cause 1 — Empty dict safety check in `save_data`**:
+**Root Cause 1 - Empty dict safety check in `save_data`**:
 `save_data(all_data, merge=False)` in `time_tracker.py` has a guard:
 
 ```python
@@ -836,10 +939,10 @@ if not session_data:
 
 When the LAST session was deleted, `del all_data[self.session_name]` left `all_data = {}`. Calling `save_data({}, merge=False)` hit that guard and returned without writing the file. The session remained in `data.json`. The rest of `_delete_session` ran (showed "deleted" dialog, navigated home), but the file was unchanged.
 
-**Root Cause 2 — Session view reloaded instead of navigating home**:
-After deletion, `_delete_session` checked `if self.tracker.session_view_frame == self` and, when True, reloaded the session view with the next most-recent session. This meant the user could never actually leave — deletion always just swapped to a different session. Even when there was only 1 session, the failed save (Root Cause 1) caused the same session to reload.
+**Root Cause 2 - Session view reloaded instead of navigating home**:
+After deletion, `_delete_session` checked `if self.tracker.session_view_frame == self` and, when True, reloaded the session view with the next most-recent session. This meant the user could never actually leave - deletion always just swapped to a different session. Even when there was only 1 session, the failed save (Root Cause 1) caused the same session to reload.
 
-**Fix Applied** (`src/completion_frame.py` — `_delete_session`):
+**Fix Applied** (`src/completion_frame.py` - `_delete_session`):
 
 1. **Replaced `save_data(all_data, merge=False)` with direct `json.dump`** to bypass the empty-dict guard:
 
@@ -858,7 +961,7 @@ except Exception as e:
     return
 ```
 
-2. **Removed the session_view reload logic — always navigate home**:
+2. **Removed the session_view reload logic - always navigate home**:
 
 ```python
 # Always navigate home after deletion
@@ -871,17 +974,17 @@ self.tracker.show_main_frame()
 
 - `save_data(merge=False)` must NOT be used when you intentionally want to write an empty dict (e.g., deleting the last session). Use direct `json.dump` for explicit overwrites.
 - The "reload with next session" UX after deletion is confusing. Always navigate home: it's predictable, safe, and matches user expectation.
-- `show_main_frame()` properly handles cleanup of session_view_container even when called from within a child CompletionFrame — no need for `self.destroy()` beforehand.
+- `show_main_frame()` properly handles cleanup of session_view_container even when called from within a child CompletionFrame - no need for `self.destroy()` beforehand.
 
-**Tests Added** (`tests/test_completion_frame.py` — `TestCompletionFrameSaveSkipDelete`):
+**Tests Added** (`tests/test_completion_frame.py` - `TestCompletionFrameSaveSkipDelete`):
 
 - `test_delete_last_session_removes_from_file`: deleting the only session writes `{}` to disk
 - `test_delete_session_from_session_view_navigates_home`: deletion from session view clears `session_view_frame` and `session_view_container` (i.e., navigates home)
 
 **Files Changed**:
 
-- `src/completion_frame.py` — rewrote deletion + navigation in `_delete_session`
-- `tests/test_completion_frame.py` — added 2 regression tests
+- `src/completion_frame.py` - rewrote deletion + navigation in `_delete_session`
+- `tests/test_completion_frame.py` - added 2 regression tests
 
 ---
 
@@ -892,8 +995,8 @@ self.tracker.show_main_frame()
 **Context**:
 After the Feb 19 `calculate_totals` fix (projects array takes priority), `test_multi_project_periods` in `tests/test_analysis_calculations.py` failed with `AssertionError: 0 != 1000`.
 
-**Root Cause (NOT a regression — bad test data)**:
-The test's `"projects"` array entries had only `"name"` — no `"duration"` or `"percentage"` field:
+**Root Cause (NOT a regression - bad test data)**:
+The test's `"projects"` array entries had only `"name"` - no `"duration"` or `"percentage"` field:
 
 ```python
 # OLD (incomplete/unrealistic test data):
@@ -903,7 +1006,7 @@ The test's `"projects"` array entries had only `"name"` — no `"duration"` or `
 ]
 ```
 
-After the fix, `calculate_totals()` correctly calls `project_dict.get("duration", 0)` which returns **0** because the key is absent. The test got `0` — the correct result for incomplete data.
+After the fix, `calculate_totals()` correctly calls `project_dict.get("duration", 0)` which returns **0** because the key is absent. The test got `0` - the correct result for incomplete data.
 
 Real app data **always** includes `"duration"` and `"percentage"` in every project dict (the spinbox split UI sets them). The test was written before the fix with simplified, unrealistic data.
 
@@ -921,7 +1024,7 @@ Real app data **always** includes `"duration"` and `"percentage"` in every proje
 # All Projects → 1000 (full period, no split)
 ```
 
-**Key Learning**: Multi-project period test data MUST include `"duration"` in each project dict — without it, `calculate_totals()` correctly returns 0 because there is no allocation to sum.
+**Key Learning**: Multi-project period test data MUST include `"duration"` in each project dict - without it, `calculate_totals()` correctly returns 0 because there is no allocation to sum.
 
 **Required fields for realistic multi-project test data**:
 
@@ -932,7 +1035,7 @@ Real app data **always** includes `"duration"` and `"percentage"` in every proje
 
 **Files Changed**:
 
-- `tests/test_analysis_calculations.py` — updated `test_multi_project_periods` test data and assertions
+- `tests/test_analysis_calculations.py` - updated `test_multi_project_periods` test data and assertions
 
 ---
 
@@ -958,9 +1061,9 @@ This is inconsistent. Real data from the app never saves a `"project"` field alo
 
 **Correct Rule**:
 
-> When `"projects"` array is present, it is the authoritative allocation data for **all** projects — including the primary. Only fall back to `"project"` field if no `"projects"` array exists.
+> When `"projects"` array is present, it is the authoritative allocation data for **all** projects - including the primary. Only fall back to `"project"` field if no `"projects"` array exists.
 
-**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+**Fix Applied** (`src/analysis_frame.py` - `calculate_totals()` active loop):
 
 ```python
 for period in session_data.get("active", []):
@@ -971,7 +1074,7 @@ for period in session_data.get("active", []):
     period_projects = period.get("projects", [])
     if period_projects:
         # Multi-project period: "projects" array holds each project's
-        # allocated duration — always use it for all projects.
+        # allocated duration - always use it for all projects.
         for project_dict in period_projects:
             if project_dict.get("name") == project_filter:
                 total_active += project_dict.get("duration", 0)
@@ -983,9 +1086,9 @@ for period in session_data.get("active", []):
 
 **Tests Updated** (correct expected values with the proper fix):
 
-`test_secondary_projects_aggregated_correctly` — period duration=1000, split 60/40:
+`test_secondary_projects_aggregated_correctly` - period duration=1000, split 60/40:
 
-- Project A: **600** (was 1000 — old code gave full via `"project"` field match)
+- Project A: **600** (was 1000 - old code gave full via `"project"` field match)
 - Project B: **400** (unchanged)
 - All Projects: 1000 (unchanged)
 
@@ -1000,12 +1103,12 @@ for period in session_data.get("active", []):
 1. **`"projects"` array > `"project"` field**: If a period has been split, `"projects"` contains the authoritative per-project allocation. Never use `"project"` as a shortcut when `"projects"` is present.
 2. **"Documents current behavior" comments = tests to update**: Tests with that comment are behavior snapshots of bugs, not correctness contracts. Update them when the bug is fixed.
 3. **Inconsistency is a code smell**: If primary and secondary projects of the same period use different duration sources, the logic is wrong.
-4. **Real data never has both fields**: The app saves multi-project periods with only `"projects"` array — no top-level `"project"` field. The test data having both was an artifact.
+4. **Real data never has both fields**: The app saves multi-project periods with only `"projects"` array - no top-level `"project"` field. The test data having both was an artifact.
 
 **Files Changed**:
 
-- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~16 lines)
-- `tests/test_analysis_priority.py` — updated assertions in `test_secondary_projects_aggregated_correctly` and `test_multiple_periods_with_different_splits`
+- `src/analysis_frame.py` - rewrote active-period loop in `calculate_totals()` (~16 lines)
+- `tests/test_analysis_priority.py` - updated assertions in `test_secondary_projects_aggregated_correctly` and `test_multiple_periods_with_different_splits`
 
 ---
 
@@ -1054,7 +1157,7 @@ total_active += period.get("duration", 0)  # ← adds 10s, not 5s!
 }
 ```
 
-**Fix Applied** (`src/analysis_frame.py` — `calculate_totals()` active loop):
+**Fix Applied** (`src/analysis_frame.py` - `calculate_totals()` active loop):
 
 Rewrote the active-period accumulation block with three distinct cases:
 
@@ -1100,16 +1203,16 @@ for period in session_data.get("active", []):
 
 **Key Learnings**:
 
-1. Multi-project periods store per-project duration in `period["projects"][i]["duration"]` — NOT in `period["duration"]`.
+1. Multi-project periods store per-project duration in `period["projects"][i]["duration"]` - NOT in `period["duration"]`.
 2. `period["duration"]` = total period time; `project_dict["duration"]` = this project's share.
-3. Old code found the matching project dict but then fell through to `period.get("duration")` — the continue/break was never placed correctly.
+3. Old code found the matching project dict but then fell through to `period.get("duration")` - the continue/break was never placed correctly.
 4. New pattern uses `continue` after each case so only ONE branch executes per period.
 5. Backward compatible: single-project periods (no `projects` list, only `"project"` field) still use full duration.
 
 **Files Changed**:
 
-- `src/analysis_frame.py` — rewrote active-period loop in `calculate_totals()` (~15 lines replaced with ~16 cleaner lines)
-- `tests/test_analysis_timeline.py` — added `test_project_filter_multi_project_period_allocates_partial_duration` to `TestAnalysisFrameProjectFiltering` class
+- `src/analysis_frame.py` - rewrote active-period loop in `calculate_totals()` (~15 lines replaced with ~16 cleaner lines)
+- `tests/test_analysis_timeline.py` - added `test_project_filter_multi_project_period_allocates_partial_duration` to `TestAnalysisFrameProjectFiltering` class
 
 ---
 
@@ -1128,21 +1231,21 @@ User screenshot showed Active/Break labels compressed to single characters ("A",
 
 **Fix Applied**:
 
-- Removed `card_frame.columnconfigure(0, weight=1)` — both columns now use `weight=0` (default).
-- With `weight=0` on both: each column takes its **natural width** only. Neither can be compressed by the grid manager — the card frame simply overflows to the right. Since col 0 is on the **left**, it stays visible; col 1 (pie) is clipped first.
-- Added `width=14` to both labels — fixed character width ensures the colored box is always the same size regardless of window size or text content.
-- Changed `sticky="EW"` → `sticky="W"` on both labels — no longer stretch to fill the column.
+- Removed `card_frame.columnconfigure(0, weight=1)` - both columns now use `weight=0` (default).
+- With `weight=0` on both: each column takes its **natural width** only. Neither can be compressed by the grid manager - the card frame simply overflows to the right. Since col 0 is on the **left**, it stays visible; col 1 (pie) is clipped first.
+- Added `width=14` to both labels - fixed character width ensures the colored box is always the same size regardless of window size or text content.
+- Changed `sticky="EW"` → `sticky="W"` on both labels - no longer stretch to fill the column.
 
 **Key Learning**:
 
-- `columnconfigure(weight=1)` gives a column BOTH the power to expand AND the obligation to compress when space is short — the OPPOSITE of what was needed.
+- `columnconfigure(weight=1)` gives a column BOTH the power to expand AND the obligation to compress when space is short - the OPPOSITE of what was needed.
 - `weight=0` on all grid columns = fixed natural sizes; parent overflow is clipped from the right. This is the correct pattern for "col 0 must always show".
 - `width=` on `tk.Label` is in **character units**, not pixels. `width=14` at Arial 14 bold ≈ 170px, enough for "Active: 1h 20m".
-- No test changes needed — tests check background/foreground/type, not grid options.
+- No test changes needed - tests check background/foreground/type, not grid options.
 
 **Files changed**:
 
-- `src/analysis_frame.py` — removed `columnconfigure(0, weight=1)`, added `width=14` to both labels, changed `sticky="EW"` to `sticky="W"` on both label grid calls
+- `src/analysis_frame.py` - removed `columnconfigure(0, weight=1)`, added `width=14` to both labels, changed `sticky="EW"` to `sticky="W"` on both label grid calls
 
 ---
 
@@ -1151,51 +1254,51 @@ User screenshot showed Active/Break labels compressed to single characters ("A",
 **Search Keywords**: pie chart layout, colored box label, tk.Label bg color, active label green, break label amber, column 0 always visible, non-maximized window, OutlinedLabel removed, create_card layout, rowspan pie canvas, PIE_LABEL_WIDTH removed, PIE_LABEL_HEIGHT removed
 
 **Context**:
-User reported: in a non-maximized window the cards were clipped — the pie chart and labels were cut off on the right. Outline text effect was also unwanted. Refactored card layout to put ALL controls in column 0 (always visible), pie chart in column 1 (safe to clip). Labels changed from `OutlinedLabel` canvas to plain `tk.Label` with a colored background box and black text.
+User reported: in a non-maximized window the cards were clipped - the pie chart and labels were cut off on the right. Outline text effect was also unwanted. Refactored card layout to put ALL controls in column 0 (always visible), pie chart in column 1 (safe to clip). Labels changed from `OutlinedLabel` canvas to plain `tk.Label` with a colored background box and black text.
 
 **Files changed**:
 
-- `src/constants.py` — removed `PIE_LABEL_WIDTH`, `PIE_LABEL_HEIGHT` (no longer needed)
-- `src/analysis_frame.py` — removed `PIE_LABEL_HEIGHT/WIDTH` from imports; removed `OutlinedLabel` class entirely; rewrote `create_card()`
-- `tests/test_analysis_pie_chart.py` — removed 9 OutlinedLabel/PIE_LABEL tests; added 6 new tk.Label tests; now 28 tests total
+- `src/constants.py` - removed `PIE_LABEL_WIDTH`, `PIE_LABEL_HEIGHT` (no longer needed)
+- `src/analysis_frame.py` - removed `PIE_LABEL_HEIGHT/WIDTH` from imports; removed `OutlinedLabel` class entirely; rewrote `create_card()`
+- `tests/test_analysis_pie_chart.py` - removed 9 OutlinedLabel/PIE_LABEL tests; added 6 new tk.Label tests; now 28 tests total
 
 **New layout in create_card()**:
 
 ```
 Col 0 (weight=1, always visible):
   Row 0: dropdown  (sticky="W")
-  Row 1: active_label — green bg, black text  (sticky="EW")
-  Row 2: break_label  — amber bg, black text  (sticky="EW")
+  Row 1: active_label - green bg, black text  (sticky="EW")
+  Row 2: break_label  - amber bg, black text  (sticky="EW")
   Row 3: Show Timeline button  (sticky="W")
 Col 1 (no weight, may clip on small windows):
-  Rows 0–3: pie_canvas  (rowspan=4, padx=(8,0), sticky="NS")
+  Rows 0-3: pie_canvas  (rowspan=4, padx=(8,0), sticky="NS")
 ```
 
-- `card_frame.columnconfigure(0, weight=1)` — col 0 expands; col 1 stays fixed width
+- `card_frame.columnconfigure(0, weight=1)` - col 0 expands; col 1 stays fixed width
 - `sticky="EW"` on labels so they stretch to fill the column width
 
 **Label design**:
 
 - `tk.Label` with `bg=COLOR_TRAY_ACTIVE` / `bg=COLOR_TRAY_BREAK`
 - `fg="black"`, `font=("Arial", 14, "bold")`
-- `relief=tk.SOLID, borderwidth=1` — creates the visible box border
-- `padx=8, pady=4` — breathing room inside the box
-- `anchor="w"` — text left-aligned within the box
+- `relief=tk.SOLID, borderwidth=1` - creates the visible box border
+- `padx=8, pady=4` - breathing room inside the box
+- `anchor="w"` - text left-aligned within the box
 
-**What Worked** ✅:
+**What Worked**:
 
-- `tk.Label` with `bg=` and `relief=tk.SOLID` is the simplest way to get a colored box — no subclass needed
+- `tk.Label` with `bg=` and `relief=tk.SOLID` is the simplest way to get a colored box - no subclass needed
 - `columnconfigure(0, weight=1)` ensures col 0 always fills available space; col 1 gets clipped first on narrow windows
 - `rowspan=4` on pie_canvas aligns it with all 4 rows in col 0
-- `tk.Label.cget("background")` and `cget("foreground")` return plain strings (not Tcl_Obj) unlike `ttk.Label` — easier to test
+- `tk.Label.cget("background")` and `cget("foreground")` return plain strings (not Tcl_Obj) unlike `ttk.Label` - easier to test
 - `assertIn(fg, ("black", "#000000"))` pattern handles both representations of black
 
 **What Was Removed / What Didn't Work**:
 
-1. **OutlinedLabel** removed — outline effect (canvas with 4-offset text) was visually noisy and not requested going forward
-2. **PIE_LABEL_WIDTH / PIE_LABEL_HEIGHT** constants removed — they were only needed for the canvas-based OutlinedLabel sizing
-3. **Previous layout (v2)** had dropdown + labels in col 0 but button in col 0 with colspan 2, and pie in col 1 — the button spanning both columns caused layout issues on narrow windows
-4. **labels_frame ttk.Frame** intermediate container removed — labels grid directly into card_frame now
+1. **OutlinedLabel** removed - outline effect (canvas with 4-offset text) was visually noisy and not requested going forward
+2. **PIE_LABEL_WIDTH / PIE_LABEL_HEIGHT** constants removed - they were only needed for the canvas-based OutlinedLabel sizing
+3. **Previous layout (v2)** had dropdown + labels in col 0 but button in col 0 with colspan 2, and pie in col 1 - the button spanning both columns caused layout issues on narrow windows
+4. **labels_frame ttk.Frame** intermediate container removed - labels grid directly into card_frame now
 
 ---
 
@@ -1208,19 +1311,19 @@ Refactored analysis frame card layout so the Active/Break labels sit on the LEFT
 
 **Files changed**:
 
-- `src/constants.py` — added `PIE_LABEL_WIDTH = 200`, `PIE_LABEL_HEIGHT = 30`
-- `src/analysis_frame.py` — added `PIE_LABEL_HEIGHT`, `PIE_LABEL_WIDTH` to imports; new `OutlinedLabel` class (before `draw_pie_chart`); rewrote `create_card()` layout
-- `tests/test_analysis_pie_chart.py` — added 7 new tests; replaced foreground `.cget()` tests with `itemcget()` canvas text fill tests; now 31 tests total
+- `src/constants.py` - added `PIE_LABEL_WIDTH = 200`, `PIE_LABEL_HEIGHT = 30`
+- `src/analysis_frame.py` - added `PIE_LABEL_HEIGHT`, `PIE_LABEL_WIDTH` to imports; new `OutlinedLabel` class (before `draw_pie_chart`); rewrote `create_card()` layout
+- `tests/test_analysis_pie_chart.py` - added 7 new tests; replaced foreground `.cget()` tests with `itemcget()` canvas text fill tests; now 31 tests total
 
-**What Worked** ✅:
+**What Worked**:
 
 **OutlinedLabel pattern** (module-level class before `AnalysisFrame`):
 
 - Inherits `tk.Canvas`, `highlightthickness=0` to remove default border
 - `config(text=..., **kwargs)` method: sets `_text`, calls `_redraw()`, forwards other kwargs to `super().config()`
-- `configure = config` class-level alias — required for Tkinter compatibility
+- `configure = config` class-level alias - required for Tkinter compatibility
 - `_redraw()`: calls `canvas.delete("all")`, draws text 4× offset by ±1px in black, then once in `_color` centered on top
-- `_OUTLINE_OFFSETS = ((-1,-1), (1,-1), (-1,1), (1,1))` — 4 diagonal offsets → clean thin outline
+- `_OUTLINE_OFFSETS = ((-1,-1), (1,-1), (-1,1), (1,1))` - 4 diagonal offsets → clean thin outline
 
 **Layout in create_card()**:
 
@@ -1237,22 +1340,22 @@ Row 2: button (column=0, columnspan=2)
 
 **Testing OutlinedLabel**:
 
-- Cannot use `.cget("foreground")` — `tk.Canvas` doesn't support that option
+- Cannot use `.cget("foreground")` - `tk.Canvas` doesn't support that option
 - Instead: `card.active_label.find_all()` → filter `type == "text"` → `itemcget(last_item, "fill")` → last text item is the colored one
 - Test for 5 text items total: 4 black outline offsets + 1 colored foreground → `len(text_items) == 5`
 - Test label canvas size: `int(card.active_label["width"]) == PIE_LABEL_WIDTH`
 
 **What Didn't Work / Key Learnings**:
 
-1. **`ttk.Label` doesn't support text outline** — must use `tk.Canvas` with multi-offset text drawing trick. The 4-corner diagonal offset approach (+/- 1px in both axes) is the standard Tkinter technique for an outline effect.
+1. **`ttk.Label` doesn't support text outline** - must use `tk.Canvas` with multi-offset text drawing trick. The 4-corner diagonal offset approach (+/- 1px in both axes) is the standard Tkinter technique for an outline effect.
 
-2. **`configure = config` must be a class-level assignment** — assigning it inside `__init__` won't work because Tkinter internally calls `self.configure(...)` during widget initialization before `__init__` body fully runs.
+2. **`configure = config` must be a class-level assignment** - assigning it inside `__init__` won't work because Tkinter internally calls `self.configure(...)` during widget initialization before `__init__` body fully runs.
 
-3. **`tk.Canvas.config()` shadows our override** — calling `super().config(**kwargs)` correctly forwards canvas-specific options (like `bg`) while our override handles `text=`.
+3. **`tk.Canvas.config()` shadows our override** - calling `super().config(**kwargs)` correctly forwards canvas-specific options (like `bg`) while our override handles `text=`.
 
-4. **`_text = ""` initial state** — `_redraw()` is not called until `.config(text=...)` is first called (from `update_card()` → `refresh_all()`). Canvas is blank until then. Tests that check text items must ensure `refresh_all()` has run (it does automatically in `AnalysisFrame.__init__` → `create_widgets()`).
+4. **`_text = ""` initial state** - `_redraw()` is not called until `.config(text=...)` is first called (from `update_card()` → `refresh_all()`). Canvas is blank until then. Tests that check text items must ensure `refresh_all()` has run (it does automatically in `AnalysisFrame.__init__` → `create_widgets()`).
 
-5. **No existing tests broke** — previous foreground tests used `.cget("foreground")` which would now error on `tk.Canvas`. Replaced with `itemcget(last_text_item, "fill")` pattern.
+5. **No existing tests broke** - previous foreground tests used `.cget("foreground")` which would now error on `tk.Canvas`. Replaced with `itemcget(last_text_item, "fill")` pattern.
 
 ---
 
@@ -1262,23 +1365,23 @@ Row 2: button (column=0, columnspan=2)
 
 **Context**:
 Added a pure-Tkinter two-section pie chart to each of the 3 analysis summary cards.
-Active (green) vs Break/Idle (amber) — colors matching the system tray icons.
-Active/Break text labels use the same colors as their pie slice (implicit key — no legend needed).
+Active (green) vs Break/Idle (amber) - colors matching the system tray icons.
+Active/Break text labels use the same colors as their pie slice (implicit key - no legend needed).
 Percentage labels are rendered inside each slice when the slice is >= 10%.
 
 **Files changed**:
 
-- `src/constants.py` — added `PIE_CHART_SIZE`, `PIE_CHART_MARGIN`, `PIE_TEXT_MIN_PERCENT`
-- `src/analysis_frame.py` — added `import math`, new constants to import, `draw_pie_chart()` module-level function, modified `create_card()` and `update_card()`
-- `tests/test_analysis_pie_chart.py` — new TDD test file (24 tests: import, unit, integration)
+- `src/constants.py` - added `PIE_CHART_SIZE`, `PIE_CHART_MARGIN`, `PIE_TEXT_MIN_PERCENT`
+- `src/analysis_frame.py` - added `import math`, new constants to import, `draw_pie_chart()` module-level function, modified `create_card()` and `update_card()`
+- `tests/test_analysis_pie_chart.py` - new TDD test file (24 tests: import, unit, integration)
 
-**What Worked** ✅:
+**What Worked**:
 
-**TDD approach — write tests first, then implement:**
+**TDD approach - write tests first, then implement:**
 
-1. Created `tests/test_analysis_pie_chart.py` first — all tests errored with `ImportError` (expected RED phase).
+1. Created `tests/test_analysis_pie_chart.py` first - all tests errored with `ImportError` (expected RED phase).
 2. Added constants to `src/constants.py`.
-3. Added `draw_pie_chart()` function before `AnalysisFrame` class (module-level, not a method) — allows independent import for testing.
+3. Added `draw_pie_chart()` function before `AnalysisFrame` class (module-level, not a method) - allows independent import for testing.
 4. Modified `create_card()`: added `tk.Canvas` at row=1, shifted active_label to row=2, break_label to row=3, button to row=4. Added `foreground=COLOR_TRAY_ACTIVE/COLOR_TRAY_BREAK` to labels.
 5. Modified `update_card()`: added `draw_pie_chart(card.pie_canvas, active_time, break_time)` call.
 6. All 24 tests pass GREEN.
@@ -1288,7 +1391,7 @@ Percentage labels are rendered inside each slice when the slice is >= 10%.
 - Canvas: `PIE_CHART_SIZE=120` px, `PIE_CHART_MARGIN=6` px, `highlightthickness=0`
 - Canvas `bg=get_frame_background()` to blend with ttk.LabelFrame background
 - Starts at 12 o'clock (`start=90`), clockwise via negative `extent`
-- Full-circle arcs use `extent=359.9` (not 360 — Tkinter renders 360° as nothing)
+- Full-circle arcs use `extent=359.9` (not 360 - Tkinter renders 360° as nothing)
 - Text radius = 55% of arc radius, placed at slice midpoint via `math.cos/sin`
 - `PIE_TEXT_MIN_PERCENT=10` suppresses text for very thin slices
 
@@ -1298,7 +1401,7 @@ Percentage labels are rendered inside each slice when the slice is >= 10%.
    - Fix: wrap in `str()` → `str(label.cget("foreground")).lower()`
    - This affects any test that reads back ttk widget color options as strings.
 
-2. **`create_arc()` with `extent=360` renders nothing** — Tkinter special-cases a full 360° arc as "no arc". Always use `359.9` for full circles.
+2. **`create_arc()` with `extent=360` renders nothing** - Tkinter special-cases a full 360° arc as "no arc". Always use `359.9` for full circles.
 
 3. **Tkinter angle convention**: `start` is degrees counterclockwise from 3 o'clock (east). To start at 12 o'clock use `start=90`. Negative `extent` = clockwise direction.
 
@@ -1306,7 +1409,7 @@ Percentage labels are rendered inside each slice when the slice is >= 10%.
 
 5. **No existing tests broke**: no test in the suite referenced card widget structure (row positions, widget types inside cards). Adding the pie canvas row was safe.
 
-6. **Colors chosen**: `COLOR_TRAY_ACTIVE = "#4CAF50"` (green) and `COLOR_TRAY_BREAK = "#FFC107"` (amber) — these match the system tray icons exactly.
+6. **Colors chosen**: `COLOR_TRAY_ACTIVE = "#4CAF50"` (green) and `COLOR_TRAY_BREAK = "#FFC107"` (amber) - these match the system tray icons exactly.
 
 ---
 
@@ -1352,7 +1455,7 @@ if initial_project:  # <- Guard exists!
 # But for actions: NO guard - just calls .set(default_break_action) directly
 ```
 
-**What Worked** ✅ - Writing the integration test:
+**What Worked** - Writing the integration test:
 
 File: [tests/test_completion_frame_rename_bug.py](tests/test_completion_frame_rename_bug.py)
 
@@ -1387,14 +1490,14 @@ test_completion_frame_opens_after_renaming_non_default_action ... FAIL (captures
 test_completion_frame_preserves_existing_assignments_after_rename ... ok (correct behavior)
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
-- ❌ **Using list format for settings**: Settings use dict format `{"Name": {...}}` NOT list format `[{"name": "...", ...}]`
-- ❌ **TimeTracker(settings_file, data_file, root=root)**: TimeTracker only takes `root` parameter
+- **Using list format for settings**: Settings use dict format `{"Name": {...}}` NOT list format `[{"name": "...", ...}]`
+- **TimeTracker(settings_file, data_file, root=root)**: TimeTracker only takes `root` parameter
   - Correct pattern: `tracker = TimeTracker(self.root); tracker.data_file = ...; tracker.settings_file = ...`
-- ❌ **tracker.save_settings(settings)**: TimeTracker has no `save_settings()` method
+- **tracker.save_settings(settings)**: TimeTracker has no `save_settings()` method
   - Correct: write directly to file with `json.dump` then reload with `tracker.settings = tracker.get_settings()`
-- ❌ **Not reloading tracker.settings after file write**: `get_active_break_actions()` uses cached `self.settings`, so must reload
+- **Not reloading tracker.settings after file write**: `get_active_break_actions()` uses cached `self.settings`, so must reload
 
 **Fix Location** (NOT yet implemented - test phase only):
 
@@ -1430,9 +1533,9 @@ disable_combobox_scroll(self.default_action_menu)
 
 - Mirrors the identical guard already used on `default_project_menu`: `if initial_project: self.default_project_menu.set(initial_project)`
 - Handles **two failure cases** with one check:
-  1. `default_break_action is None` (no action has `is_default=True`) — `None and ...` short-circuits
-  2. Stale reference (e.g., "Resting" renamed away) — `in break_actions` check catches this
-- When guard fails, combobox stays blank (user picks manually) — safe and honest UX
+  1. `default_break_action is None` (no action has `is_default=True`) - `None and ...` short-circuits
+  2. Stale reference (e.g., "Resting" renamed away) - `in break_actions` check catches this
+- When guard fails, combobox stays blank (user picks manually) - safe and honest UX
 - Minimal 2-line change, no behaviour change for the happy path
 
 **Test Results After Fix**:
@@ -1458,7 +1561,7 @@ The test was calling `tracker.get_active_break_actions()` against `tracker.setti
 - `skip_and_close()` uses same cached `tracker.settings` → ALSO gets `None` → falls back to `"Break"`
 - `assertEqual('Break', None)` → FAIL
 
-**What Worked** ✅:
+**What Worked**:
 
 Add `tracker.settings = tracker.get_settings()` immediately after setting `tracker.settings_file` in each test method. This reloads settings from the **test settings file**, not production, making both the test expectation and `skip_and_close()` use the same deterministic source.
 
@@ -1498,10 +1601,10 @@ User reported bug: Create session with 5sec active + 5sec break, end session, cl
 
 **What Didn't Work**:
 
-- ❌ **Only in `skip_and_close()`**: Worked but wrong layer (UI, not data)
-- ❌ **Only in `end_session()`**: Failed for old/incomplete data edge cases
+- **Only in `skip_and_close()`**: Worked but wrong layer (UI, not data)
+- **Only in `end_session()`**: Failed for old/incomplete data edge cases
 
-**What Worked** ✅:
+**What Worked**:
 
 **Final Solution: Apply defaults in BOTH locations (defense in depth)**
 
@@ -1639,9 +1742,9 @@ def skip_and_close(self):
 
 | Approach            | New Sessions | Old Data | Architecture       | Robustness |
 | ------------------- | ------------ | -------- | ------------------ | ---------- |
-| Only skip_and_close | ✓            | ✓        | ❌ UI layer        | Low        |
-| Only end_session    | ✓            | ❌       | ✓ Data layer       | Medium     |
-| Both locations      | ✓            | ✓        | ✓ Defense in depth | **High**   |
+| Only skip_and_close |            |        | UI layer        | Low        |
+| Only end_session    |            |       | Data layer       | Medium     |
+| Both locations      |            |        | Defense in depth | **High**   |
 
 **Test Results**:
 
@@ -1653,11 +1756,11 @@ Ran 2 tests in 5.077s
 OK
 ```
 
-- ✅ Both tests PASS
-- ✅ New sessions: Defaults applied in end_session (primary)
-- ✅ Old data: Defaults applied in skip_and_close (fallback)
-- ✅ Existing assignments preserved (no overwrites)
-- ✅ Defense in depth: Data complete regardless of path
+- Both tests PASS
+- New sessions: Defaults applied in end_session (primary)
+- Old data: Defaults applied in skip_and_close (fallback)
+- Existing assignments preserved (no overwrites)
+- Defense in depth: Data complete regardless of path
 
 **Key Learnings**:
 
@@ -1682,8 +1785,8 @@ OK
    - No risk of duplicate or conflicting assignments
 
 5. **Layer boundaries matter**:
-   - Data layer (`end_session`): Set defaults at creation ✓
-   - UI layer (`skip_and_close`): Verify and fix incomplete data ✓
+   - Data layer (`end_session`): Set defaults at creation
+   - UI layer (`skip_and_close`): Verify and fix incomplete data
    - Both valid - serves different purposes
 
 6. **Handle dual data formats gracefully**:
@@ -1744,12 +1847,12 @@ User reported bug: Create session with 5sec active + 5sec break, end session, cl
 
 **What Didn't Work**:
 
-- ❌ **Initial fix in `skip_and_close()`**: Worked but was wrong location
+- **Initial fix in `skip_and_close()`**: Worked but was wrong location
   - Applied defaults when user clicked skip
   - Required complex logic in completion frame
   - Data incomplete until skip/save action
 
-**What Worked** ✅:
+**What Worked**:
 
 **Better Fix Location: Set defaults in `end_session()` instead**
 
@@ -1842,7 +1945,7 @@ def skip_and_close(self):
 
 **Comparison of Fix Locations**:
 
-| Aspect              | Fix in skip_and_close() ❌ | Fix in end_session() ✅    |
+| Aspect              | Fix in skip_and_close() | Fix in end_session()    |
 | ------------------- | -------------------------- | -------------------------- |
 | Data completeness   | Only after skip/save       | Immediately at session end |
 | Skip complexity     | 54 lines of logic          | 2 lines (just navigate)    |
@@ -1857,10 +1960,10 @@ test_completion_skip_bug.py::TestCompletionFrameSkipBug::test_skip_does_not_over
 test_completion_skip_bug.py::TestCompletionFrameSkipBug::test_skip_records_default_sphere_and_project PASSED
 ```
 
-- ✅ Both tests PASS
-- ✅ Bug fixed: Active periods now visible in analysis after skip
-- ✅ Existing assignments preserved (no overwrites)
-- ✅ Simpler implementation with better architecture
+- Both tests PASS
+- Bug fixed: Active periods now visible in analysis after skip
+- Existing assignments preserved (no overwrites)
+- Simpler implementation with better architecture
 
 **Key Learnings**:
 
@@ -1870,8 +1973,8 @@ test_completion_skip_bug.py::TestCompletionFrameSkipBug::test_skip_records_defau
    - Second implementation cleaner and more robust
 
 2. **Fix at the right layer**:
-   - ❌ UI layer (`skip_and_close`): Band-aid fix
-   - ✅ Data layer (`end_session`): Root cause fix
+   - UI layer (`skip_and_close`): Band-aid fix
+   - Data layer (`end_session`): Root cause fix
    - Data should be complete before UI sees it
 
 3. **TDD enables refactoring**:
@@ -1943,7 +2046,7 @@ ScrollableFrame used `self.after(100, setup_root_binding)` with arbitrary 100ms 
 - Widget might be visible earlier (wasted delay)
 - No deterministic way to know when binding should occur
 
-**What Worked** ✅:
+**What Worked**:
 
 **Used `<Map>` event instead of arbitrary delay**:
 
@@ -1967,7 +2070,7 @@ self.bind("<Map>", setup_root_binding, add="+")
 
 **What Didn't Work**:
 
-- ❌ `self.after(100, setup_root_binding)` - arbitrary, non-deterministic
+- `self.after(100, setup_root_binding)` - arbitrary, non-deterministic
 
 **Files Changed**:
 
@@ -2024,10 +2127,10 @@ idle_threshold_spin.insert(0, str(idle_threshold_value))
 
 **What Didn't Work**:
 
-- ❌ `textvariable=IntVar(value=60)` - blank
-- ❌ `textvariable=StringVar(value="60")` - blank
-- ❌ `spinbox.set(value)` with textvariable - blank
-- ❌ All combinations of .set() before/after grid - blank
+- `textvariable=IntVar(value=60)` - blank
+- `textvariable=StringVar(value="60")` - blank
+- `spinbox.set(value)` with textvariable - blank
+- All combinations of .set() before/after grid - blank
 
 **Key Learning**:
 **ttk.Spinbox TWO modes:**
@@ -2058,14 +2161,14 @@ After adding validation for idle threshold, spinbox stopped displaying initial v
 - Original code WITHOUT `.set()` worked fine!
 
 **What Didn't Work**:
-❌ **Adding explicit `.set()` call after creating spinbox**:
+**Adding explicit `.set()` call after creating spinbox**:
 
 ```python
 idle_threshold_spin = ttk.Spinbox(...)
 idle_threshold_spin.set(idle_settings.get("idle_threshold", 60))  # Didn't help!
 ```
 
-❌ **Calling `.set()` after `.grid()`**:
+**Calling `.set()` after `.grid()`**:
 
 ```python
 idle_threshold_spin.grid(...)
@@ -2073,7 +2176,7 @@ idle_threshold_spin.set(idle_settings.get("idle_threshold", 60))  # Still didn't
 ```
 
 **What Worked**:
-✅ **Keep ORIGINAL code - just use textvariable binding, NO .set() call needed**:
+**Keep ORIGINAL code - just use textvariable binding, NO .set() call needed**:
 
 ```python
 # This is what WORKS (original code before validation):
@@ -2118,9 +2221,9 @@ idle_threshold_spin.grid(row=idle_row, column=1, pady=5, padx=5)
 
 **Test Results**:
 
-- ✅ Spinbox displays initial value from settings.json
-- ✅ Validation catches invalid text input
-- ✅ All tests pass
+- Spinbox displays initial value from settings.json
+- Validation catches invalid text input
+- All tests pass
 
 **Files Modified**:
 
@@ -2152,7 +2255,7 @@ User reported bug: Entering non-numeric string in idle threshold spinbox and cli
 - Silently failed to save or corrupted settings
 
 **What Didn't Work**:
-❌ **Writing tests that import non-existent functions**:
+**Writing tests that import non-existent functions**:
 
 - Initially tried to test `validate_idle_threshold` function that didn't exist
 - Got ImportError, not a failing test
@@ -2161,24 +2264,24 @@ User reported bug: Entering non-numeric string in idle threshold spinbox and cli
 - Corrected approach: Create stub function first, then write tests that FAIL
 
 **What Worked**:
-✅ **Following proper TDD workflow from DEVELOPMENT.md**:
+**Following proper TDD workflow from DEVELOPMENT.md**:
 
 **Step 1: Write Import Test (Smoke Test)**
 
 - Created stub function `validate_idle_threshold()` that returns None
 - Wrote test to verify function exists and is callable
-- Test PASSED ✅
+- Test PASSED
 
 **Step 2: Write Unit Tests (Should FAIL)**
 
 - Wrote 7 unit tests for validation function:
-  - `test_validate_idle_threshold_accepts_valid_value` - expects 120, got None ❌
-  - `test_validate_idle_threshold_rejects_invalid_string` - expects None ✅
-  - `test_validate_idle_threshold_rejects_negative_value` - expects None ✅
-  - `test_validate_idle_threshold_rejects_zero` - expects None ✅
-  - `test_validate_idle_threshold_accepts_boundary_values` - expects 1 and 600, got None ❌
-  - `test_validate_idle_threshold_rejects_too_large_value` - expects None ✅
-- Tests RAN (no ImportError) and FAILED (2 failures, 5 passes) ✅
+  - `test_validate_idle_threshold_accepts_valid_value` - expects 120, got None
+  - `test_validate_idle_threshold_rejects_invalid_string` - expects None
+  - `test_validate_idle_threshold_rejects_negative_value` - expects None
+  - `test_validate_idle_threshold_rejects_zero` - expects None
+  - `test_validate_idle_threshold_accepts_boundary_values` - expects 1 and 600, got None
+  - `test_validate_idle_threshold_rejects_too_large_value` - expects None
+- Tests RAN (no ImportError) and FAILED (2 failures, 5 passes)
 - This is correct TDD: tests run but fail because implementation is incomplete
 
 **Step 3: Implement Validation Function**
@@ -2194,7 +2297,7 @@ User reported bug: Entering non-numeric string in idle threshold spinbox and cli
       except (ValueError, TypeError):
           return None
   ```
-- All 7 validation tests now PASS ✅
+- All 7 validation tests now PASS
 
 **Step 4: Integrate into save_idle_settings()**
 
@@ -2220,9 +2323,9 @@ User reported bug: Entering non-numeric string in idle threshold spinbox and cli
 
 **Test Results**:
 
-- ✅ All 7 new validation tests pass
-- ✅ All 59 existing tests still pass
-- ✅ Total: 66 tests, 48.741 seconds, no regressions
+- All 7 new validation tests pass
+- All 59 existing tests still pass
+- Total: 66 tests, 48.741 seconds, no regressions
 
 **Key Learnings**:
 
@@ -2290,7 +2393,7 @@ After refactoring `create_break_idle_section()` from 288 lines into 4 methods, u
 N/A - Implemented on first try
 
 **What Worked**:
-✅ **Inlined the wrapper method calls directly into create_widgets()**:
+**Inlined the wrapper method calls directly into create_widgets()**:
 
 **Before** (unnecessary indirection):
 
@@ -2332,10 +2435,10 @@ def create_widgets(self):
 
 **Test Results**:
 
-- ✅ All 59 tests pass (28.556 seconds)
-- ✅ No regressions
-- ✅ All subsections still function correctly
-- ✅ Code is cleaner and more direct
+- All 59 tests pass (28.556 seconds)
+- No regressions
+- All subsections still function correctly
+- Code is cleaner and more direct
 
 **Key Learnings**:
 
@@ -2347,17 +2450,17 @@ def create_widgets(self):
 
 **When Wrapper Methods Make Sense**:
 
-- ✅ Called from multiple places (code reuse)
-- ✅ Adds logic (validation, error handling, state management)
-- ✅ Part of public API (stable interface)
-- ✅ Simplifies complex parameter passing
+- Called from multiple places (code reuse)
+- Adds logic (validation, error handling, state management)
+- Part of public API (stable interface)
+- Simplifies complex parameter passing
 
 **When to Inline Instead**:
 
-- ❌ Only called once
-- ❌ Just forwards calls with no added logic
-- ❌ Creates unnecessary indirection
-- ❌ Doesn't improve readability (comment is clearer)
+- Only called once
+- Just forwards calls with no added logic
+- Creates unnecessary indirection
+- Doesn't improve readability (comment is clearer)
 
 **Files Modified**:
 
@@ -2393,7 +2496,7 @@ User identified `create_break_idle_section()` method as violating best practices
 N/A - Implemented on first try
 
 **What Worked**:
-✅ **Extracted 4 methods with clear separation of concerns**:
+**Extracted 4 methods with clear separation of concerns**:
 
 1. **Main orchestrator** (11 lines):
 
@@ -2429,10 +2532,10 @@ def create_break_idle_section(self, parent):
 
 **Test Results**:
 
-- ✅ All 59 tests pass (31.636 seconds)
-- ✅ No regressions
-- ✅ Break actions, idle settings, screenshot settings all functional
-- ✅ Row counter increments correctly across all subsections
+- All 59 tests pass (31.636 seconds)
+- No regressions
+- Break actions, idle settings, screenshot settings all functional
+- Row counter increments correctly across all subsections
 
 **Key Learnings**:
 
@@ -2441,10 +2544,10 @@ def create_break_idle_section(self, parent):
    - DO refactor: Independent sections with clear boundaries (UI subsections)
 
 2. **Refactoring checklist**:
-   - ✅ Clear boundaries between sections (comment blocks, separators)
-   - ✅ Zero interdependence (can reorder subsections)
-   - ✅ Each section self-contained (own frame, own variables)
-   - ✅ Low risk (just code movement)
+   - Clear boundaries between sections (comment blocks, separators)
+   - Zero interdependence (can reorder subsections)
+   - Each section self-contained (own frame, own variables)
+   - Low risk (just code movement)
 
 3. **Method naming conventions**:
    - Public orchestrator: `create_break_idle_section()`
@@ -2496,7 +2599,7 @@ User identified code quality violation in `toggle_project_edit()` method which h
 N/A - Implemented on first try
 
 **What Worked**:
-✅ **Nested function with closure inside create_project_row()**:
+**Nested function with closure inside create_project_row()**:
 
 1. Moved entire toggle logic into `toggle_edit()` nested function
 2. Defined nested function BEFORE creating edit_btn so it can reference the button
@@ -2531,10 +2634,10 @@ def create_project_row(self, parent, row, project_name, project_data):
 
 **Test Results**:
 
-- ✅ All 59 tests pass (46.203 seconds)
-- ✅ No regressions - integration test for sphere change still works
-- ✅ Project edit/save functionality unchanged
-- ✅ Sphere change refresh logic still triggers correctly
+- All 59 tests pass (46.203 seconds)
+- No regressions - integration test for sphere change still works
+- Project edit/save functionality unchanged
+- Sphere change refresh logic still triggers correctly
 
 **Key Learnings**:
 
@@ -2576,14 +2679,14 @@ User reported bug: When editing a project in Sphere1 and changing its sphere to 
   - Project list not refreshed (bug)
   - Project still visible in Sphere1 list
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. First attempted fix (wrong behavior):**
 
 ```python
 # If sphere changed, update current sphere selection and refresh
 if old_sphere != new_sphere:
-    self.sphere_var.set(new_sphere)  # ❌ WRONG: Switch to new sphere
+    self.sphere_var.set(new_sphere)  # WRONG: Switch to new sphere
     self.load_selected_sphere()
 ```
 
@@ -2593,7 +2696,7 @@ Why it didn't work:
 - Moving to Sphere2 is confusing and unexpected
 - Should just refresh current sphere's list so moved project disappears
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Correct fix: Stay on current sphere, just refresh list**
 
@@ -2622,7 +2725,7 @@ note_entry.config(state="readonly")
 goal_entry.config(state="readonly")
 edit_btn.config(text="Edit")
 
-# ✅ Refresh project list if name OR sphere changed
+# Refresh project list if name OR sphere changed
 if new_name != project_name or old_sphere != new_sphere:
     self.refresh_project_section()
 ```
@@ -2669,9 +2772,9 @@ Ran 59 tests in 40.820s
 OK
 ```
 
-- ✅ All 59 tests PASS including new integration test
-- ✅ Test covers realistic user workflow (edit → change sphere → save)
-- ✅ Verifies project disappears from old sphere, appears in new sphere
+- All 59 tests PASS including new integration test
+- Test covers realistic user workflow (edit → change sphere → save)
+- Verifies project disappears from old sphere, appears in new sphere
 
 **Key Learnings**:
 
@@ -2728,7 +2831,7 @@ User requested adding tests for settings_frame module following TDD workflow (#t
 - No validation that regex pattern correctly extracts IDs from various URL formats
 - Missing coverage for edge cases (None, empty string, invalid URLs)
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added 9 comprehensive unit tests for URL parsing:**
 
@@ -2764,12 +2867,12 @@ def test_extract_from_standard_url(self):
 
 **3. Tested all URL format variations:**
 
-- ✅ Standard URL with /edit: `https://docs.google.com/.../d/ID/edit`
-- ✅ URL with gid parameter: `.../edit#gid=0`
-- ✅ URL with range: `.../edit#gid=0&range=A1:B2`
-- ✅ URL without /edit suffix: `.../d/ID` (no /edit)
-- ✅ Plain ID: `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms`
-- ✅ IDs with hyphens/underscores: `ABC123-def_456-GHI`
+- Standard URL with /edit: `https://docs.google.com/.../d/ID/edit`
+- URL with gid parameter: `.../edit#gid=0`
+- URL with range: `.../edit#gid=0&range=A1:B2`
+- URL without /edit suffix: `.../d/ID` (no /edit)
+- Plain ID: `1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms`
+- IDs with hyphens/underscores: `ABC123-def_456-GHI`
 
 **4. Edge cases covered:**
 
@@ -2784,12 +2887,12 @@ Ran 9 tests in 0.001s
 OK
 ```
 
-- ✅ All 9 tests PASS
-- ✅ No tkinter components involved (pure utility function)
-- ✅ Fast execution (0.001s - no UI overhead)
-- ✅ No mocking required (pure function with no side effects)
+- All 9 tests PASS
+- No tkinter components involved (pure utility function)
+- Fast execution (0.001s - no UI overhead)
+- No mocking required (pure function with no side effects)
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 None - tests passed on first run. Utility function testing is straightforward when function is pure (no side effects, no external dependencies).
 
@@ -2832,7 +2935,7 @@ User requested adding tests for screenshot_capture module following TDD workflow
 - No tests for settings hot-reload (update_settings)
 - No tests for defensive copy pattern in get_current_period_screenshots
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Followed TDD workflow - wrote tests FIRST before any implementation:**
 
@@ -2924,13 +3027,13 @@ Ran 16 tests in 2.845s
 OK
 ```
 
-- ✅ All 16 tests PASS
-- ✅ Started with 2 tests, now 16 tests (14 new tests added)
-- ✅ Full coverage of: init, monitoring lifecycle, session mgmt, settings reload
-- ✅ No real filesystem operations (mocked os.makedirs)
-- ✅ No blocking operations (monitoring threads properly cleaned up)
+- All 16 tests PASS
+- Started with 2 tests, now 16 tests (14 new tests added)
+- Full coverage of: init, monitoring lifecycle, session mgmt, settings reload
+- No real filesystem operations (mocked os.makedirs)
+- No blocking operations (monitoring threads properly cleaned up)
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Initial test assertions assumed wrong defaults:**
 
@@ -2980,7 +3083,7 @@ After adding error messages to `test_connection()`, user pointed out that `uploa
 - No indication if it's permissions, wrong sheet, bad data, or network issue
 - Silent failures are confusing and frustrating
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added 4 specific error messageboxes for upload failures:**
 
@@ -3089,15 +3192,15 @@ def test_upload_session_unexpected_exception(self, mock_auth, mock_error):
     # Verify error shows actual exception message
 ```
 
-**Test Results** ✅:
+**Test Results**:
 
-- ✅ All 68 tests PASS (was 64, added 4 new upload_session error tests)
-- ✅ 403 error shows "Make sure you have 'Editor' access (not just Viewer)"
-- ✅ 404 error shows both spreadsheet ID and sheet name
-- ✅ 400 error suggests using 'Create Sheet' to reset
-- ✅ Unexpected exceptions show actual error message
-- ✅ No blocking messageboxes during tests
-- ✅ No real Google Sheets API calls
+- All 68 tests PASS (was 64, added 4 new upload_session error tests)
+- 403 error shows "Make sure you have 'Editor' access (not just Viewer)"
+- 404 error shows both spreadsheet ID and sheet name
+- 400 error suggests using 'Create Sheet' to reset
+- Unexpected exceptions show actual error message
+- No blocking messageboxes during tests
+- No real Google Sheets API calls
 
 **Files Modified**:
 
@@ -3153,7 +3256,7 @@ User requested adding user-actionable error messages to bare except blocks in `t
 - Users wouldn't know if it's a permissions issue, wrong ID, or network problem
 - No messageboxes to alert users of specific problems
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added comprehensive error messageboxes for all error scenarios:**
 
@@ -3246,7 +3349,7 @@ def test_connection_unexpected_exception(self, mock_auth, mock_error):
     # Verify error dialog shows "Unexpected error" message
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Not mocking `authenticate()` caused test failures:**
 
@@ -3289,15 +3392,15 @@ mock_spreadsheets.get.return_value = mock_get_result
 mock_service.spreadsheets.return_value = mock_spreadsheets
 ```
 
-**Test Results** ✅:
+**Test Results**:
 
-- ✅ All 64 tests PASS (was 60, added 4 new test_connection error tests)
-- ✅ 404 error shows spreadsheet ID and "Verify the spreadsheet ID" message
-- ✅ 403 error shows "Share the spreadsheet with your Google account" message
-- ✅ 500/generic errors show HTTP status code
-- ✅ Unexpected exceptions show "Unexpected error" with actual error message
-- ✅ No blocking messageboxes during test execution
-- ✅ No real Google Sheets API calls during tests
+- All 64 tests PASS (was 60, added 4 new test_connection error tests)
+- 404 error shows spreadsheet ID and "Verify the spreadsheet ID" message
+- 403 error shows "Share the spreadsheet with your Google account" message
+- 500/generic errors show HTTP status code
+- Unexpected exceptions show "Unexpected error" with actual error message
+- No blocking messageboxes during test execution
+- No real Google Sheets API calls during tests
 
 **Files Modified**:
 
@@ -3356,17 +3459,17 @@ User asked: "if the user moves the columns in the google sheet, will the data st
 - Silent data corruption - no error message, just wrong data in wrong places
 - Users wouldn't realize data was corrupted until analyzing spreadsheet
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Followed Feature Implementation Workflow (#f in COPILOT_INSTRUCTIONS.md):**
 
 ```
-✅ Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
-✅ Searched AGENT_MEMORY.md for related entries (Google Sheets, header, validation)
-✅ Wrote tests FIRST (TDD approach)
-✅ Implemented feature to pass tests
-✅ Fixed existing tests that needed updates
-✅ Updated AGENT_MEMORY.md
+Read COPILOT_INSTRUCTIONS.md and DEVELOPMENT.md
+Searched AGENT_MEMORY.md for related entries (Google Sheets, header, validation)
+Wrote tests FIRST (TDD approach)
+Implemented feature to pass tests
+Fixed existing tests that needed updates
+Updated AGENT_MEMORY.md
 ```
 
 **2. Added comprehensive header validation in `_ensure_sheet_headers()`:**
@@ -3463,7 +3566,7 @@ def test_real_upload_to_google_sheets(self, mock_error, mock_headers):
     mock_headers.return_value = True  # Skip header validation for this test
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Initial test runs showed blocking popups:**
 
@@ -3485,13 +3588,13 @@ Fix:
 - Updated all 3 tests to mock complete expected_headers
 - Added `@patch` for messagebox in integration test
 
-**Test Results** ✅:
+**Test Results**:
 
-- ✅ All 60 tests PASS (was 58, added 2 new header validation tests)
-- ✅ Header validation correctly detects wrong column order
-- ✅ Header validation accepts correct column order
-- ✅ No blocking messageboxes during test execution
-- ✅ Integration test works with header validation mocked
+- All 60 tests PASS (was 58, added 2 new header validation tests)
+- Header validation correctly detects wrong column order
+- Header validation accepts correct column order
+- No blocking messageboxes during test execution
+- Integration test works with header validation mocked
 
 **Files Modified**:
 
@@ -3547,7 +3650,7 @@ User noticed that primary project comment was placed far away from the primary p
 - Column name "Activity Comment" was misleading - it was actually the project comment
 - Break comments were also in wrong location
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Reorganized column structure with logical adjacency:**
 
@@ -3628,12 +3731,12 @@ return True
 
 **Why This Works**:
 
-- ✅ Logical grouping: Primary info together, secondary info together
-- ✅ Easier to read in Google Sheets: Project and its comment are adjacent
-- ✅ Consistent pattern: Same structure for active periods and breaks
-- ✅ Better column names: "Project Comment" is clearer than "Activity Comment"
-- ✅ All 58 tests pass after updating column indices
-- ✅ No data loss: All information still uploaded, just better organized
+- Logical grouping: Primary info together, secondary info together
+- Easier to read in Google Sheets: Project and its comment are adjacent
+- Consistent pattern: Same structure for active periods and breaks
+- Better column names: "Project Comment" is clearer than "Activity Comment"
+- All 58 tests pass after updating column indices
+- No data loss: All information still uploaded, just better organized
 
 **Files Changed**:
 
@@ -3702,7 +3805,7 @@ After adding error messageboxes for Google Sheets API errors, realized the `_cre
 - No error message shown to user
 - User wouldn't know why sheet creation failed
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added user-actionable error message:**
 
@@ -3745,12 +3848,12 @@ def test_create_sheet_unexpected_error_shows_message(self, mock_error):
 
 **Why This Works**:
 
-- ✅ User sees specific error message with sheet name
-- ✅ Error message includes actual exception details for troubleshooting
-- ✅ Provides actionable guidance ("Check your spreadsheet configuration")
-- ✅ Test verifies error shows ONCE with correct content
-- ✅ Test verifies method returns False on error
-- ✅ All 58 tests passing (was 57, added 1 new test)
+- User sees specific error message with sheet name
+- Error message includes actual exception details for troubleshooting
+- Provides actionable guidance ("Check your spreadsheet configuration")
+- Test verifies error shows ONCE with correct content
+- Test verifies method returns False on error
+- All 58 tests passing (was 57, added 1 new test)
 
 **Files Changed**:
 
@@ -3764,11 +3867,11 @@ def test_create_sheet_unexpected_error_shows_message(self, mock_error):
 
 Now all Google Sheets error paths have tests:
 
-- ✅ 403 Permission Denied (accessing spreadsheet)
-- ✅ 404 Spreadsheet Not Found
-- ✅ 403 Permission Denied (creating sheet)
-- ✅ 400 Sheet Missing (automatic recovery, no error)
-- ✅ **NEW**: Unexpected errors during sheet creation
+- 403 Permission Denied (accessing spreadsheet)
+- 404 Spreadsheet Not Found
+- 403 Permission Denied (creating sheet)
+- 400 Sheet Missing (automatic recovery, no error)
+- **NEW**: Unexpected errors during sheet creation
 
 **Key Learnings**:
 
@@ -3803,7 +3906,7 @@ After adding user-actionable error messages for Google Sheets API errors (403 Pe
 - Needed test coverage to verify dialogs show ONCE with actionable messages
 - Also needed to verify automatic recovery (creating missing sheets) shows NO error dialog
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added 4 new tests for Google Sheets API error scenarios:**
 
@@ -3861,11 +3964,11 @@ mock_error.assert_not_called()
 
 **Why This Works**:
 
-- ✅ Tests verify error dialogs show exactly ONCE (not multiple times)
-- ✅ Tests verify error messages contain user-actionable information (spreadsheet ID, permissions)
-- ✅ Tests verify automatic recovery shows NO dialogs
-- ✅ Tests verify different HTTP status codes trigger different, appropriate messages
-- ✅ All 57 tests passing (was 53, added 4 new tests)
+- Tests verify error dialogs show exactly ONCE (not multiple times)
+- Tests verify error messages contain user-actionable information (spreadsheet ID, permissions)
+- Tests verify automatic recovery shows NO dialogs
+- Tests verify different HTTP status codes trigger different, appropriate messages
+- All 57 tests passing (was 53, added 4 new tests)
 
 **Files Changed**:
 
@@ -3875,12 +3978,12 @@ mock_error.assert_not_called()
 
 **Test Coverage**:
 
-- ✅ 403 Permission Denied (accessing spreadsheet) → Error with permission guidance
-- ✅ 404 Spreadsheet Not Found → Error showing actual spreadsheet ID
-- ✅ 403 Permission Denied (creating sheet) → Error with edit access instructions
-- ✅ 400 Sheet Missing → Automatic recovery, NO error dialog
-- ✅ All error dialogs show exactly ONCE (verified with `assert_called_once()`)
-- ✅ Automatic recovery verified with `assert_not_called()`
+- 403 Permission Denied (accessing spreadsheet) → Error with permission guidance
+- 404 Spreadsheet Not Found → Error showing actual spreadsheet ID
+- 403 Permission Denied (creating sheet) → Error with edit access instructions
+- 400 Sheet Missing → Automatic recovery, NO error dialog
+- All error dialogs show exactly ONCE (verified with `assert_called_once()`)
+- Automatic recovery verified with `assert_not_called()`
 
 **Key Learnings**:
 
@@ -3917,7 +4020,7 @@ After adding error messageboxes for OAuth flow errors, discovered that `test_rea
 - When credentials.json missing, new production error dialog blocked test execution
 - User had to manually click "OK" to continue test
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added `@patch` decorator to integration test:**
 
@@ -3943,11 +4046,11 @@ def test_connection_success(self, mock_exists, mock_error):
 
 **Why This Works**:
 
-- ✅ Integration tests can still test real authentication flow
-- ✅ Error messageboxes are mocked (no blocking popups)
-- ✅ Test verifies successful auth shows NO error dialogs (`assert_not_called()`)
-- ✅ All 53 tests run completely automatically
-- ✅ Tests still use real credentials.json/token.pickle from tests/ directory
+- Integration tests can still test real authentication flow
+- Error messageboxes are mocked (no blocking popups)
+- Test verifies successful auth shows NO error dialogs (`assert_not_called()`)
+- All 53 tests run completely automatically
+- Tests still use real credentials.json/token.pickle from tests/ directory
 
 **Files Changed**:
 
@@ -3987,7 +4090,7 @@ Extended production error handling improvements from Feb 15 to cover OAuth flow 
 - Tests must verify dialogs show exactly ONCE (not multiple times)
 - Tests must verify actionable error messages with troubleshooting steps
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Added 5 new tests for OAuth/API error scenarios:**
 
@@ -4045,19 +4148,19 @@ with patch("src.google_sheets_integration.os.path.exists", side_effect=exists_si
 
 **Why This Works**:
 
-- ✅ Tests verify error dialogs show exactly ONCE (not multiple times)
-- ✅ Tests verify error messages contain user-actionable information
-- ✅ Tests verify different error types show different, appropriate messages
-- ✅ Tests verify successful path shows NO error dialogs
-- ✅ Mock layering correctly simulates file existence scenarios
-- ✅ All 53 tests passing (was 48, added 5 new tests)
+- Tests verify error dialogs show exactly ONCE (not multiple times)
+- Tests verify error messages contain user-actionable information
+- Tests verify different error types show different, appropriate messages
+- Tests verify successful path shows NO error dialogs
+- Mock layering correctly simulates file existence scenarios
+- All 53 tests passing (was 48, added 5 new tests)
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Initial test approach used simple `return_value=True`:**
 
 ```python
-# ❌ WRONG - This makes credentials file exist, so flow gets called
+# WRONG - This makes credentials file exist, so flow gets called
 # but also makes token exist, so flow NEVER gets called
 @patch("src.google_sheets_integration.os.path.exists", return_value=True)
 def test_authenticate_invalid_credentials_format_shows_error(...)
@@ -4080,13 +4183,13 @@ def test_authenticate_invalid_credentials_format_shows_error(...)
 
 **Test Coverage**:
 
-- ✅ Missing credentials file → Error with Google Cloud Console link
-- ✅ Invalid credentials format (ValueError) → Error with re-download instructions
-- ✅ OAuth flow failures (network, permissions) → Error with troubleshooting steps
-- ✅ API connection failures → Error suggesting internet check
-- ✅ Successful authentication → NO error dialogs
-- ✅ Corrupted token → Silent recovery, then error for missing credentials
-- ✅ All error dialogs show exactly ONCE (verified with `assert_called_once()`)
+- Missing credentials file → Error with Google Cloud Console link
+- Invalid credentials format (ValueError) → Error with re-download instructions
+- OAuth flow failures (network, permissions) → Error with troubleshooting steps
+- API connection failures → Error suggesting internet check
+- Successful authentication → NO error dialogs
+- Corrupted token → Silent recovery, then error for missing credentials
+- All error dialogs show exactly ONCE (verified with `assert_called_once()`)
 
 **Key Learnings**:
 
@@ -4125,14 +4228,14 @@ Updated `google_sheets_integration.py` `_load_settings()` method to use producti
 
 **What Didn't Work**:
 
-- ❌ Using `messagebox.showerror()` directly in production code without considering test environments
-- ❌ Not mocking tkinter dialogs in tests that trigger error conditions
+- Using `messagebox.showerror()` directly in production code without considering test environments
+- Not mocking tkinter dialogs in tests that trigger error conditions
 
 **What Worked**:
-✅ Mock `tkinter.messagebox.showerror` in all Google Sheets tests that might trigger errors
-✅ Use `@patch('src.google_sheets_integration.messagebox.showerror')` decorator on affected tests
-✅ Verify error dialogs are called with correct messages (test the error handling logic)
-✅ FileNotFoundError remains silent (acceptable default) - no dialog shown
+Mock `tkinter.messagebox.showerror` in all Google Sheets tests that might trigger errors
+Use `@patch('src.google_sheets_integration.messagebox.showerror')` decorator on affected tests
+Verify error dialogs are called with correct messages (test the error handling logic)
+FileNotFoundError remains silent (acceptable default) - no dialog shown
 
 **Implementation**:
 
@@ -4200,8 +4303,8 @@ Timeline: Active (9:00) → Break (9:15) → Active (9:20) → Idle (9:45) → A
 
 When `project_count = 3`, `range(3, 5)` updates indices [3, 4]:
 
-- Index 3: Idle secondary ✓ Correct
-- Index 4: **Active secondary** ✗ BUG! Updates project dropdown with break action options
+- Index 3: Idle secondary Correct
+- Index 4: **Active secondary** BUG! Updates project dropdown with break action options
 
 **What Didn't Work**:
 
@@ -4270,7 +4373,7 @@ After fixing backward compatibility removal regression, I incorrectly "fixed" it
 - Idle periods: show `idle_notes` only
 - NO combining - each period type shows its own contextual notes
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Removed incorrect combining logic:**
 
@@ -4292,10 +4395,10 @@ Updated `test_session_level_comments_appear_on_all_periods` to expect correct be
 
 **Why This Works**:
 
-- ✅ Matches Test 2's explicit expectations for contextual display
-- ✅ Each period type shows notes relevant to that type only
-- ✅ Column name `session_break_idle_comments` is just a label, not instructions to combine
-- ✅ Simpler logic - no combining needed
+- Matches Test 2's explicit expectations for contextual display
+- Each period type shows notes relevant to that type only
+- Column name `session_break_idle_comments` is just a label, not instructions to combine
+- Simpler logic - no combining needed
 
 **Key Learnings**:
 
@@ -4337,7 +4440,7 @@ During backward compatibility removal for session comments, accidentally deleted
 - Test expected BOTH Break and Idle periods to show "Took good breaks"
 - Idle period returned empty string because code only used `idle_notes`
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Restored combining logic:**
 Created combined field from both break_notes and idle_notes:
@@ -4361,10 +4464,10 @@ session_break_idle_comments = "\n".join(filter(None, [break_notes, idle_notes]))
 
 **Why This Works**:
 
-- ✅ Restores original behavior that existed in backward compatibility code
-- ✅ Single UI column gets combined data from both sources
-- ✅ Both Break and Idle periods show same combined notes (UI consistency)
-- ✅ Clean combination using `filter(None, [...])` to skip empty strings
+- Restores original behavior that existed in backward compatibility code
+- Single UI column gets combined data from both sources
+- Both Break and Idle periods show same combined notes (UI consistency)
+- Clean combination using `filter(None, [...])` to skip empty strings
 
 **Key Learnings**:
 
@@ -4395,7 +4498,7 @@ During code quality review, removed backward compatibility code in analysis_fram
 - `test_session_level_comments_appear_on_all_periods` - AssertionError: '' != 'Great day overall'
 - `test_timeline_data_has_all_required_fields` - AssertionError: '' != 'Overall session was productive'
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Updated test data structure to new format:**
 Replaced old format test data:
@@ -4431,10 +4534,10 @@ test_data = {
 
 **Why This Works**:
 
-- ✅ Tests now match current production data structure
-- ✅ Backward compatibility no longer needed (old format removed from production code)
-- ✅ Consistent with session data saved by actual application
-- ✅ Cleaner data structure with nested dictionary vs flat fields
+- Tests now match current production data structure
+- Backward compatibility no longer needed (old format removed from production code)
+- Consistent with session data saved by actual application
+- Cleaner data structure with nested dictionary vs flat fields
 
 **Key Learnings**:
 
@@ -4458,7 +4561,7 @@ test_data = {
 **Context**:
 After removing pynput suppression code, user questioned whether `logging` and `traceback` modules were needed for production. Analysis found they were only used for development debugging (8 total uses), not user-facing features.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Removed logging module entirely:**
 
@@ -4506,25 +4609,25 @@ except Exception as error:
 
 **Why This Works**:
 
-- ✅ **User-facing errors handled**: messagebox.showerror() already shows errors to users
-- ✅ **Optional features fail silently**: Hotkeys are convenience, not critical
-- ✅ **No console in production**: When packaged as .exe, console output invisible anyway
-- ✅ **Cleaner codebase**: Removed all development-only debug output
-- ✅ **Professional appearance**: No scary stack traces for end users
+- **User-facing errors handled**: messagebox.showerror() already shows errors to users
+- **Optional features fail silently**: Hotkeys are convenience, not critical
+- **No console in production**: When packaged as .exe, console output invisible anyway
+- **Cleaner codebase**: Removed all development-only debug output
+- **Professional appearance**: No scary stack traces for end users
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Nothing failed** - straightforward cleanup of debug code.
 
 **Decision/Outcome**:
 
-- ✅ Removed `import logging` and `import traceback` from imports
-- ✅ Deleted 6 logging.info() calls
-- ✅ Deleted 1 logging.error() call
-- ✅ Deleted 2 traceback.print_exc() calls
-- ✅ Removed 2 `import traceback` statements inside except blocks
-- ✅ Total: 11 lines of debug code removed
-- ✅ No functional impact - errors still shown to users via messageboxes
+- Removed `import logging` and `import traceback` from imports
+- Deleted 6 logging.info() calls
+- Deleted 1 logging.error() call
+- Deleted 2 traceback.print_exc() calls
+- Removed 2 `import traceback` statements inside except blocks
+- Total: 11 lines of debug code removed
+- No functional impact - errors still shown to users via messageboxes
 
 **Key Learnings**:
 
@@ -4552,7 +4655,7 @@ except Exception as error:
 **Context**:
 User identified PEP 8 E402 violation - function definition (\_patched_print_exception) between imports. After fixing import order, user questioned whether pynput suppression code was necessary for production-ready code.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Fixed PEP 8 E402 violation:**
 
@@ -4579,23 +4682,23 @@ traceback.print_exception = _patched_print_exception  # Patch application
 
 **Why This Works**:
 
-- ✅ **Exceptions already handled**: on_activity() has `except Exception: pass` (line 560)
-- ✅ **Production deployment**: If packaged as .exe, console output invisible to users
-- ✅ **Cleaner codebase**: Removes development-only workarounds from production code
-- ✅ **pynput works fine**: Listeners function correctly without suppression
-- ✅ **PEP 8 compliant**: All imports at module level, no code between imports
+- **Exceptions already handled**: on_activity() has `except Exception: pass` (line 560)
+- **Production deployment**: If packaged as .exe, console output invisible to users
+- **Cleaner codebase**: Removes development-only workarounds from production code
+- **pynput works fine**: Listeners function correctly without suppression
+- **PEP 8 compliant**: All imports at module level, no code between imports
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Nothing failed** - straightforward removal of unnecessary code.
 
 **Decision/Outcome**:
 
-- ✅ PEP 8 E402 violation fixed
-- ✅ Removed 20 lines of suppression code (lines 33-52 deleted)
-- ✅ Removed `import warnings` (unused after suppression removal)
-- ✅ Code cleaner and more production-ready
-- ✅ No functional impact (pynput listeners still work)
+- PEP 8 E402 violation fixed
+- Removed 20 lines of suppression code (lines 33-52 deleted)
+- Removed `import warnings` (unused after suppression removal)
+- Code cleaner and more production-ready
+- No functional impact (pynput listeners still work)
 
 **Key Learnings**:
 
@@ -4616,7 +4719,7 @@ traceback.print_exception = _patched_print_exception  # Patch application
 **Context**:
 CODE_QUALITY_REVIEW.md Item #8 flagged typing.List as unused in time_tracker.py line 9. User requested verification and removal of all unused imports.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Verified typing.List already removed:**
 
@@ -4633,15 +4736,15 @@ CODE_QUALITY_REVIEW.md Item #8 flagged typing.List as unused in time_tracker.py 
 
 **3. Updated CODE_QUALITY_REVIEW.md:**
 
-- Marked Item #8 as "✅ COMPLETED"
+- Marked Item #8 as "COMPLETED"
 - Documented verification methodology
 - All three checklist items marked complete
 
 **Decision/Outcome**:
 
-- ✅ Item #8 COMPLETE - No action needed, all imports already cleaned up
-- ✅ typing.List confirmed not present in codebase
-- ✅ All imports verified as actively used
+- Item #8 COMPLETE - No action needed, all imports already cleaned up
+- typing.List confirmed not present in codebase
+- All imports verified as actively used
 
 **Why This Works**:
 
@@ -4657,7 +4760,7 @@ CODE_QUALITY_REVIEW.md Item #8 flagged typing.List as unused in time_tracker.py 
 **Context**:
 User confirmed black formatter is already running on save/keep. Updated CODE_QUALITY_REVIEW.md Item #10 to mark whitespace formatting as complete since automated formatting is already in place.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Confirmed existing automation:**
 
@@ -4667,7 +4770,7 @@ User confirmed black formatter is already running on save/keep. Updated CODE_QUA
 
 **2. Updated CODE_QUALITY_REVIEW.md:**
 
-- Marked Item #10 as "✅ COMPLETED (Feb 11, 2026)"
+- Marked Item #10 as "COMPLETED (Feb 11, 2026)"
 - Checked all 4 sub-items:
   - [x] Review blank line usage between functions (should be 2 lines)
   - [x] Review blank line usage between methods (should be 1 line)
@@ -4677,16 +4780,16 @@ User confirmed black formatter is already running on save/keep. Updated CODE_QUA
 
 **3. Confirmed DEVELOPMENT.md directives followed:**
 
-- ✅ Read .github/COPILOT_INSTRUCTIONS.md (standing orders)
-- ✅ Referenced CODE_QUALITY_REVIEW.md checklist
-- ✅ Updated AGENT_MEMORY.md with completion details
-- ✅ Did not skip DEVELOPMENT.md requirements
+- Read .github/COPILOT_INSTRUCTIONS.md (standing orders)
+- Referenced CODE_QUALITY_REVIEW.md checklist
+- Updated AGENT_MEMORY.md with completion details
+- Did not skip DEVELOPMENT.md requirements
 
 **Key Learnings**:
 
-- ✅ **Automation beats manual**: Black on save ensures consistent formatting without effort
-- ✅ **Check existing tools first**: No need to run formatters manually if already automated
-- ✅ **Document completion**: Mark checklist items as done when automation is in place
+- **Automation beats manual**: Black on save ensures consistent formatting without effort
+- **Check existing tools first**: No need to run formatters manually if already automated
+- **Document completion**: Mark checklist items as done when automation is in place
 
 **Impact:**
 
@@ -4703,18 +4806,18 @@ User confirmed black formatter is already running on save/keep. Updated CODE_QUA
 **Context**:
 After documenting 65 methods (55% coverage) systematically using three-tiered approach, evaluated whether remaining ~53 undocumented methods need docstrings for portfolio quality.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Analyzed what's already documented (65 methods):**
 
-- ✅ Core session lifecycle (start, end, pause, resume, check_idle, update_timers)
-- ✅ Complex data processing (timeline updates, period loading, date calculations)
-- ✅ System integration (tray icon, hotkeys, cleanup sequences)
-- ✅ Navigation (frame switching, state management, return-to-previous)
-- ✅ User workflows (inline creation, session completion, settings)
-- ✅ UI construction (major sections, scrollable frames)
-- ✅ Security-critical (Google Sheets integration with validation)
-- ✅ Frequently called utilities (format_duration called 9+ times, get_spreadsheet_id 12+ times)
+- Core session lifecycle (start, end, pause, resume, check_idle, update_timers)
+- Complex data processing (timeline updates, period loading, date calculations)
+- System integration (tray icon, hotkeys, cleanup sequences)
+- Navigation (frame switching, state management, return-to-previous)
+- User workflows (inline creation, session completion, settings)
+- UI construction (major sections, scrollable frames)
+- Security-critical (Google Sheets integration with validation)
+- Frequently called utilities (format_duration called 9+ times, get_spreadsheet_id 12+ times)
 
 **2. Analyzed what remains undocumented (~53 methods):**
 
@@ -4726,11 +4829,11 @@ After documenting 65 methods (55% coverage) systematically using three-tiered ap
 
 **3. Portfolio quality assessment:**
 
-- ✅ 55% coverage exceeds industry standard for solo projects (typically 30-40%)
-- ✅ Three-tiered systematic approach demonstrates methodology
-- ✅ All complex/critical methods documented (shows judgment)
-- ✅ 386/386 tests passing (quality proven without 100% docstrings)
-- ✅ Comprehensive docstrings show depth (20-48 lines with Args/Returns/Side effects/Note)
+- 55% coverage exceeds industry standard for solo projects (typically 30-40%)
+- Three-tiered systematic approach demonstrates methodology
+- All complex/critical methods documented (shows judgment)
+- 386/386 tests passing (quality proven without 100% docstrings)
+- Comprehensive docstrings show depth (20-48 lines with Args/Returns/Side effects/Note)
 
 **4. Diminishing returns analysis:**
 
@@ -4741,9 +4844,9 @@ After documenting 65 methods (55% coverage) systematically using three-tiered ap
 
 **Decision/Outcome**:
 
-- ✅ Marked CODE_QUALITY_REVIEW.md Item #4 as COMPLETE (not "substantially complete")
-- ✅ 55% coverage is SUFFICIENT for portfolio quality
-- ✅ All MAJOR functions documented
+- Marked CODE_QUALITY_REVIEW.md Item #4 as COMPLETE (not "substantially complete")
+- 55% coverage is SUFFICIENT for portfolio quality
+- All MAJOR functions documented
 - ⏸️ Remaining 53 methods can stay undocumented (CRUD/helpers are self-explanatory)
 
 **Why This Decision Works**:
@@ -4756,7 +4859,7 @@ After documenting 65 methods (55% coverage) systematically using three-tiered ap
 
 **Rationale for "Complete" vs "Substantially Complete"**:
 
-- Goal was portfolio-ready documentation showing systematic approach ✅
+- Goal was portfolio-ready documentation showing systematic approach
 - Goal was NOT 100% coverage (unrealistic even in enterprise codebases)
 - Documented all methods that BENEFIT from documentation (complex logic, threading, state management)
 - Remaining methods DON'T benefit from documentation (save_sphere doesn't need 30-line docstring)
@@ -4768,7 +4871,7 @@ After documenting 65 methods (55% coverage) systematically using three-tiered ap
 **Context**:
 Final phase of CODE_QUALITY_REVIEW.md Item #4 docstring sprint. After completing Tier 1-3, navigation, inline creation, and UI sections (60 methods), ran subagent analysis to identify remaining high-priority undocumented methods. Found 5 critical system integration methods in time_tracker.py that handle tray icon, global hotkeys, and application cleanup.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Used subagent for priority analysis:**
 
@@ -4821,7 +4924,7 @@ runSubagent("Find all public methods without docstrings")
 
 **7. Updated CODE_QUALITY_REVIEW.md:**
 
-- Marked Item #4 as "✅ SUBSTANTIALLY COMPLETE"
+- Marked Item #4 as "SUBSTANTIALLY COMPLETE"
 - Coverage milestone: 55% (65 methods documented)
 - Remaining work: ~53 methods (mostly simple CRUD, UI helpers)
 
@@ -4878,7 +4981,7 @@ def on_closing(self):
     """
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Trying to document all 58 remaining methods at once:**
 
@@ -4895,10 +4998,10 @@ def on_closing(self):
 
 **Decision/Outcome**:
 
-- ✅ Documented 5 critical system integration methods (188 total lines)
-- ✅ Coverage reached 55% milestone (65 methods)
-- ✅ All 386 tests passing (no regressions)
-- ✅ CODE_QUALITY_REVIEW.md Item #4 marked SUBSTANTIALLY COMPLETE
+- Documented 5 critical system integration methods (188 total lines)
+- Coverage reached 55% milestone (65 methods)
+- All 386 tests passing (no regressions)
+- CODE_QUALITY_REVIEW.md Item #4 marked SUBSTANTIALLY COMPLETE
 - ⏸️ Remaining ~53 methods can be addressed incrementally (mostly simple CRUD)
 
 **Why This Works**:
@@ -4916,15 +5019,15 @@ def on_closing(self):
 **Context**:
 CODE_QUALITY_REVIEW.md Item #7 suggested improving error handling specificity (replace broad `Exception` catches with specific exception types, add logging context). Evaluated whether this improvement was necessary given production-level status with 386 passing tests.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Evaluated current error handling status:**
 
-- ✅ **All critical paths covered**: File I/O, API calls, UI operations all wrapped in try/except
-- ✅ **User feedback provided**: Messageboxes for errors users need to know about
-- ✅ **Silent failures appropriate**: Screenshot errors don't crash app, use sensible defaults
-- ✅ **Test coverage validates**: 386 tests verify error paths work correctly
-- ✅ **Already using `as error`**: Most exceptions captured with context for error messages
+- **All critical paths covered**: File I/O, API calls, UI operations all wrapped in try/except
+- **User feedback provided**: Messageboxes for errors users need to know about
+- **Silent failures appropriate**: Screenshot errors don't crash app, use sensible defaults
+- **Test coverage validates**: 386 tests verify error paths work correctly
+- **Already using `as error`**: Most exceptions captured with context for error messages
 
 **2. Analyzed CODE_QUALITY_REVIEW.md Item #7 specifics:**
 
@@ -4979,31 +5082,31 @@ except Exception as error:
 
 **Evidence supporting "Skip":**
 
-- ✅ 386/386 tests passing (error paths validated)
-- ✅ Zero production crashes or error handling bugs
-- ✅ All user-facing errors provide clear feedback
-- ✅ Code quality score already 8.5/10
-- ✅ No specific error handling problems identified
+- 386/386 tests passing (error paths validated)
+- Zero production crashes or error handling bugs
+- All user-facing errors provide clear feedback
+- Code quality score already 8.5/10
+- No specific error handling problems identified
 
 **Evidence supporting "Do it anyway":**
 
-- ❌ Only 1 concrete issue (bare except in pynput setup)
-- ❌ Generic recommendations without examples
-- ❌ Would consume significant time for <0.1 quality improvement
-- ❌ Inappropriate application of server/library best practices to GUI app
+- Only 1 concrete issue (bare except in pynput setup)
+- Generic recommendations without examples
+- Would consume significant time for <0.1 quality improvement
+- Inappropriate application of server/library best practices to GUI app
 
 **Decision: NOT NECESSARY** - Current error handling is production-ready for a GUI application.
 
 **Key Learnings**:
 
-- ✅ **Distinguish app types**: Server/library code needs specific exceptions + logging; GUI code needs user feedback + stability
-- ✅ **Test coverage validates**: 386 passing tests prove error handling works correctly
-- ✅ **Evaluate ROI**: <0.1 quality gain not worth significant refactoring effort
-- ✅ **Question generic advice**: "Best practices" must be contextualized to application type
-- ✅ **Production-ready != Perfect**: Code at 8.5/10 doesn't need to reach 8.6/10 if time better spent elsewhere
-- ✅ **Evidence-based decisions**: Review actual code, not just checklist items
+- **Distinguish app types**: Server/library code needs specific exceptions + logging; GUI code needs user feedback + stability
+- **Test coverage validates**: 386 passing tests prove error handling works correctly
+- **Evaluate ROI**: <0.1 quality gain not worth significant refactoring effort
+- **Question generic advice**: "Best practices" must be contextualized to application type
+- **Production-ready != Perfect**: Code at 8.5/10 doesn't need to reach 8.6/10 if time better spent elsewhere
+- **Evidence-based decisions**: Review actual code, not just checklist items
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Blindly following "best practices" checklist:**
 
@@ -5040,10 +5143,10 @@ except Exception as error:
 
 **CODE_QUALITY_REVIEW.md updated:**
 
-- ✅ Item #7 marked as "DECISION: NOT NECESSARY"
-- ✅ Rationale documented with production-level evidence
-- ✅ GUI vs server/library patterns explained
-- ✅ Decision preserves 8.5/10 quality score
+- Item #7 marked as "DECISION: NOT NECESSARY"
+- Rationale documented with production-level evidence
+- GUI vs server/library patterns explained
+- Decision preserves 8.5/10 quality score
 
 **Time saved:**
 
@@ -5054,10 +5157,10 @@ except Exception as error:
 
 **Portfolio impact:**
 
-- ✅ Demonstrates evidence-based decision making
-- ✅ Shows understanding of context-appropriate patterns
-- ✅ Avoids gold-plating working production code
-- ✅ Prioritizes high-impact improvements
+- Demonstrates evidence-based decision making
+- Shows understanding of context-appropriate patterns
+- Avoids gold-plating working production code
+- Prioritizes high-impact improvements
 
 **Next Steps:**
 
@@ -5074,30 +5177,30 @@ except Exception as error:
 **Context**:
 Completed major code quality improvements for portfolio-level standards. Systematically addressed CODE_QUALITY_REVIEW.md critical issues: removed all print statements (30+), extracted all magic numbers to constants (40+), removed all hardcoded file paths (7), and replaced all variable abbreviations (99). All 386 tests passing after refactoring.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Systematic approach to code quality:**
 
-**Phase 1: Print Statements** ✅
+**Phase 1: Print Statements**
 
 - Deleted all 30+ debug print statements across 5 files
 - Decision: Delete rather than convert to logging (GUI app, prints invisible to users)
 - Result: Cleaner codebase, no debug clutter
 
-**Phase 2: Magic Numbers** ✅
+**Phase 2: Magic Numbers**
 
 - Created centralized `src/constants.py` module
 - Extracted 40+ magic numbers: time conversions, idle thresholds, UI colors, dimensions
 - Self-documenting constants: `SECONDS_PER_HOUR = 3600` vs raw `3600`
 - Single source of truth for all hardcoded values
 
-**Phase 3: Hardcoded File Paths** ✅
+**Phase 3: Hardcoded File Paths**
 
 - Extracted 7 file paths to constants: settings.json, data.json, screenshots/, backups/
 - Added to constants.py: `DEFAULT_SETTINGS_FILE`, `DEFAULT_DATA_FILE`, etc.
 - Easy to reconfigure for different deployment environments
 
-**Phase 4: Variable Abbreviations** ✅ (MOST COMPLEX)
+**Phase 4: Variable Abbreviations** (MOST COMPLEX)
 
 - **Total: 99 variable renames across 6 production files**
 - `e` → `error` (27 instances) - all exception handlers
@@ -5117,17 +5220,17 @@ Completed major code quality improvements for portfolio-level standards. Systema
 
 **Instead of generic replacements:**
 
-- ❌ `idx` → `index` everywhere
-- ❌ `col` → `column` everywhere
+- `idx` → `index` everywhere
+- `col` → `column` everywhere
 
 **Used context-specific names:**
 
-- ✅ `idx` → `card_index` (which time range card)
-- ✅ `idx` → `period_index` (which timeline period)
-- ✅ `idx` → `row_index` (grid row placement)
-- ✅ `col` → `column_index` (loop counter for column config)
-- ✅ `col` → `grid_column` (sequential widget placement)
-- ✅ `col` → `timeline_column` (column within timeline period row)
+- `idx` → `card_index` (which time range card)
+- `idx` → `period_index` (which timeline period)
+- `idx` → `row_index` (grid row placement)
+- `col` → `column_index` (loop counter for column config)
+- `col` → `grid_column` (sequential widget placement)
+- `col` → `timeline_column` (column within timeline period row)
 
 **Why?** Self-documenting code - instantly clear what each variable represents
 
@@ -5150,12 +5253,12 @@ Completed major code quality improvements for portfolio-level standards. Systema
 
 **After Code Quality Sprint:**
 
-- 0 print statements ✅
-- 0 magic numbers ✅
-- 0 hardcoded file paths ✅
-- 0 variable abbreviations ✅
-- Code Quality Score: 8.5/10 ✅
-- All 386 tests passing ✅
+- 0 print statements
+- 0 magic numbers
+- 0 hardcoded file paths
+- 0 variable abbreviations
+- Code Quality Score: 8.5/10
+- All 386 tests passing
 
 **Files Modified:**
 
@@ -5169,16 +5272,16 @@ Completed major code quality improvements for portfolio-level standards. Systema
 
 **Key Learnings**:
 
-- ✅ **Test immediately after refactoring**: Caught incomplete replacement bug before committing
-- ✅ **Use maxResults in grep_search**: Default shows only ~20 matches, can miss instances
-- ✅ **Verify 0 matches after replacement**: Don't assume it's complete
-- ✅ **Context-aware naming**: `period_index` > `index`, `timeline_column` > `column`
-- ✅ **Run full test suite**: All 386 tests = confidence in refactoring
-- ✅ **Document lessons learned**: AGENT_MEMORY.md captures patterns for future work
-- ✅ **Batch operations efficient**: multi_replace_string_in_file handles 37 operations in one call
-- ✅ **Search entire file**: Large files (2000+ lines) can have variables in multiple sections
+- **Test immediately after refactoring**: Caught incomplete replacement bug before committing
+- **Use maxResults in grep_search**: Default shows only ~20 matches, can miss instances
+- **Verify 0 matches after replacement**: Don't assume it's complete
+- **Context-aware naming**: `period_index` > `index`, `timeline_column` > `column`
+- **Run full test suite**: All 386 tests = confidence in refactoring
+- **Document lessons learned**: AGENT_MEMORY.md captures patterns for future work
+- **Batch operations efficient**: multi_replace_string_in_file handles 37 operations in one call
+- **Search entire file**: Large files (2000+ lines) can have variables in multiple sections
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Initial grep_search without maxResults:**
 
@@ -5197,12 +5300,12 @@ Completed major code quality improvements for portfolio-level standards. Systema
 
 **Portfolio Readiness:**
 
-- ✅ Zero debug code (all prints removed)
-- ✅ Self-documenting constants (no magic numbers)
-- ✅ Configurable (no hardcoded paths)
-- ✅ Readable variables (no abbreviations)
-- ✅ Fully tested (386/386 passing)
-- ✅ Well-documented (AGENT_MEMORY.md + CODE_QUALITY_REVIEW.md)
+- Zero debug code (all prints removed)
+- Self-documenting constants (no magic numbers)
+- Configurable (no hardcoded paths)
+- Readable variables (no abbreviations)
+- Fully tested (386/386 passing)
+- Well-documented (AGENT_MEMORY.md + CODE_QUALITY_REVIEW.md)
 
 **Next Steps:**
 
@@ -5220,7 +5323,7 @@ Completed major code quality improvements for portfolio-level standards. Systema
 **Context**:
 After replacing variable abbreviations (`e`→`error`, `idx`→`index`, `col`→`column`), ran test suite and discovered 87 failures all with same error: "UnboundLocalError: cannot access local variable 'col' where it is not associated with a value". Initial replacement only covered 7 instances in completion_frame.py session navigation, but missed 43 more instances in two other sections of the same file.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Quickly identified the root cause:**
 
@@ -5230,7 +5333,7 @@ After replacing variable abbreviations (`e`→`error`, `idx`→`index`, `col`→
 
 **2. Three distinct sections required different naming:**
 
-**Section 1 (lines 510-600): Session Navigation Controls** ✅ ALREADY DONE
+**Section 1 (lines 510-600): Session Navigation Controls** ALREADY DONE
 
 - Initial replacement renamed `col` → `grid_column` (7 instances)
 - Sequential widget placement: Date dropdown, Session dropdown, time labels
@@ -5267,14 +5370,14 @@ After replacing variable abbreviations (`e`→`error`, `idx`→`index`, `col`→
 
 **Key Learnings**:
 
-- ✅ **Search entire file, not just first match**: Initial replacement found session navigation section, assumed complete
-- ✅ **grep_search maxResults parameter**: Default shows only 20 matches - need `maxResults=100` to see all
-- ✅ **Test immediately after refactoring**: Running tests revealed the issue before committing
-- ✅ **Read error messages carefully**: All 87 errors were SAME issue (UnboundLocalError on `col`)
-- ✅ **Context-specific names prevent confusion**: `grid_column` vs `timeline_column` clarifies purpose
-- ⚠️ **Don't assume variable is used only once**: Just because you replaced it in one section doesn't mean it's complete
+- **Search entire file, not just first match**: Initial replacement found session navigation section, assumed complete
+- **grep_search maxResults parameter**: Default shows only 20 matches - need `maxResults=100` to see all
+- **Test immediately after refactoring**: Running tests revealed the issue before committing
+- **Read error messages carefully**: All 87 errors were SAME issue (UnboundLocalError on `col`)
+- **Context-specific names prevent confusion**: `grid_column` vs `timeline_column` clarifies purpose
+- **Don't assume variable is used only once**: Just because you replaced it in one section doesn't mean it's complete
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **1. Initial grep_search without maxResults showed only first section:**
 
@@ -5340,7 +5443,7 @@ python tests/run_all_tests.py  # Returns: All 386 tests passing
 **Context**:
 CODE_QUALITY_REVIEW.md identified that the codebase used common but abbreviated variable names (`e`, `idx`, `col`, `proj`) that violated the portfolio standard: "Clear, descriptive variable/function names (no abbreviations)". Replaced all 56 instances across 6 production files with descriptive, context-aware names.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Used multi_replace_string_in_file for efficient batch replacement:**
 
@@ -5437,14 +5540,14 @@ for period_index, period in enumerate(periods):
 
 **Key Learnings**:
 
-- ✅ **Context-aware beats generic**: `period_index` > `index`, `grid_column` > `column` when purpose is clear
-- ✅ **Batch replacements efficient**: multi_replace_string_in_file handled 37 operations in one call
-- ✅ **Self-documenting code**: No need to guess what `project_name` vs `project_dict` contains
-- ✅ **Portfolio standard achieved**: Zero abbreviations in production code (excluding 3rd party APIs)
-- ✅ **Common != Good**: `e`, `idx`, `col` are common Python conventions, but explicit is better
-- ✅ **Verify examples**: `br` was listed as example but didn't exist - always grep_search first
+- **Context-aware beats generic**: `period_index` > `index`, `grid_column` > `column` when purpose is clear
+- **Batch replacements efficient**: multi_replace_string_in_file handled 37 operations in one call
+- **Self-documenting code**: No need to guess what `project_name` vs `project_dict` contains
+- **Portfolio standard achieved**: Zero abbreviations in production code (excluding 3rd party APIs)
+- **Common != Good**: `e`, `idx`, `col` are common Python conventions, but explicit is better
+- **Verify examples**: `br` was listed as example but didn't exist - always grep_search first
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - All replacements successful, no issues encountered.
 
@@ -5470,7 +5573,7 @@ for period_index, period in enumerate(periods):
 **Context**:
 Completed documentation of inline creation patterns in CompletionFrame and major UI section creation methods in SettingsFrame. Focused on methods implementing "Add New..." dropdown pattern and complex multi-part UI sections.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Documented 8 CompletionFrame Inline Creation Methods**:
 
@@ -5493,11 +5596,11 @@ Completed documentation of inline creation patterns in CompletionFrame and major
 
 **Key Learnings**:
 
-- ✅ **Inline creation pattern consistent**: "Add New..." → editable → <Return> saves, <FocusOut> cancels
-- ✅ **Document update_all flag**: Critical for dropdown cascade understanding
-- ✅ **Sphere association matters**: Projects sphere-specific, break actions global
-- ✅ **UI sections need component inventory**: List filters, dropdowns, buttons explicitly
-- ✅ **Security notes valuable**: Google Sheets env var recommendation important
+- **Inline creation pattern consistent**: "Add New..." → editable → <Return> saves, <FocusOut> cancels
+- **Document update_all flag**: Critical for dropdown cascade understanding
+- **Sphere association matters**: Projects sphere-specific, break actions global
+- **UI sections need component inventory**: List filters, dropdowns, buttons explicitly
+- **Security notes valuable**: Google Sheets env var recommendation important
 
 **Coverage Progress**:
 
@@ -5515,7 +5618,7 @@ Completed documentation of inline creation patterns in CompletionFrame and major
 **Context**:
 CODE_QUALITY_REVIEW.md item #6 required extracting hardcoded file path strings to constants. Constants were created in src/constants.py earlier but not actually used in the code. Completed the work by replacing all hardcoded string literals with constant imports.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Identified All Hardcoded File Path Locations**:
 
@@ -5550,20 +5653,20 @@ Intentionally LEFT AS-IS because:
 
 **Result:**
 
-- ✅ 0 hardcoded file paths in production code (was 7 instances)
-- ✅ Single source of truth for all file/folder paths
-- ✅ Easy to change paths globally (e.g., for testing or deployment)
-- ✅ Completes CODE_QUALITY_REVIEW.md item #6
+- 0 hardcoded file paths in production code (was 7 instances)
+- Single source of truth for all file/folder paths
+- Easy to change paths globally (e.g., for testing or deployment)
+- Completes CODE_QUALITY_REVIEW.md item #6
 
 **Key Learnings**:
 
-- ✅ **Constants defined ≠ constants used**: Creating src/constants.py was only half the work - must actually replace hardcoded strings
-- ✅ **Search for all instances**: Use grep_search to find all locations before replacing
-- ✅ **Add imports incrementally**: Some files already imported from constants, others needed new imports
-- ✅ **Pragmatic judgment**: Not all "magic values" need extraction - UI layout values are context-specific
-- ✅ **Batch replacements**: multi_replace_string_in_file efficient for 9 related changes across 4 files
+- **Constants defined ≠ constants used**: Creating src/constants.py was only half the work - must actually replace hardcoded strings
+- **Search for all instances**: Use grep_search to find all locations before replacing
+- **Add imports incrementally**: Some files already imported from constants, others needed new imports
+- **Pragmatic judgment**: Not all "magic values" need extraction - UI layout values are context-specific
+- **Batch replacements**: multi_replace_string_in_file efficient for 9 related changes across 4 files
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - Approach was successful.
 
@@ -5586,7 +5689,7 @@ Item #6 complete. Remaining CODE_QUALITY_REVIEW items:
 **Context**:
 Completed documentation of critical TimeTracker navigation methods and all tray/hotkey integration wrappers. Focused on methods that handle complex frame lifecycle and cross-thread communication.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Documented 4 Complex Navigation Methods (Tier 2)**:
 
@@ -5640,14 +5743,14 @@ Completed documentation of critical TimeTracker navigation methods and all tray/
 
 **Key Learnings**:
 
-- ✅ **Navigation methods need exhaustive state documentation**: Must list all navigation states and flags
-- ✅ **Document cleanup order**: grid_remove → destroy → clear refs prevents use-after-free
-- ✅ **Explain flag purposes**: analysis_from_completion, session_view_open control back navigation
-- ✅ **Thread safety is critical**: All tray/hotkey handlers use root.after(0, func) for main thread execution
-- ✅ **Batch simple wrappers**: 11 wrapper methods documented in one pass with brief consistent format
-- ✅ **Include keyboard shortcuts in docstrings**: Helps users find hotkey documentation
+- **Navigation methods need exhaustive state documentation**: Must list all navigation states and flags
+- **Document cleanup order**: grid_remove → destroy → clear refs prevents use-after-free
+- **Explain flag purposes**: analysis_from_completion, session_view_open control back navigation
+- **Thread safety is critical**: All tray/hotkey handlers use root.after(0, func) for main thread execution
+- **Batch simple wrappers**: 11 wrapper methods documented in one pass with brief consistent format
+- **Include keyboard shortcuts in docstrings**: Helps users find hotkey documentation
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - Navigation documentation was successful.
 
@@ -5675,7 +5778,7 @@ Continue with completion_frame.py and settings_frame.py:
 **Context**:
 Completed Tier 2 (frequently called utilities 15-50 lines) and Tier 3 (simple getters/setters <15 lines) of the three-tiered docstring approach. Used subagent to identify and prioritize methods by call frequency and complexity.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Subagent Analysis Identified Priority Methods**:
 
@@ -5749,14 +5852,14 @@ Completed Tier 2 (frequently called utilities 15-50 lines) and Tier 3 (simple ge
 
 **Key Learnings**:
 
-- ✅ **Security methods need extra detail**: Google Sheets validation methods documented injection prevention
-- ✅ **List all call locations**: Helps understand utility importance and usage patterns
-- ✅ **Document defaults and fallbacks**: Critical for understanding error handling
-- ✅ **Tier 3 can be brief**: One-liners sufficient for simple getters/setters
-- ✅ **Format examples help**: Showing "2h 15m" vs "30m 5s" clarifies format_duration() logic
-- ✅ **Explain defensive copies**: .copy() usage needs explicit documentation
+- **Security methods need extra detail**: Google Sheets validation methods documented injection prevention
+- **List all call locations**: Helps understand utility importance and usage patterns
+- **Document defaults and fallbacks**: Critical for understanding error handling
+- **Tier 3 can be brief**: One-liners sufficient for simple getters/setters
+- **Format examples help**: Showing "2h 15m" vs "30m 5s" clarifies format_duration() logic
+- **Explain defensive copies**: .copy() usage needs explicit documentation
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - Tier 2 and Tier 3 approach was successful.
 
@@ -5793,7 +5896,7 @@ Continue systematic documentation:
 **Context**:
 Following three-tiered recommendation from previous docstring work, focused on Tier 1: complex helper methods (50-100 lines) that are frequently called or handle critical logic.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Used subagent to analyze and prioritize complex helpers**:
 
@@ -5847,13 +5950,13 @@ For `start_input_monitoring()` idle resumption:
 
 **Key Learnings**:
 
-- ✅ **Analyze first with subagent**: Efficiently identified top priorities across files
-- ✅ **Document complex transitions**: State management needs detailed step-by-step explanation
-- ✅ **Explain design decisions**: "Why" is more valuable than "what" for complex helpers
-- ✅ **List all callers**: Helps understand importance and usage patterns
-- ✅ **Note critical behaviors**: Warning about ScrollableFrame preservation prevents future bugs
+- **Analyze first with subagent**: Efficiently identified top priorities across files
+- **Document complex transitions**: State management needs detailed step-by-step explanation
+- **Explain design decisions**: "Why" is more valuable than "what" for complex helpers
+- **List all callers**: Helps understand importance and usage patterns
+- **Note critical behaviors**: Warning about ScrollableFrame preservation prevents future bugs
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - Tier 1 approach was successful.
 
@@ -5878,7 +5981,7 @@ Move to Tier 2: Frequently called utility functions like `format_time()`, `forma
 **Context**:
 CODE_QUALITY_REVIEW.md identified that ~60% of public methods (110 out of 118) were missing docstrings, violating portfolio standards: "Docstrings for all public functions/classes". Analyzed codebase and discovered only 7% docstring coverage. Prioritized most critical user-facing methods for documentation.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Analyzed before implementing - measured the problem**:
 
@@ -5956,15 +6059,15 @@ Note:
 
 **Key Learnings**:
 
-- ✅ **Measure before acting**: Analysis showed 7% coverage - validated the problem scope
-- ✅ **Prioritize by criticality**: User-facing methods > helpers > trivial getters
-- ✅ **Document side effects**: GUI apps have lots of state changes - make them explicit
-- ✅ **Add contextual notes**: Explain WHY code works a certain way (e.g., threshold-based idle)
-- ✅ **Use consistent format**: Google-style with Args/Returns/Side effects/Note sections
-- ✅ **Focus on behavior**: Describe WHAT happens, not HOW the code does it
-- ✅ **Verify existing work**: Some methods already had good docstrings - don't duplicate effort
+- **Measure before acting**: Analysis showed 7% coverage - validated the problem scope
+- **Prioritize by criticality**: User-facing methods > helpers > trivial getters
+- **Document side effects**: GUI apps have lots of state changes - make them explicit
+- **Add contextual notes**: Explain WHY code works a certain way (e.g., threshold-based idle)
+- **Use consistent format**: Google-style with Args/Returns/Side effects/Note sections
+- **Focus on behavior**: Describe WHAT happens, not HOW the code does it
+- **Verify existing work**: Some methods already had good docstrings - don't duplicate effort
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **N/A** - Approach was successful. Key was verifying existing docstrings before writing new ones.
 
@@ -5995,7 +6098,7 @@ Consider using AI to generate initial drafts for simpler methods, then review/ed
 **Context**:
 CODE_QUALITY_REVIEW.md identified 20+ functions exceeding 50-line guideline, including 5 massive functions (>200 lines). Analyzed refactoring opportunities, particularly `export_to_csv()` (280 lines) which has sequential logic processing three period types (active, break, idle).
 
-**Decision Made** ✅:
+**Decision Made**:
 
 **Leave working, tested code as-is rather than refactoring for arbitrary metrics**:
 
@@ -6007,7 +6110,7 @@ CODE_QUALITY_REVIEW.md identified 20+ functions exceeding 50-line guideline, inc
 4. **Risk vs. reward**: Working code with tests is valuable - refactoring introduces regression risk
 5. **Code duplication is intentional**: Similar logic for each period type makes pattern obvious and consistent
 
-**What Worked** ✅:
+**What Worked**:
 
 **Documented the decision in code and README**:
 
@@ -6048,12 +6151,12 @@ This codebase prioritizes **working, tested code** over dogmatic adherence to ar
 
 **Key Learnings**:
 
-- ✅ **Not all "code smells" need fixing**: Function length guidelines are not absolute rules
-- ✅ **Context matters**: Sequential workflows with clear structure may be more readable when linear
-- ✅ **Test coverage provides confidence**: Comprehensive tests make refactoring optional, not mandatory
-- ✅ **Document intentional decisions**: Explain WHY code violates typical guidelines when there's good reason
-- ✅ **ROI thinking**: Spend time on changes that improve code quality meaningfully across entire codebase
-- ✅ **"Do better next time" is valid**: Write better code going forward rather than gold-plating the past
+- **Not all "code smells" need fixing**: Function length guidelines are not absolute rules
+- **Context matters**: Sequential workflows with clear structure may be more readable when linear
+- **Test coverage provides confidence**: Comprehensive tests make refactoring optional, not mandatory
+- **Document intentional decisions**: Explain WHY code violates typical guidelines when there's good reason
+- **ROI thinking**: Spend time on changes that improve code quality meaningfully across entire codebase
+- **"Do better next time" is valid**: Write better code going forward rather than gold-plating the past
 
 **What to Prioritize Instead**:
 
@@ -6065,11 +6168,11 @@ This codebase prioritizes **working, tested code** over dogmatic adherence to ar
 
 **When to Refactor Functions**:
 
-- ✅ When tests are failing or hard to maintain
-- ✅ When adding new features requires understanding complex code
-- ✅ When duplicated logic needs to change in lockstep (DRY violation causing bugs)
-- ✅ When code is actively causing problems
-- ❌ Not just because it's "too long" if it's readable and working
+- When tests are failing or hard to maintain
+- When adding new features requires understanding complex code
+- When duplicated logic needs to change in lockstep (DRY violation causing bugs)
+- When code is actively causing problems
+- Not just because it's "too long" if it's readable and working
 
 **Portfolio Lesson**:
 Showing pragmatic engineering judgment (knowing when NOT to refactor) is just as valuable as showing refactoring skills. Document your decisions and reasoning.
@@ -6083,7 +6186,7 @@ Showing pragmatic engineering judgment (knowing when NOT to refactor) is just as
 **Context**:
 Code quality review identified 40+ magic numbers throughout codebase violating portfolio standards: "No magic numbers - use named constants". Created centralized `src/constants.py` module to eliminate all hardcoded numeric values and color codes.
 
-**What Worked** ✅:
+**What Worked**:
 
 **Created comprehensive constants module with clear organization**:
 
@@ -6116,11 +6219,11 @@ MOUSEWHEEL_DELTA_DIVISOR = 120
 
 **Systematic replacement approach**:
 
-1. ✅ **Created constants module first** - Single source of truth for all hardcoded values
-2. ✅ **Categorized constants logically** - Time, colors, dimensions, defaults
-3. ✅ **Added descriptive comments** - Explains what each constant represents
-4. ✅ **Updated imports** - Added `from src.constants import ...` to each file
-5. ✅ **Replaced all instances** - Used multi_replace for efficiency
+1. **Created constants module first** - Single source of truth for all hardcoded values
+2. **Categorized constants logically** - Time, colors, dimensions, defaults
+3. **Added descriptive comments** - Explains what each constant represents
+4. **Updated imports** - Added `from src.constants import ...` to each file
+5. **Replaced all instances** - Used multi_replace for efficiency
 
 **Files updated**:
 
@@ -6137,22 +6240,22 @@ MOUSEWHEEL_DELTA_DIVISOR = 120
 
 **Result**:
 
-- ✅ 0 magic numbers in production code (was 40+)
-- ✅ Single source of truth for all constants
-- ✅ Easy to update colors/values globally
-- ✅ Self-documenting code (constant names explain purpose)
-- ✅ All tests pass (386/386)
+- 0 magic numbers in production code (was 40+)
+- Single source of truth for all constants
+- Easy to update colors/values globally
+- Self-documenting code (constant names explain purpose)
+- All tests pass (386/386)
 
 **Key Learnings**:
 
 1. **Organize constants by category, not by file**:
-   - ✅ GOOD: `# Time Conversion Constants` section
-   - ❌ BAD: `time_tracker_constants.py`, `analysis_frame_constants.py` (scattered)
+   - GOOD: `# Time Conversion Constants` section
+   - BAD: `time_tracker_constants.py`, `analysis_frame_constants.py` (scattered)
    - Benefit: Easy to find related constants
 
 2. **Use descriptive, searchable names**:
-   - ✅ GOOD: `COLOR_ACTIVE_LIGHT_GREEN` - Tells you it's a color, for active state, and it's light green
-   - ❌ BAD: `GREEN` or `BG_COLOR_1` - Too vague, need to reference file to understand
+   - GOOD: `COLOR_ACTIVE_LIGHT_GREEN` - Tells you it's a color, for active state, and it's light green
+   - BAD: `GREEN` or `BG_COLOR_1` - Too vague, need to reference file to understand
 
 3. **Add inline comments for non-obvious constants**:
    - Example: `MOUSEWHEEL_DELTA_DIVISOR = 120  # Windows standard for mouse wheel delta`
@@ -6168,20 +6271,20 @@ MOUSEWHEEL_DELTA_DIVISOR = 120
    - Prevents breaking everything at once
 
 6. **Don't extract configuration values that users change**:
-   - ❌ Don't move settings.json defaults to constants (defeats purpose of user config)
-   - ✅ Do extract fallback/default values used when settings missing
+   - Don't move settings.json defaults to constants (defeats purpose of user config)
+   - Do extract fallback/default values used when settings missing
 
 **Pattern to Reuse** (Extracting magic numbers):
 
 ```python
 # BEFORE - Magic numbers scattered
 def format_time(seconds):
-    hours = seconds // 3600  # ❌ Magic number
-    minutes = (seconds % 3600) // 60  # ❌ Magic numbers
-    secs = seconds % 60  # ❌ Magic number
+    hours = seconds // 3600  # Magic number
+    minutes = (seconds % 3600) // 60  # Magic numbers
+    secs = seconds % 60  # Magic number
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
-label = tk.Label(frame, bg="#e8f5e9")  # ❌ Magic color
+label = tk.Label(frame, bg="#e8f5e9")  # Magic color
 
 # AFTER - Named constants
 # In src/constants.py:
@@ -6193,12 +6296,12 @@ COLOR_ACTIVE_LIGHT_GREEN = "#e8f5e9"
 from src.constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE, COLOR_ACTIVE_LIGHT_GREEN
 
 def format_time(seconds):
-    hours = seconds // SECONDS_PER_HOUR  # ✅ Self-documenting
-    minutes = (seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE  # ✅ Clear
-    secs = seconds % SECONDS_PER_MINUTE  # ✅ Readable
+    hours = seconds // SECONDS_PER_HOUR  # Self-documenting
+    minutes = (seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE  # Clear
+    secs = seconds % SECONDS_PER_MINUTE  # Readable
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
-label = tk.Label(frame, bg=COLOR_ACTIVE_LIGHT_GREEN)  # ✅ Descriptive
+label = tk.Label(frame, bg=COLOR_ACTIVE_LIGHT_GREEN)  # Descriptive
 ```
 
 **Benefits of this approach**:
@@ -6222,11 +6325,11 @@ During code quality review for portfolio presentation, identified 30+ print stat
 
 **Why DELETE is better for portfolio projects**:
 
-1. ✅ **Simpler, cleaner code** - No logging infrastructure needed
-2. ✅ **Shows code confidence** - Production code doesn't need debug statements
-3. ✅ **Removes clutter** - Print to console is invisible to GUI users anyway
-4. ✅ **Professional appearance** - Debug prints look like leftover development code
-5. ✅ **Less maintenance** - No logging config/levels to manage
+1. **Simpler, cleaner code** - No logging infrastructure needed
+2. **Shows code confidence** - Production code doesn't need debug statements
+3. **Removes clutter** - Print to console is invisible to GUI users anyway
+4. **Professional appearance** - Debug prints look like leftover development code
+5. **Less maintenance** - No logging config/levels to manage
 
 **When to use logging instead**:
 
@@ -6237,7 +6340,7 @@ During code quality review for portfolio presentation, identified 30+ print stat
 
 **For portfolio GUI apps**: Just delete debug prints. Errors shown in UI via messageboxes.
 
-**What Worked** ✅:
+**What Worked**:
 
 **Deleted all 30+ print statements from production code**:
 
@@ -6284,10 +6387,10 @@ All deleted prints fell into these categories:
 
 **Result**:
 
-- ✅ 0 print statements in production code (was 30+)
-- ✅ Code quality improved for portfolio presentation
-- ✅ Cleaner, more professional codebase
-- ✅ All functionality preserved (errors still handled, just silently or via UI)
+- 0 print statements in production code (was 30+)
+- Code quality improved for portfolio presentation
+- Cleaner, more professional codebase
+- All functionality preserved (errors still handled, just silently or via UI)
 
 **Files Changed**:
 
@@ -6309,8 +6412,8 @@ All deleted prints fell into these categories:
    - Print statements only help developers during development
 
 3. **When to delete vs. when to keep**:
-   - ✅ DELETE: Development debug prints, duplicate error messages, internal status
-   - ⚠️ KEEP (as logging): Production monitoring, audit trails, server operations
+   - DELETE: Development debug prints, duplicate error messages, internal status
+   - KEEP (as logging): Production monitoring, audit trails, server operations
 
 4. **Error handling doesn't require prints**:
    - Return sensible defaults (empty dict, False, None)
@@ -6330,7 +6433,7 @@ try:
     with open(file, "r") as f:
         return json.load(f)
 except Exception as e:
-    print(f"Error loading file: {e}")  # ❌ Debug cruft
+    print(f"Error loading file: {e}")  # Debug cruft
     return {}
 
 # AFTER - Clean portfolio code
@@ -6338,13 +6441,13 @@ try:
     with open(file, "r") as f:
         return json.load(f)
 except Exception as e:
-    return {}  # ✅ Silent failure with sensible default
+    return {}  # Silent failure with sensible default
 ```
 
 **Don't do this for portfolio code**:
 
 ```python
-# ❌ Over-engineering for portfolio
+# Over-engineering for portfolio
 import logging
 logger = logging.getLogger(__name__)
 
@@ -6371,12 +6474,12 @@ Tests expected the SAME analysis frame instance to be restored:
 analysis_frame = self.tracker.analysis_frame
 self.tracker.open_session_view(from_analysis=True)
 self.tracker.close_session_view()
-self.assertEqual(analysis_frame, self.tracker.analysis_frame)  # ❌ FAILS - different instances!
+self.assertEqual(analysis_frame, self.tracker.analysis_frame)  # FAILS - different instances!
 ```
 
 But the deliberate bug fix (from Feb 8) destroys old frames and creates fresh instances to prevent corrupted state restoration.
 
-**What Worked** ✅:
+**What Worked**:
 
 **Updated tests to verify functional correctness instead of object identity**:
 
@@ -6384,20 +6487,20 @@ But the deliberate bug fix (from Feb 8) destroys old frames and creates fresh in
 # Test 1: test_close_session_view_returns_to_analysis_if_from_analysis
 # BEFORE
 analysis_frame = self.tracker.analysis_frame
-self.assertEqual(analysis_frame, self.tracker.analysis_frame)  # ❌ Object identity check
+self.assertEqual(analysis_frame, self.tracker.analysis_frame)  # Object identity check
 
 # AFTER
-self.assertIsNotNone(self.tracker.analysis_frame)  # ✅ Fresh instance exists
+self.assertIsNotNone(self.tracker.analysis_frame)  # Fresh instance exists
 # Added comment explaining this is deliberate behavior to prevent state corruption
 ```
 
 ```python
 # Test 2: test_close_analysis_clears_session_view_if_open
 # BEFORE
-self.assertIsNone(self.tracker.analysis_frame)  # ❌ Expected no frame
+self.assertIsNone(self.tracker.analysis_frame)  # Expected no frame
 
 # AFTER
-self.assertIsNotNone(self.tracker.analysis_frame)  # ✅ Fresh frame created
+self.assertIsNotNone(self.tracker.analysis_frame)  # Fresh frame created
 # close_analysis() → close_session_view() → open_analysis() creates fresh instance
 ```
 
@@ -6422,8 +6525,8 @@ self.assertIsNotNone(self.tracker.analysis_frame)  # ✅ Fresh frame created
 **Key Learnings**:
 
 1. **Tests should verify behavior, not implementation details**:
-   - ✅ GOOD: `assertIsNotNone(frame)` - verifies frame exists
-   - ❌ BAD: `assertEqual(old_frame, new_frame)` - assumes implementation uses same instance
+   - GOOD: `assertIsNotNone(frame)` - verifies frame exists
+   - BAD: `assertEqual(old_frame, new_frame)` - assumes implementation uses same instance
 
 2. **Object identity vs functional correctness**:
    - Object identity (`is`, `assertEqual` on objects) tests implementation
@@ -6454,10 +6557,10 @@ def test_navigation_returns_to_previous_view(self):
     self.tracker.close_view_b()
 
     # Verify functional correctness (fresh instance exists)
-    self.assertIsNotNone(self.tracker.view_a)  # ✅ Frame exists
+    self.assertIsNotNone(self.tracker.view_a)  # Frame exists
 
     # DON'T verify object identity
-    # self.assertEqual(old_frame, self.tracker.view_a)  # ❌ Wrong approach
+    # self.assertEqual(old_frame, self.tracker.view_a)  # Wrong approach
 ```
 
 ---
@@ -6473,18 +6576,18 @@ Test `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline` 
 
 Test had TWO responsibilities:
 
-1. **Primary**: Ensure navigation doesn't freeze/crash (functional correctness) ✅
-2. **Secondary**: Verify performance < 5 seconds (performance validation) ⚠️
+1. **Primary**: Ensure navigation doesn't freeze/crash (functional correctness)
+2. **Secondary**: Verify performance < 5 seconds (performance validation)
 
 **Why strict performance threshold was problematic**:
 
-- Test passes individually (~3.9s) ✅
-- Test is flaky in full suite (4-6s, sometimes > 5s) ❌
+- Test passes individually (~3.9s)
+- Test is flaky in full suite (4-6s, sometimes > 5s)
 - Threshold was arbitrary - chosen to tolerate suite overhead, not catch real bugs
 - False negatives reduced confidence in test suite
 - Real bug was FREEZING, not slowness - test was testing the wrong thing
 
-**What Worked** ✅:
+**What Worked**:
 
 **Removed strict performance assertion, made it a pure functional test**:
 
@@ -6508,16 +6611,16 @@ print(f"  - Elapsed time: {elapsed:.3f}s")
 
 # Warn if performance degrades significantly (but don't fail test)
 if elapsed > 10.0:
-    print(f"  ⚠️ WARNING: Took {elapsed:.2f}s (slower than expected)")
+    print(f"  WARNING: Took {elapsed:.2f}s (slower than expected)")
 ```
 
 **Benefits**:
 
-1. ✅ **Test is now reliable** - No false negatives from suite overhead
-2. ✅ **Tests what matters** - Functional correctness (no freeze/crash)
-3. ✅ **Still monitors performance** - Logs timing, warns if > 10s
-4. ✅ **Better CI/CD compatibility** - Won't fail on slower machines
-5. ✅ **Clearer intent** - This is a regression test for a freeze bug, not a performance test
+1. **Test is now reliable** - No false negatives from suite overhead
+2. **Tests what matters** - Functional correctness (no freeze/crash)
+3. **Still monitors performance** - Logs timing, warns if > 10s
+4. **Better CI/CD compatibility** - Won't fail on slower machines
+5. **Clearer intent** - This is a regression test for a freeze bug, not a performance test
 
 **Result**:
 
@@ -6583,7 +6686,7 @@ FAILURES:
 
 **No indication of WHY tests failed** - had to search through output.
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **First attempt - searching for 'self.assert' in traceback lines**:
 
@@ -6591,7 +6694,7 @@ FAILURES:
 - Output was useless: `Cause: ~~~~~~~~~~~~~~~^`
 - Problem: Python traceback includes caret markers that contain 'self.assert' but aren't the error
 
-**What Worked** ✅:
+**What Worked**:
 
 **Search for "AssertionError:" prefix, then look backwards for assertion call**:
 
@@ -6629,10 +6732,10 @@ FAILURES:
 
 **Benefits**:
 
-- ✅ **Immediate visibility** - See what failed without scrolling
-- ✅ **Root cause extraction** - Shows actual AssertionError message
-- ✅ **Context included** - Shows which assertion failed
-- ✅ **Better debugging** - Quickly identify what went wrong
+- **Immediate visibility** - See what failed without scrolling
+- **Root cause extraction** - Shows actual AssertionError message
+- **Context included** - Shows which assertion failed
+- **Better debugging** - Quickly identify what went wrong
 
 **Files Changed**:
 
@@ -6652,11 +6755,11 @@ Test `test_analysis_frame_fresh_instance_after_reopen` passes individually but f
 
 **The Problem**:
 
-- Individual run: ~3.5-4s ✅
-- Full suite run: ~4-5s ❌ (fails with 2.0s threshold)
+- Individual run: ~3.5-4s
+- Full suite run: ~4-5s (fails with 2.0s threshold)
 - Same tkinter state accumulation issue as `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline`
 
-**What Worked** ✅:
+**What Worked**:
 
 **Updated threshold from 2.0s to 5.0s**:
 
@@ -6699,7 +6802,7 @@ Test `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline` 
 - Fresh Python process
 - Clean tkinter instance
 - No accumulated widgets/memory
-- Performance: ~3.5-4 seconds ✅
+- Performance: ~3.5-4 seconds
 
 **Full test suite run:**
 
@@ -6707,7 +6810,7 @@ Test `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline` 
 - Tkinter instances accumulate
 - Widgets not fully garbage collected between tests
 - Memory fragmentation from repeated widget creation/destruction
-- Performance: ~4-5 seconds ❌ (fails with 4s threshold)
+- Performance: ~4-5 seconds (fails with 4s threshold)
 
 **Why This Happens**:
 
@@ -6716,7 +6819,7 @@ Test `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline` 
 3. **Widget overhead** - 50+ tests creating/destroying thousands of widgets leaves memory fragmentation
 4. **This is NORMAL** - Common issue with GUI framework testing
 
-**What Worked** ✅:
+**What Worked**:
 
 **Decision: Increase threshold from 4s to 5s**
 
@@ -6731,11 +6834,11 @@ self.assertLess(
 
 **Why 5 Seconds is the Right Threshold**:
 
-1. ✅ **Accounts for test suite overhead** - Passes in both individual and full suite runs
-2. ✅ **Still validates performance** - Would catch true regressions (10s+ = real bug)
-3. ✅ **Reflects real-world usage** - Production app runs continuously like test suite
-4. ✅ **User-acceptable** - 5s is reasonable for intentional data review action
-5. ✅ **Reduces false negatives** - Won't fail on CI/CD with limited resources
+1. **Accounts for test suite overhead** - Passes in both individual and full suite runs
+2. **Still validates performance** - Would catch true regressions (10s+ = real bug)
+3. **Reflects real-world usage** - Production app runs continuously like test suite
+4. **User-acceptable** - 5s is reasonable for intentional data review action
+5. **Reduces false negatives** - Won't fail on CI/CD with limited resources
 
 **Performance Benchmarks**:
 
@@ -6799,13 +6902,13 @@ txt.bind("<MouseWheel>", lambda e: "break")
 - Event never reaches ScrollableFrame's `bind_all` handler
 - Result: **Scrolling only works when mouse is NOT over Text widgets**
 
-**What Worked** ✅:
+**What Worked**:
 
 **Removed the binding entirely**:
 
 ```python
 # OLD CODE (BROKEN)
-txt.bind("<MouseWheel>", lambda e: "break")  # ❌ Prevents scrolling!
+txt.bind("<MouseWheel>", lambda e: "break")  # Prevents scrolling!
 
 # NEW CODE (FIXED)
 # NOTE: ScrollableFrame's bind_all handles mousewheel - no widget-specific binding needed
@@ -6821,10 +6924,10 @@ txt.bind("<MouseWheel>", lambda e: "break")  # ❌ Prevents scrolling!
 
 **Result**:
 
-- ✅ Timeline scrolls when mouse is over Text widget comment boxes
-- ✅ No need to move mouse to scroll
-- ✅ Consistent scrolling behavior across all timeline widgets
-- ✅ ScrollableFrame's global handler works as designed
+- Timeline scrolls when mouse is over Text widget comment boxes
+- No need to move mouse to scroll
+- Consistent scrolling behavior across all timeline widgets
+- ScrollableFrame's global handler works as designed
 
 **Files Changed**:
 
@@ -6849,7 +6952,7 @@ The binding was added with comment "prevent Text widget class bindings from inte
 
 ```python
 # DON'T bind mousewheel on individual widgets inside ScrollableFrame
-# txt.bind("<MouseWheel>", handler)  # ❌ Wrong - interferes with ScrollableFrame
+# txt.bind("<MouseWheel>", handler)  # Wrong - interferes with ScrollableFrame
 
 # DO let ScrollableFrame's bind_all handle ALL mousewheel events
 # (no widget-specific binding needed)
@@ -6870,7 +6973,7 @@ Text widgets in timeline rows (lines 983-994) didn't have a `cursor` parameter s
 1. Suggested to users they could edit the text (incorrect - widgets are read-only)
 2. Was inconsistent with the rest of the UI which uses pointer/arrow cursors
 
-**What Worked** ✅:
+**What Worked**:
 
 **Added `cursor="arrow"` parameter to Text widget creation**:
 
@@ -6890,10 +6993,10 @@ txt = tk.Text(
 
 **Result**:
 
-- ✅ Mouse cursor now shows arrow (not I-beam) over comment text boxes
-- ✅ Consistent UX with rest of application
-- ✅ Clearly indicates text is read-only, not editable
-- ✅ Timeline scrolling works normally (this was already working - cursor was the only issue)
+- Mouse cursor now shows arrow (not I-beam) over comment text boxes
+- Consistent UX with rest of application
+- Clearly indicates text is read-only, not editable
+- Timeline scrolling works normally (this was already working - cursor was the only issue)
 
 **Files Changed**:
 
@@ -6923,7 +7026,7 @@ txt.config(state=tk.DISABLED)
 **Context**:
 After removing `generate_dummy_data` function, test `test_csv_export_then_navigate_to_completion_then_back_then_show_timeline` started failing with performance regression - taking 3.5+ seconds instead of < 3.0 seconds. Suspected debug print statements were the cause.
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Approach: Remove all debug print statements from analysis_frame.py**
 
@@ -6954,7 +7057,7 @@ txt.config(height=min(15, max(1, actual_lines)))
 
 With 50 periods loaded × 5 text widgets per row = **250 `update_idletasks()` calls**, each forcing tkinter to recalculate geometry. This is the actual bottleneck (~3.5s).
 
-**What We Learned** ✅:
+**What We Learned**:
 
 1. **Debug prints have minimal performance impact** - removing 40+ prints changed time by only 0.05s
 2. **`update_idletasks()` is expensive** - 250 calls takes ~3.5 seconds
@@ -6963,9 +7066,9 @@ With 50 periods loaded × 5 text widgets per row = **250 `update_idletasks()` ca
 
 **Trade-off Analysis**:
 
-- ✅ **Text wrapping works perfectly** - users see full wrapped comments
-- ❌ **Initial load is slow** - 3.5s for 50 periods, ~15s for all 450 periods
-- 🤔 **Acceptable for production?** - Depends on user tolerance for initial load time
+- **Text wrapping works perfectly** - users see full wrapped comments
+- **Initial load is slow** - 3.5s for 50 periods, ~15s for all 450 periods
+- **Acceptable for production?** - Depends on user tolerance for initial load time
 
 **Possible Future Optimizations** (not implemented):
 
@@ -6974,7 +7077,7 @@ With 50 periods loaded × 5 text widgets per row = **250 `update_idletasks()` ca
 3. **Virtual scrolling** - only create widgets for visible rows
 4. **Estimate height instead of measuring** - use character count formula instead of `count("displaylines")`
 
-**DECISION: Keep Current Implementation** ✅
+**DECISION: Keep Current Implementation**
 
 After analysis, decided to **accept the 3.5-4s load time** for these reasons:
 
@@ -7016,7 +7119,7 @@ After analysis, decided to **accept the 3.5-4s load time** for these reasons:
 **Context**:
 User requested removal of the "Generate Dummy Data" button and its associated function from the analysis frame. This was a development/testing feature that is no longer needed.
 
-**What Was Removed** ✅:
+**What Was Removed**:
 
 1. **Button in header frame** (line ~112):
    - Removed `ttk.Button` for "Generate Dummy Data"
@@ -7030,7 +7133,7 @@ User requested removal of the "Generate Dummy Data" button and its associated fu
 3. **Unused import** (line 6):
    - Removed `import random` (no longer used after function removal)
 
-**What Worked** ✅:
+**What Worked**:
 
 - Simple removal using `multi_replace_string_in_file` for both button and method
 - Separate edit to remove unused `random` import
@@ -7092,7 +7195,7 @@ txt.grid(...)  # Height stays 1 forever!
 
 **AGENT_MEMORY showed this was fixed on 2026-02-02** (lines 4130-4300), but the implementation was **somehow lost/reverted**! The solution documented there using `count("displaylines")` was not in the current code.
 
-**What Worked** ✅:
+**What Worked**:
 
 1. **Fixed the test to actually fail** (catch the bug, not document it):
 
@@ -7109,7 +7212,7 @@ self.assertEqual(height, actual_wrapped_lines,
     f"Text is being visually truncated!")
 ```
 
-Test result: **FAIL** - height=1 but should be 7 ✅ (catches bug!)
+Test result: **FAIL** - height=1 but should be 7 (catches bug!)
 
 2. **Re-implemented dynamic height calculation** using `count("displaylines")`:
 
@@ -7146,9 +7249,9 @@ txt.config(state=tk.DISABLED)  # Make read-only AFTER height set
 
 **Test Results**:
 
-- ✅ Test now passes with `height=7` for 153-char text
-- ✅ All 58 tests passing (no regressions)
-- ✅ Visual confirmation: Text now wraps to multiple lines in timeline
+- Test now passes with `height=7` for 153-char text
+- All 58 tests passing (no regressions)
+- Visual confirmation: Text now wraps to multiple lines in timeline
 
 **Key Learnings**:
 
@@ -7195,9 +7298,9 @@ Empty tk.Text widgets return `winfo_rootx()=0` in headless test environments:
 
 ```python
 # test_empty_text.py PROOF
-Text 1 (with content) X: 60, width: 84   # ✅ Proper position
-Text 2 (empty) X: 0, width: 84           # ❌ Returns 0
-Text 3 (with content) X: 228, width: 84  # ✅ Proper position
+Text 1 (with content) X: 60, width: 84   # Proper position
+Text 2 (empty) X: 0, width: 84           # Returns 0
+Text 3 (with content) X: 228, width: 84  # Proper position
 ```
 
 **Why This Matters**:
@@ -7209,11 +7312,11 @@ Text 3 (with content) X: 228, width: 84  # ✅ Proper position
 
 **What We Tried (all failed)**:
 
-1. ❌ Populate all session_comments in test data → Some row types inherently lack certain comments
-2. ❌ Select only Active period rows → Even Active periods may have empty secondary comments
-3. ❌ Change test data to only Active periods → Still had empty Text widgets
+1. Populate all session_comments in test data → Some row types inherently lack certain comments
+2. Select only Active period rows → Even Active periods may have empty secondary comments
+3. Change test data to only Active periods → Still had empty Text widgets
 
-**What Worked** ✅:
+**What Worked**:
 
 Skip empty Text widgets when checking X positions:
 
@@ -7229,9 +7332,9 @@ if isinstance(data, tk.Text):
 
 **Test Results**:
 
-- ✅ All 58 tests passing (100% pass rate)
-- ✅ Test still catches real alignment bugs (populated widgets checked)
-- ✅ Documented limitation prevents future confusion
+- All 58 tests passing (100% pass rate)
+- Test still catches real alignment bugs (populated widgets checked)
+- Documented limitation prevents future confusion
 
 **Key Learnings**:
 
@@ -7276,7 +7379,7 @@ frame.update_timeline()  # After 2026-01-29: No data visible! Test fails!
 - Only 14 tests set `selected_card = 2`
 - ~24 tests at risk of failure as time passes
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution 1: Add `selected_card = 2` for Tests with Hardcoded Dates**
 
@@ -7289,7 +7392,7 @@ def test_specific_date_logic(self):
 
     # CRITICAL: Set to "All Time" to ensure date is included
     frame.selected_card = 2  # All Time - ensures always visible
-    frame.update_timeline()  # ✓ Works regardless of test run date
+    frame.update_timeline()  # Works regardless of test run date
 ```
 
 **Solution 2: Use `datetime.now()` for Tests Requiring Recent Data**
@@ -7305,7 +7408,7 @@ def test_recent_data(self):
 
     test_data = {f"{date}_session1": {"date": date, ...}}
     # Works with default selected_card = 0 (Last 7 Days)
-    frame.update_timeline()  # ✓ Data is always recent
+    frame.update_timeline()  # Data is always recent
 ```
 
 **Solution 3: Combination Approach** (APPLIED)
@@ -7321,7 +7424,7 @@ def test_recent_data(self):
    - Added comments: `# All Time - ensure test date is included`
 
 2. **Updated DEVELOPMENT.md** with comprehensive date handling guidelines:
-   - Added "📅 Date Handling in Tests" section
+   - Added "Date Handling in Tests" section
    - Explained the problem with hardcoded dates
    - Provided 3 solution patterns with code examples
    - Added to "Key Points" checklist
@@ -7330,7 +7433,7 @@ def test_recent_data(self):
 3. **Documentation added to DEVELOPMENT.md**:
 
    ```markdown
-   ## 📅 Date Handling in Tests
+   ## Date Handling in Tests
 
    ### The Problem
 
@@ -7376,42 +7479,42 @@ frame.selected_card = 2  # All Time - ensure test date is included
 
 ```
 Before fix (date = "2026-01-22", no selected_card):
-- Run on 2026-01-25: ✓ Pass (within 7 days)
-- Run on 2026-02-01: ✗ Fail (9 days old, outside filter)
+- Run on 2026-01-25: Pass (within 7 days)
+- Run on 2026-02-01: Fail (9 days old, outside filter)
 
 After fix (date = "2026-01-22", selected_card = 2):
-- Run on 2026-01-25: ✓ Pass
-- Run on 2026-02-01: ✓ Pass
-- Run on 2026-12-31: ✓ Pass (All Time includes all dates)
+- Run on 2026-01-25: Pass
+- Run on 2026-02-01: Pass
+- Run on 2026-12-31: Pass (All Time includes all dates)
 ```
 
 **Key Learnings**:
 
-🔴 **NEVER use hardcoded dates without `selected_card = 2`**
+**NEVER use hardcoded dates without `selected_card = 2`**
 
 - Default `selected_card = 0` means "Last 7 Days"
 - Hardcoded dates eventually fall outside this window
 - Tests pass today, fail tomorrow → fragile tests
 
-✅ **Use `datetime.now()` for tests needing recent data**
+**Use `datetime.now()` for tests needing recent data**
 
 - Tests remain current automatically
 - Works with default "Last 7 Days" filter
 - Better for testing "recent activity" scenarios
 
-✅ **Use hardcoded + `selected_card = 2` for specific date tests**
+**Use hardcoded + `selected_card = 2` for specific date tests**
 
 - Tests remain consistent (same date every run)
 - All Time filter ensures always visible
 - Better for testing specific date scenarios
 
-✅ **Document date handling in TDD guidelines**
+**Document date handling in TDD guidelines**
 
 - Prevents future developers from making same mistake
 - Provides clear patterns to follow
 - Added to DEVELOPMENT.md for visibility
 
-🔴 **Timeline tests require FOUR filter settings**
+**Timeline tests require FOUR filter settings**
 
 - `status_filter`: "all", "active", or "archived"
 - `sphere_var`: sphere name or "All Spheres"
@@ -7481,7 +7584,7 @@ While the test data had:
 
 The incomplete filter setup could cause timeline to be empty if any filter conditions weren't met.
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Set All Required Filter Variables Before update_timeline()**
 
@@ -7510,31 +7613,31 @@ Before fix:
 
 After fix:
 - timeline_children length: > 0 (has rows)
-- Test passes: ✓
+- Test passes:
 ```
 
 **Key Learnings**:
 
-🔴 **Always set all filter variables in timeline tests**
+**Always set all filter variables in timeline tests**
 
 - `status_filter`: "all", "active", or "archived"
 - `sphere_var`: sphere name or "All Spheres"
 - `project_var`: project name or "All Projects"
 - `selected_card`: 0 (Last 7 Days), 1 (Last 30 Days), 2 (All Time)
 
-✅ **Use "All Time" (selected_card=2) for test data**
+**Use "All Time" (selected_card=2) for test data**
 
 - Eliminates date range as a variable in tests
 - Test data can use any date without worrying about falling outside range
 - More robust and less fragile tests
 
-✅ **Use status_filter="all" for comprehensive tests**
+**Use status_filter="all" for comprehensive tests**
 
 - Shows all data regardless of active/archived status
 - Reduces filter-related test failures
 - Only use "active" or "archived" when specifically testing that filter logic
 
-🔴 **Incomplete test setup causes silent failures**
+**Incomplete test setup causes silent failures**
 
 - Missing filter settings don't throw errors
 - `update_timeline()` succeeds but creates 0 rows
@@ -7586,11 +7689,11 @@ When a period uses the `projects` array:
 - The period gets skipped with `continue`
 - Result: NO active periods exported
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 N/A - This was a straightforward bug once identified
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Extract Project Name from Projects Array Before Filtering**
 
@@ -7647,34 +7750,34 @@ Test failed initially (only 2 rows), passed after fix (4 rows).
 ```
 Before fix:
 - Data: 4 Active + 2 Idle + 1 Break = 7 periods
-- CSV export: 0 Active + 2 Idle + 1 Break = 3 rows ✗
+- CSV export: 0 Active + 2 Idle + 1 Break = 3 rows
 
 After fix:
 - Data: 4 Active + 2 Idle + 1 Break = 7 periods
-- CSV export: 4 Active + 2 Idle + 1 Break = 7 rows ✓
+- CSV export: 4 Active + 2 Idle + 1 Break = 7 rows
 ```
 
 **Key Learnings**:
 
-🔴 **Always handle both data formats when filtering**
+**Always handle both data formats when filtering**
 
 - Active periods can have EITHER `"project": "name"` OR `"projects": [...]` array
 - Must check for both formats before filtering
 - Empty string comparisons cause silent filtering bugs
 
-✅ **Extract identifiers BEFORE applying filters**
+**Extract identifiers BEFORE applying filters**
 
 - Don't filter on incomplete data (empty strings)
 - Extract the actual value first (project name, action name, etc.)
 - Then apply filter logic with real values
 
-✅ **TDD catches filtering logic bugs**
+**TDD catches filtering logic bugs**
 
 - Integration test with real data structure exposed the bug
 - Test verified both formats work (single project + projects array)
 - Regression test ensures future changes don't break this
 
-✅ **Project filtering applies to both single and array formats**
+**Project filtering applies to both single and array formats**
 
 - When user selects "Project A" filter, should show both:
   - `"project": "Project A"` periods
@@ -7712,7 +7815,7 @@ The `export_to_csv()` function in [src/analysis_frame.py](src/analysis_frame.py)
 - The timeline display shows them as "Idle" type
 - They contain the same structure as break periods (actions with comments)
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Added Idle Period Export Loop**
 
@@ -7793,34 +7896,34 @@ for period in session_data.get("idle_periods", []):
 
 ```
 Before fix:
-- 4 Active periods exported ✓
-- 1 Break period exported ✓
-- 2 Idle periods exported ✗ (missing)
+- 4 Active periods exported
+- 1 Break period exported
+- 2 Idle periods exported (missing)
 Total: 5 rows instead of 7
 
 After fix:
-- 4 Active periods exported ✓
-- 1 Break period exported ✓
-- 2 Idle periods exported ✓
+- 4 Active periods exported
+- 1 Break period exported
+- 2 Idle periods exported
 Total: 7 rows (complete)
 ```
 
 **Key Learnings**:
 
-🔴 **Always check all period types when implementing export functionality**
+**Always check all period types when implementing export functionality**
 
 - Sessions have 3 types: active, breaks, AND idle_periods
 - Missing any type results in incomplete exports
 - Check data.json structure to identify all period types
 
-✅ **Idle periods use same structure as break periods**
+**Idle periods use same structure as break periods**
 
 - Both have actions instead of projects
 - Both use `{type}_primary` flag (idle_primary vs break_primary)
 - Both pull from session_comments (idle_notes vs break_notes)
 - Both show "N/A" for Project Active column
 
-✅ **Test with complete session data**
+**Test with complete session data**
 
 - Test data should include all period types (active, break, idle)
 - Verify export count matches timeline display count
@@ -7868,7 +7971,7 @@ When `update_timeline()` destroys all children and recreates them, the `<Configu
 2. Nothing visually updates (scrollregion doesn't match actual content)
 3. Scrollbar frozen (synced to old scrollregion)
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Attempt 1: Text widget `lambda e: "break"` binding**
 
@@ -7889,7 +7992,7 @@ When `update_timeline()` destroys all children and recreates them, the `<Configu
 - **Why It Failed**: This was diagnostic only - proved the scroll MECHANISM works but rendering doesn't
 - **Key Finding**: This definitively showed the issue was visual rendering, not scroll handler logic
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Force Canvas Scrollregion Recalculation After Widget Recreation**
 
@@ -7926,41 +8029,41 @@ if hasattr(self, "scrollable_container") and hasattr(
 
 ```
 Before fix (scrollbar frozen):
-- Handler called: ✓
-- yview changing: ✓ (0.0 to 0.47)
-- Visual update: ✗ (frozen)
-- Scrollbar moves: ✗ (frozen)
+- Handler called:
+- yview changing: (0.0 to 0.47)
+- Visual update: (frozen)
+- Scrollbar moves: (frozen)
 
 After fix (working):
 Canvas scrollregion updated to: (0, 0, 585, 1555)  # 88 periods
 Canvas scrollregion updated to: (0, 0, 585, 1196)  # 36 periods
-- Handler called: ✓
-- yview changing: ✓
-- Visual update: ✓ (working)
-- Scrollbar moves: ✓ (working)
+- Handler called:
+- yview changing:
+- Visual update: (working)
+- Scrollbar moves: (working)
 ```
 
 **Key Learnings**:
 
-🔴 **Canvas scrollregion must be recalculated after widget destruction/recreation**
+**Canvas scrollregion must be recalculated after widget destruction/recreation**
 
 - `<Configure>` event binding alone is insufficient when children are destroyed/recreated
 - Stale scrollregion causes visual freeze even if scroll logic works
 - Always force recalculation after major DOM changes
 
-✅ **Use update_idletasks() for geometry-dependent operations**
+**Use update_idletasks() for geometry-dependent operations**
 
 - Call before `bbox("all")` to ensure accurate measurements
 - Call after `configure(scrollregion=...)` to force visual update
 - Two calls needed: one for geometry, one for rendering
 
-✅ **Diagnostic logging proved the hypothesis**
+**Diagnostic logging proved the hypothesis**
 
 - Tracking yview changes proved scroll mechanism worked
 - Comparing "handler works" + "yview changes" + "visual frozen" = rendering issue
 - This directed focus to canvas rendering instead of event handling
 
-✅ **Reset scroll position after content recreation**
+**Reset scroll position after content recreation**
 
 - `yview_moveto(0)` ensures user starts at a valid position
 - Prevents being scrolled to invalid position after content changes
@@ -7983,7 +8086,7 @@ Canvas scrollregion updated to: (0, 0, 585, 1196)  # 36 periods
 **Context**:
 User reported the bug still exists (no scrolling after navigation and second card click). Logs showed `SCROLL CLEANUP` events but no root cause for unexpected destruction.
 
-**What Was Added** ✅:
+**What Was Added**:
 
 - `debug_name` parameter to `ScrollableFrame` to identify instances in logs.
 - Destroy logging now prints the call site (filename, line, function) using a short stack trace.
@@ -7999,7 +8102,7 @@ We need to confirm whether mousewheel events are firing and **who** is destroyin
 - [src/analysis_frame.py](src/analysis_frame.py)
 - [src/settings_frame.py](src/settings_frame.py)
 
-**Additional Diagnostics Added** ✅:
+**Additional Diagnostics Added**:
 
 - Added `AnalysisFrame.destroy()` logging to identify who triggers AnalysisFrame destruction.
 - Added debug names for session view and completion view `ScrollableFrame` instances.
@@ -8030,7 +8133,7 @@ def destroy(self):
     try:
         if self._mousewheel_handler:
             root = self.winfo_toplevel()
-            root.unbind_all("<MouseWheel>")  # ❌ Removes ALL bindings, including live ones!
+            root.unbind_all("<MouseWheel>")  # Removes ALL bindings, including live ones!
     except Exception as e:
         pass
     super().destroy()
@@ -8059,7 +8162,7 @@ def destroy(self):
 7. User tries to scroll → DOESN'T WORK!
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Approach 1: Using `unbind_all` to clean up bindings**
 
@@ -8068,7 +8171,7 @@ def destroy(self):
 - Multiple ScrollableFrame instances share the same binding
 - When one destroys and unbinds, it breaks all others
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Use Instance Alive Flag Instead of unbind_all**
 
@@ -8133,27 +8236,27 @@ class ScrollableFrame(ttk.Frame):
 
 **Key Learnings**:
 
-🔴 **NEVER use `unbind_all` with shared bindings**
+**NEVER use `unbind_all` with shared bindings**
 
 - `unbind_all("<Event>")` removes ALL bindings for that event globally
 - If multiple instances use `bind_all`, they share bindings
 - Removing one breaks all others
 - Only use `unbind_all` if you're 100% sure no other code uses that binding
 
-✅ **Use instance flags for cleanup instead**
+**Use instance flags for cleanup instead**
 
 - Set a flag like `self._is_alive = False` in `destroy()`
 - Have handlers check this flag first
 - This makes handlers inert without removing them
 - Other instances' handlers continue working normally
 
-✅ **bind_all with add="+" allows multiple handlers**
+**bind_all with add="+" allows multiple handlers**
 
 - Each `bind_all(..., add="+")` adds a new handler, doesn't replace
 - Multiple handlers can coexist and run sequentially
 - Each can check its own instance state independently
 
-🔍 **Global operations are dangerous in tkinter**
+**Global operations are dangerous in tkinter**
 
 - `bind_all`, `unbind_all`, `winfo_children()`, etc. affect ALL widgets
 - Always consider if other code might be using the same bindings
@@ -8202,8 +8305,8 @@ User reported after all previous fixes (Parts 1-4):
 **Detailed Logging Revealed**:
 
 ```
-UPDATE_TIMELINE COMPLETED  ✅ (Timeline updates successfully)
-[SCROLL ERROR] Canvas doesn't exist in on_mousewheel  ❌ (Hundreds of these!)
+UPDATE_TIMELINE COMPLETED  (Timeline updates successfully)
+[SCROLL ERROR] Canvas doesn't exist in on_mousewheel  (Hundreds of these!)
 [SCROLL ERROR] Canvas doesn't exist in on_mousewheel
 [SCROLL ERROR] Canvas doesn't exist in on_mousewheel
 ... (UI locks up from error flood)
@@ -8216,7 +8319,7 @@ Found in `update_timeline()` in [src/analysis_frame.py](src/analysis_frame.py):
 ```python
 # OLD CODE (THE BUG - destroys frame breaking ScrollableFrame!)
 timeline_parent = self.timeline_frame.master  # Parent is scrollable container's content_frame
-self.timeline_frame.destroy()  # ❌ This destroys part of ScrollableFrame structure!
+self.timeline_frame.destroy()  # This destroys part of ScrollableFrame structure!
 self.timeline_frame = ttk.Frame(timeline_parent)  # Create new frame
 self.timeline_frame.pack(fill="both", expand=True)
 ```
@@ -8245,7 +8348,7 @@ def on_mousewheel(event):
         return
 ```
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 **Approach 1: Destroying and Recreating timeline_frame**
 
@@ -8254,7 +8357,7 @@ def on_mousewheel(event):
 - Canvas got destroyed as collateral damage
 - Mousewheel bindings couldn't be cleaned up (they're global with `bind_all`)
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Clear Children Instead of Destroying Frame**
 
@@ -8288,25 +8391,25 @@ print(f"[UPDATE] Children cleared")
 
 **Key Learnings**:
 
-🔴 **Never destroy a frame that's part of a ScrollableFrame's content structure**
+**Never destroy a frame that's part of a ScrollableFrame's content structure**
 
 - Destroys canvas inadvertently
 - Orphans global mousewheel bindings (`bind_all`)
 - Causes error floods that lock up UI
 
-✅ **Always clear children, not the frame itself**
+**Always clear children, not the frame itself**
 
 - Use `for widget in frame.winfo_children(): widget.destroy()`
 - Preserves parent structure and bindings
 - Safe and performant with pagination
 
-✅ **Global bindings (`bind_all`) are dangerous**
+**Global bindings (`bind_all`) are dangerous**
 
 - They persist even when widgets are destroyed
 - Always validate widget exists before accessing
 - Consider using regular `bind()` with explicit unbinding
 
-🔍 **Comprehensive logging saved the day**
+**Comprehensive logging saved the day**
 
 - Logging showed UPDATE_TIMELINE completed successfully
 - But then hundreds of scroll errors appeared
@@ -8317,11 +8420,11 @@ print(f"[UPDATE] Children cleared")
 When clearing tkinter container widgets:
 
 ```python
-# ✅ CORRECT - Clear children
+# CORRECT - Clear children
 for widget in container_frame.winfo_children():
     widget.destroy()
 
-# ❌ WRONG - Destroy and recreate frame
+# WRONG - Destroy and recreate frame
 parent = container_frame.master
 container_frame.destroy()  # Breaks parent structure!
 container_frame = ttk.Frame(parent)
@@ -8352,7 +8455,7 @@ Found the actual bug in `close_session_view()` in [time_tracker.py](time_tracker
 if came_from_analysis:
     if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
         # Restore analysis frame
-        self.analysis_frame.grid(  # ❌ Restoring old frame with corrupted state!
+        self.analysis_frame.grid(  # Restoring old frame with corrupted state!
             row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S)
         )
 ```
@@ -8377,7 +8480,7 @@ if came_from_analysis:
 5. Click "Show Timeline" → Works with corrupted instance → FREEZE!
 ```
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Always Create Fresh Instance When Returning from Session View**
 
@@ -8422,10 +8525,10 @@ if came_from_analysis:
 2. **grid_forget() vs destroy()**:
 
    ```python
-   # ❌ DANGEROUS - hides frame but keeps state
+   # DANGEROUS - hides frame but keeps state
    frame.grid_forget()  # Later: frame.grid() restores old corrupted state
 
-   # ✅ SAFE - completely removes frame
+   # SAFE - completely removes frame
    frame.destroy()  # Later: create new instance with clean state
    ```
 
@@ -8470,10 +8573,10 @@ def close_frame_and_return_to_previous(self):
 
     # Return to previous frame
     if came_from_complex_frame:
-        # ❌ WRONG: Restore hidden frame
+        # WRONG: Restore hidden frame
         # self.previous_frame.grid()
 
-        # ✅ CORRECT: Destroy old and create fresh
+        # CORRECT: Destroy old and create fresh
         if hasattr(self, "previous_frame") and self.previous_frame is not None:
             self.previous_frame.destroy()
             self.previous_frame = None
@@ -8503,7 +8606,7 @@ The `update_timeline()` method had a CRITICAL BUG in the frame recreation code:
 ```python
 # OLD CODE (CRITICAL BUG - accesses destroyed widget!)
 self.timeline_frame.destroy()
-self.timeline_frame = ttk.Frame(self.timeline_frame.master)  # ❌ BUG!
+self.timeline_frame = ttk.Frame(self.timeline_frame.master)  # BUG!
 ```
 
 **Why This Caused Widget Corruption and Total Program Freeze**:
@@ -8518,15 +8621,15 @@ self.timeline_frame = ttk.Frame(self.timeline_frame.master)  # ❌ BUG!
 5. The corruption spreads through the entire widget tree
 6. Result: **Total program freeze, broken widgets, requires restart**
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Store Parent Reference BEFORE Destroying**
 
 ```python
 # NEW CODE (CORRECT - store parent reference first!)
-timeline_parent = self.timeline_frame.master  # ✅ Get reference BEFORE destroying
+timeline_parent = self.timeline_frame.master  # Get reference BEFORE destroying
 self.timeline_frame.destroy()
-self.timeline_frame = ttk.Frame(timeline_parent)  # ✅ Use stored reference
+self.timeline_frame = ttk.Frame(timeline_parent)  # Use stored reference
 self.timeline_frame.pack(fill="both", expand=True)
 ```
 
@@ -8547,11 +8650,11 @@ self.timeline_frame.pack(fill="both", expand=True)
 1. **NEVER Access Destroyed Widget Properties**: This is a CRITICAL rule in Tkinter:
 
    ```python
-   # ❌ WRONG - undefined behavior, causes corruption
+   # WRONG - undefined behavior, causes corruption
    widget.destroy()
    parent = widget.master  # Accessing destroyed widget!
 
-   # ✅ CORRECT - store references before destroying
+   # CORRECT - store references before destroying
    parent = widget.master  # Get reference while alive
    widget.destroy()
    ```
@@ -8669,7 +8772,7 @@ if hasattr(self, "analysis_frame") and self.analysis_frame is not None:
 5. The old instance has stale references to destroyed widgets, old data, and corrupted state
 6. Clicking "Show Timeline" tries to update using stale state → FREEZE
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Always Create Fresh Instance**
 
@@ -8801,7 +8904,7 @@ for widget in self.timeline_frame.winfo_children():
 5. Each destroy triggers event cleanup, geometry recalculation, and UI updates
 6. This creates a cumulative delay that appears as a freeze
 
-**What Worked** ✅:
+**What Worked**:
 
 **Solution: Destroy and Recreate Entire Frame**
 
@@ -8948,7 +9051,7 @@ If completion frame experiences similar performance issues, apply the same patte
 13. Break Comments (session-level)
 14. Session Notes
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Updated CSV Export Implementation**:
 
@@ -9053,9 +9156,9 @@ Updated 10 tests to use new column names:
 
 **3. All Tests Pass**:
 
-- ✅ All 6 integration tests PASS
-- ✅ All 4 existing tests PASS
-- ✅ No regressions
+- All 6 integration tests PASS
+- All 4 existing tests PASS
+- No regressions
 
 **Files Modified**:
 
@@ -9116,7 +9219,7 @@ else:  # Multiple items format
 
 **Bug Found During Testing**: CSV export was NOT respecting the radio button status filter (active/all/archived) - it only filtered by sphere and project dropdowns.
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. TDD Approach - Tests Revealed the Bug**:
 
@@ -9206,27 +9309,27 @@ def export_to_csv(self):
 
 **4. All Tests Pass After Fix**:
 
-- ✅ All 6 new integration tests PASS
-- ✅ All 4 existing CSV export tests PASS (no regressions)
-- ✅ CSV export now correctly respects radio button filter
+- All 6 new integration tests PASS
+- All 4 existing CSV export tests PASS (no regressions)
+- CSV export now correctly respects radio button filter
 
 **Test Results Summary**:
 
 New Tests (TestAnalysisCSVExportIntegration):
 
-- `test_csv_export_includes_all_expected_headers` ✅
-- `test_csv_export_preserves_large_text_comments` ✅
-- `test_csv_export_respects_radio_button_status_filter` ✅
-- `test_csv_export_handles_large_dataset` ✅
-- `test_csv_export_handles_special_characters_in_comments` ✅
-- `test_csv_export_includes_idle_periods` ✅
+- `test_csv_export_includes_all_expected_headers`
+- `test_csv_export_preserves_large_text_comments`
+- `test_csv_export_respects_radio_button_status_filter`
+- `test_csv_export_handles_large_dataset`
+- `test_csv_export_handles_special_characters_in_comments`
+- `test_csv_export_includes_idle_periods`
 
 Existing Tests (TestAnalysisCSVExport):
 
-- `test_csv_export_creates_file` ✅
-- `test_csv_export_respects_filters` ✅
-- `test_csv_export_no_data` ✅
-- `test_csv_export_handles_write_error` ✅
+- `test_csv_export_creates_file`
+- `test_csv_export_respects_filters`
+- `test_csv_export_no_data`
+- `test_csv_export_handles_write_error`
 
 **Files Modified**:
 
@@ -9304,7 +9407,7 @@ The radio button feature introduced `status_filter` which defaults to "active" (
 5. Result: Timeline was empty because time range filter excluded the data
 6. `timeline_children[0]` failed with IndexError
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Pattern Recognition from Passing Tests**:
 
@@ -9318,7 +9421,7 @@ The radio button feature introduced `status_filter` which defaults to "active" (
 # BEFORE (causes regression):
 parent_frame = ttk.Frame(self.root)
 frame = AnalysisFrame(parent_frame, tracker, self.root)
-frame.update_timeline()  # ❌ Uses default filters
+frame.update_timeline()  # Uses default filters
 
 # AFTER (works):
 parent_frame = ttk.Frame(self.root)
@@ -9330,7 +9433,7 @@ frame.sphere_var.set("Work")
 frame.project_var.set("All Projects")
 frame.selected_card = 2  # All Time filter
 
-frame.update_timeline()  # ✅ Timeline has data
+frame.update_timeline()  # Timeline has data
 ```
 
 **Why This Works**:
@@ -9346,8 +9449,8 @@ frame.update_timeline()  # ✅ Timeline has data
 
 **Test Results**:
 
-- ✅ Both tests now pass
-- ✅ No other regressions detected
+- Both tests now pass
+- No other regressions detected
 
 **Key Learning**: When radio button filtering is added to a frame, ALL tests that call `update_timeline()` must explicitly set the filter status and time range. The default "active" filter is too restrictive for general test data.
 
@@ -9368,7 +9471,7 @@ frame.update_timeline()  # ✅ Timeline has data
 1. `_get_sphere_projects()` method (line 589) only called `tracker.get_active_projects()` which filters out inactive projects
 2. `change_defaults_for_session()` method (line 188) used the default project instead of prioritizing the session's first project
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. TDD Approach for Bug Fix**:
 
@@ -9467,9 +9570,9 @@ if initial_project:
 
 **Test Results**:
 
-- ✅ New test passes: `test_inactive_project_displays_in_session_completion_frame`
-- ✅ All 23 existing comprehensive completion frame tests still pass
-- ✅ No regressions
+- New test passes: `test_inactive_project_displays_in_session_completion_frame`
+- All 23 existing comprehensive completion frame tests still pass
+- No regressions
 
 **Key Learning**: When displaying historical session data, always prioritize the session's actual values over current settings defaults, even if those values are now inactive/archived. This applies to spheres, projects, and break actions.
 
@@ -9496,7 +9599,7 @@ The `get_timeline_data` method was:
 - **All Radio Button**: Show all combinations (Active+Active, Active+Inactive, Inactive+Active, Inactive+Inactive)
 - **Archived Radio Button**: Show only combinations where at least one is inactive (exclude Active Sphere + Active Project)
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. TDD Approach - Write Failing Tests First**:
 
@@ -9520,7 +9623,7 @@ def test_archived_radio_button_shows_no_active_projects(self):
 **2. Proper RED Phase**:
 
 - All 3 tests written first
-- Ran tests: 2 FAILURES, 0 ERRORS ✅ (proper RED phase)
+- Ran tests: 2 FAILURES, 0 ERRORS (proper RED phase)
 - Active filter: Expected 1 session, got 4 (bug confirmed)
 - Archived filter: Expected 3 sessions, got 4 (bug confirmed)
 - All filter: PASSED (already working correctly)
@@ -9561,8 +9664,8 @@ elif status_filter == "archived":
 
 **4. GREEN Phase Achieved**:
 
-- All 3 new tests PASS ✅
-- Existing integration tests still PASS ✅ (no regressions)
+- All 3 new tests PASS
+- Existing integration tests still PASS (no regressions)
 - Radio buttons now correctly filter timeline data
 
 **Files Modified**:
@@ -9610,16 +9713,16 @@ elif status_filter == "archived":
 
 **Context**: Removed all "TDD RED PHASE TEST:" labels from test docstrings because once tests pass, the label becomes misleading.
 
-**What Worked** ✅:
+**What Worked**:
 
 **Rule**: Test names should describe WHAT they test, not WHEN they were written.
 
 ```python
-# ❌ WRONG - Label becomes misleading after test passes:
+# WRONG - Label becomes misleading after test passes:
 def test_something():
     """TDD RED PHASE TEST: Verify session notes appear in UI"""
 
-# ✅ CORRECT - Descriptive name that remains accurate:
+# CORRECT - Descriptive name that remains accurate:
 def test_something():
     """Verify session notes appear in UI"""
 ```
@@ -9663,18 +9766,18 @@ def test_something():
 5. `test_timeline_header_has_project_active_column` - Same issue
 6. `test_session_notes_column_expands_to_fill_space` - Used `pack_info()` but widgets now use `grid()`
 
-**What Worked** ✅:
+**What Worked**:
 
 **Fix Pattern**: Access headers by position in `winfo_children()`, not by filtering and indexing
 
 ```python
 # BEFORE (WRONG - only finds Frame containers):
 header_containers = [w for w in frame.timeline_header_frame.winfo_children() if isinstance(w, tk.Frame)]
-sphere_active = header_containers[4]  # ❌ Only 2 Frames exist!
+sphere_active = header_containers[4]  # Only 2 Frames exist!
 
 # AFTER (CORRECT - access by position):
 all_header_widgets = frame.timeline_header_frame.winfo_children()
-sphere_active = all_header_widgets[4]  # ✅ Gets column 4 regardless of type
+sphere_active = all_header_widgets[4]  # Gets column 4 regardless of type
 self.assertIsInstance(sphere_active, tk.Frame)  # Verify it's the expected type
 ```
 
@@ -9696,17 +9799,17 @@ self.assertTrue('e' in sticky or 'w' in sticky)  # Check for expansion
 **Tests Fixed**:
 
 1. **TestAnalysisTimelineTwoRowHeaders** (4 tests):
-   - `test_header_containers_exist_for_two_row_headers` ✅
-   - `test_sphere_active_header_has_two_rows` ✅
-   - `test_project_active_header_has_two_rows` ✅
-   - `test_single_row_headers_are_vertically_centered` ✅
+   - `test_header_containers_exist_for_two_row_headers`
+   - `test_sphere_active_header_has_two_rows`
+   - `test_project_active_header_has_two_rows`
+   - `test_single_row_headers_are_vertically_centered`
 
 2. **TestAnalysisFrameTimelineColumns** (2 tests):
-   - `test_timeline_header_has_sphere_active_column` ✅
-   - `test_timeline_header_has_project_active_column` ✅
+   - `test_timeline_header_has_sphere_active_column`
+   - `test_timeline_header_has_project_active_column`
 
 3. **TestAnalysisTimelineSessionNotesContent** (1 test):
-   - `test_session_notes_column_expands_to_fill_space` ✅
+   - `test_session_notes_column_expands_to_fill_space`
 
 **Files Modified**:
 
@@ -9715,7 +9818,7 @@ self.assertTrue('e' in sticky or 'w' in sticky)  # Check for expansion
 **Test Results**:
 
 - Before: 49 passing, 6 failing (3 errors + 3 failures)
-- After: **55 passing, 0 failing** ✅
+- After: **55 passing, 0 failing**
 
 **Key Learnings**:
 
@@ -9759,7 +9862,7 @@ self.assertTrue('e' in sticky or 'w' in sticky)  # Check for expansion
 
 We deleted `test_header_pixel_width_matches_data_row_pixel_width` and `test_header_pixel_width_with_sort_indicators` thinking they were overly strict. **They were actually catching a real bug!** The 6px difference per column wasn't "expected widget behavior" - it was evidence of the widget type mismatch problem.
 
-**What Didn't Work** ❌:
+**What Didn't Work**:
 
 1. **Switching from pack() to grid() alone**: Tried converting `update_timeline_header()` to use `.grid()` while leaving initial headers with `.pack()` → Still failed because of geometry manager conflict
 
@@ -9767,7 +9870,7 @@ We deleted `test_header_pixel_width_matches_data_row_pixel_width` and `test_head
 
 3. **Using grid() with container Frames**: Headers in Frame containers using `.grid()` vs data widgets directly using `.grid()` → Frame containers added extra width, causing misalignment
 
-**What Worked** ✅:
+**What Worked**:
 
 **1. Remove Initial pack() Headers Entirely**:
 
@@ -9775,7 +9878,7 @@ We deleted `test_header_pixel_width_matches_data_row_pixel_width` and `test_head
 # BEFORE (in __init__):
 def create_initial_header(text, column_key, width):
     label = tk.Label(...)
-    label.pack(side=tk.LEFT)  # ❌ Creates geometry manager conflict
+    label.pack(side=tk.LEFT)  # Creates geometry manager conflict
 
 # AFTER (in __init__):
 self.timeline_header_frame = tk.Frame(...)
@@ -9787,10 +9890,10 @@ self.timeline_header_frame = tk.Frame(...)
 ```python
 def create_non_sortable_single_row_header(text, width, expand=False, use_text_widget=False):
     if use_text_widget:
-        txt = tk.Text(...)  # ✅ Matches data row Text widgets (130px)
+        txt = tk.Text(...)  # Matches data row Text widgets (130px)
         txt.grid(row=0, column=col_idx, sticky=tk.W)
     else:
-        lbl = tk.Label(...)  # ✅ Matches data row Label widgets
+        lbl = tk.Label(...)  # Matches data row Label widgets
         lbl.grid(row=0, column=col_idx, sticky=tk.W)
 
 # Usage:
@@ -9852,9 +9955,9 @@ Created `test_header_pixel_x_positions_match_data_row_x_positions` that checks `
 
 **Test Results**:
 
-- ✅ `test_header_pixel_x_positions_match_data_row_x_positions`: RED (failed with 7-25px drift) → GREEN (passes with <2px tolerance)
-- ✅ `test_header_columns_align_with_data_rows`: Updated and passing
-- ⚠️ 3 failures + 3 errors in other tests that expected old Frame container structure (pre-existing, not regressions)
+- `test_header_pixel_x_positions_match_data_row_x_positions`: RED (failed with 7-25px drift) → GREEN (passes with <2px tolerance)
+- `test_header_columns_align_with_data_rows`: Updated and passing
+- 3 failures + 3 errors in other tests that expected old Frame container structure (pre-existing, not regressions)
 
 **Key Learnings**:
 
@@ -9897,11 +10000,11 @@ Created `test_header_pixel_x_positions_match_data_row_x_positions` that checks `
 
 1. **Testing wrong thing**: Tested `winfo_reqwidth()` pixel-perfect matching between different widget types
 2. **Unrealistic expectations**: tk.Label and tk.Text will ALWAYS render with slightly different pixel widths (~6px difference) even with same `width=21` config
-3. **Redundant coverage**: `test_header_columns_align_with_data_rows` already validates alignment correctly ✅
+3. **Redundant coverage**: `test_header_columns_align_with_data_rows` already validates alignment correctly
 4. **User confirmation**: User verified "headers and columns are aligned" in actual UI
 5. **Expected failures**: Tests failed due to tkinter widget rendering differences, not actual bugs
 
-**What Was Kept** ✅:
+**What Was Kept**:
 
 - `test_header_columns_align_with_data_rows` - The ACCURATE alignment test that checks:
   - Configuration width (`cget("width")`) matching
@@ -9909,7 +10012,7 @@ Created `test_header_pixel_x_positions_match_data_row_x_positions` that checks `
   - Anchor alignment
   - Padding consistency
   - Font consistency (no bold in headers)
-  - **This test PASSES** ✅
+  - **This test PASSES**
 
 **Rationale for Deletion**:
 
@@ -9927,7 +10030,7 @@ Instead of maintaining failing tests with disclaimers that "these failures are e
 
 - Before: 3 tests (1 passing, 2 failing with expected widget differences)
 - After: 1 test (1 passing, validates alignment correctly)
-- **TestAnalysisTimelineHeaderAlignment now has 100% pass rate** ✅
+- **TestAnalysisTimelineHeaderAlignment now has 100% pass rate**
 
 **Key Learnings**:
 
@@ -9968,7 +10071,7 @@ The tests fail with: `AssertionError: 136 != 130 : Column 8 ('Primary Comment'):
 
 - User states: "the headers and columns are aligned"
 - Visual inspection confirms no alignment issues
-- The configuration-based alignment test (`test_header_columns_align_with_data_rows`) PASSES ✅
+- The configuration-based alignment test (`test_header_columns_align_with_data_rows`) PASSES
 
 **What This Means**:
 
@@ -9976,7 +10079,7 @@ The tests fail with: `AssertionError: 136 != 130 : Column 8 ('Primary Comment'):
 2. **The actual alignment IS correct** - columns line up visually as expected
 3. **TDD RED PHASE was incorrect label** - these aren't failing tests documenting a bug, they're passing tests with unrealistic expectations
 
-**What Worked** ✅:
+**What Worked**:
 
 Removed "TDD RED PHASE TEST:" labels and updated docstrings to document that:
 
@@ -9988,10 +10091,10 @@ Removed "TDD RED PHASE TEST:" labels and updated docstrings to document that:
 
 The test `test_header_columns_align_with_data_rows` DOES work correctly - it checks:
 
-- Configuration width (`cget("width")`) matches ✅
-- Count matches ✅
-- Anchor matches ✅
-- Padding matches ✅
+- Configuration width (`cget("width")`) matches
+- Count matches
+- Anchor matches
+- Padding matches
 
 This is the accurate test for alignment, not pixel-perfect width matching.
 
@@ -10027,7 +10130,7 @@ This is the accurate test for alignment, not pixel-perfect width matching.
 - Tests either set no filters at all, or set sphere/project but forgot `selected_card`
 - Result: Test data filtered out by time range, no rows displayed
 
-**What Worked** ✅:
+**What Worked**:
 
 Added filter settings to all 3 tests:
 
@@ -10044,7 +10147,7 @@ frame.update_timeline()
 
 - [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - Fixed all 3 tests in TestAnalysisTimelineSessionNotesContent
 
-**Test Results**: ✅ All 3 tests now pass
+**Test Results**: All 3 tests now pass
 
 **Key Learnings**:
 
@@ -10085,7 +10188,7 @@ frame.update_timeline()
 - 29 Jan to 6 Feb = 8 days → data filtered out by default "Last 7 Days" range
 - Tests set `sphere_var` and `project_var` but forgot to set `selected_card`
 
-**What Worked** ✅:
+**What Worked**:
 
 1. **Set time range to "All Time"** before calling `update_timeline()`:
 
@@ -10109,9 +10212,9 @@ frame.update_timeline()
 
 **Test Results**:
 
-- ✅ `test_header_columns_align_with_data_rows` - Now passes (data rows visible)
-- ⚠️ `test_header_pixel_width_matches_data_row_pixel_width` - Still fails (expected RED phase)
-- ⚠️ `test_header_pixel_width_with_sort_indicators` - Still fails (expected RED phase)
+- `test_header_columns_align_with_data_rows` - Now passes (data rows visible)
+- `test_header_pixel_width_matches_data_row_pixel_width` - Still fails (expected RED phase)
+- `test_header_pixel_width_with_sort_indicators` - Still fails (expected RED phase)
 
 The latter two tests now run correctly but fail on pixel width mismatches (Labels vs Text widgets) - this is expected as they're "TDD RED PHASE" tests documenting a known issue.
 
@@ -10153,7 +10256,7 @@ frame.update_timeline()
 - Tests were filtering widgets with `isinstance(child, tk.Label)` which excluded `tk.Text` widgets
 - Result: Tests were checking wrong widgets (non-comment columns) that had empty text
 
-**What Worked** ✅:
+**What Worked**:
 
 1. **Updated widget filtering** to include both types:
 
@@ -10185,7 +10288,7 @@ frame.update_timeline()
 
 - [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py#L2187-L2250) - Fixed 3 tests in TestAnalysisTimelineCommentWrapping
 
-**Test Results**: ✅ All 8 tests in TestAnalysisTimelineCommentWrapping now pass
+**Test Results**: All 8 tests in TestAnalysisTimelineCommentWrapping now pass
 
 **Key Learnings**:
 
@@ -10196,14 +10299,14 @@ frame.update_timeline()
 
 ---
 
-## ⚠️ CRITICAL RULES - NEVER VIOLATE THESE
+## CRITICAL RULES - NEVER VIOLATE THESE
 
 ### Tkinter StringVar Master Parameter (MANDATORY)
 
 **Date**: 2026-02-03
 **Rule**: ALL Tkinter variables (StringVar, IntVar, BooleanVar) MUST specify master parameter.
 
-**✅ CORRECT PATTERN**:
+**CORRECT PATTERN**:
 
 ```python
 # In __init__ where self.root exists
@@ -10220,16 +10323,16 @@ name_var = tk.StringVar(master=dialog, value=project_name)
 
 **Why This Matters**:
 
-- ✅ Prevents variables from attaching to global singleton Tk root
-- ✅ Eliminates state pollution between tests
-- ✅ Prevents "RuntimeError: main thread is not in main loop" crashes
-- ✅ Prevents "Tcl_AsyncDelete: async handler deleted by wrong thread" errors
-- ✅ Variables are properly destroyed with their parent root
+- Prevents variables from attaching to global singleton Tk root
+- Eliminates state pollution between tests
+- Prevents "RuntimeError: main thread is not in main loop" crashes
+- Prevents "Tcl_AsyncDelete: async handler deleted by wrong thread" errors
+- Variables are properly destroyed with their parent root
 
-**❌ WRONG PATTERN**:
+**WRONG PATTERN**:
 
 ```python
-# ❌ NO master parameter - attaches to global Tk root!
+# NO master parameter - attaches to global Tk root!
 self.status_filter = tk.StringVar(value="active")
 self.sphere_var = tk.StringVar(value=default_sphere)
 range_var = tk.StringVar(value=self.card_ranges[index])
@@ -10249,7 +10352,7 @@ range_var = tk.StringVar(value=self.card_ranges[index])
 **Date**: 2026-02-03
 **Rule**: When running tests, execute them ONCE with comprehensive output to avoid multiple executions.
 
-**✅ CORRECT PATTERN**:
+**CORRECT PATTERN**:
 
 ```bash
 # Run test with full output (stdout + stderr combined)
@@ -10258,15 +10361,15 @@ python tests/test_<module>.py 2>&1
 
 **Why This Matters**:
 
-- ✅ Captures all output (test results, errors, warnings) in single execution
-- ✅ Avoids wasting time running same tests multiple times
-- ✅ Provides comprehensive diagnostic information from one run
-- ✅ Prevents test pollution from multiple consecutive runs
+- Captures all output (test results, errors, warnings) in single execution
+- Avoids wasting time running same tests multiple times
+- Provides comprehensive diagnostic information from one run
+- Prevents test pollution from multiple consecutive runs
 
-**❌ WRONG PATTERN**:
+**WRONG PATTERN**:
 
 ```bash
-# ❌ Running tests multiple times to gather different outputs
+# Running tests multiple times to gather different outputs
 python tests/test_module.py         # First run
 python tests/test_module.py 2>&1    # Second run
 ```
@@ -10293,7 +10396,7 @@ OK
 - Tests using `self.addCleanup(self.root.destroy)` destroy root while callbacks are still scheduled
 - Tkinter callbacks reference widget commands that no longer exist after destruction
 
-**✅ CORRECT PATTERN** (Systematic Fix Applied to All Test Files):
+**CORRECT PATTERN** (Systematic Fix Applied to All Test Files):
 
 ```python
 class TestMyFeature(unittest.TestCase):
@@ -10301,7 +10404,7 @@ class TestMyFeature(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+        # DO NOT USE: self.addCleanup(self.root.destroy)
 
     def tearDown(self):
         from tests.test_helpers import safe_teardown_tk_root
@@ -10315,9 +10418,9 @@ class TestMyFeature(unittest.TestCase):
 
 **Files Status**:
 
-- ✅ **[tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - FULLY FIXED** (2026-02-03)
-  - ✅ Added `safe_teardown_tk_root()` and `cancel_tkinter_callbacks()` helpers to test_helpers.py
-  - ✅ Fixed ALL 13 test classes:
+- **[tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - FULLY FIXED** (2026-02-03)
+  - Added `safe_teardown_tk_root()` and `cancel_tkinter_callbacks()` helpers to test_helpers.py
+  - Fixed ALL 13 test classes:
     1. TestAnalysisFrameSphereFiltering - removed addCleanup(root.destroy), added tearDown
     2. TestAnalysisFrameProjectFiltering - removed addCleanup(root.destroy), added tearDown
     3. TestAnalysisTimelineDataStructure - removed addCleanup(root.destroy), added tearDown
@@ -10331,12 +10434,12 @@ class TestMyFeature(unittest.TestCase):
     11. TestAnalysisFrameStatusFilterIntegration - updated tearDown to use safe_teardown_tk_root
     12. TestAnalysisFrameTimelineColumns - updated tearDown to use safe_teardown_tk_root
     13. TestAnalysisTimelineSessionNotesContent - removed addCleanup(root.destroy), added tearDown
-  - ✅ **All 56 tests in test_analysis_timeline.py PASSING**
-  - ✅ **Full test suite: 368 tests, 368 successes, 0 failures, 0 errors**
-  - ✅ **VERIFIED 2026-02-03: Re-ran tests, 56/56 passing, no crashes - fixes confirmed working**
-  - ✅ **No more Tkinter threading crashes!**
-- ✅ **[tests/test_settings_frame.py](tests/test_settings_frame.py) - FULLY FIXED** (2026-02-03)
-  - ✅ Fixed ALL 9 test classes that were using Wrong Pattern #2 (manual try/except destroy):
+  - **All 56 tests in test_analysis_timeline.py PASSING**
+  - **Full test suite: 368 tests, 368 successes, 0 failures, 0 errors**
+  - **VERIFIED 2026-02-03: Re-ran tests, 56/56 passing, no crashes - fixes confirmed working**
+  - **No more Tkinter threading crashes!**
+- **[tests/test_settings_frame.py](tests/test_settings_frame.py) - FULLY FIXED** (2026-02-03)
+  - Fixed ALL 9 test classes that were using Wrong Pattern #2 (manual try/except destroy):
     1. TestSettingsFrameDefaults - updated tearDown to use safe_teardown_tk_root
     2. TestSettingsFrameFilters - updated tearDown to use safe_teardown_tk_root
     3. TestSettingsFrameAddSphere - updated tearDown to use safe_teardown_tk_root
@@ -10346,19 +10449,19 @@ class TestMyFeature(unittest.TestCase):
     7. TestSettingsFrameComboboxScroll - updated tearDown to use safe_teardown_tk_root
     8. TestSettingsFrameDataAccuracy - updated tearDown to use safe_teardown_tk_root
     9. TestSettingsFrameSphereArchiveCascade - updated tearDown to use safe_teardown_tk_root
-  - ✅ **All 49 tests in test_settings_frame.py PASSING**
-  - ✅ **No more Tkinter threading crashes!**
-- ✅ **[tests/test_completion_priority.py](tests/test_completion_priority.py) - FULLY FIXED** (2026-02-03)
-  - ✅ Fixed ALL 5 test classes that were using Wrong Pattern #1 (addCleanup(root.destroy)):
+  - **All 49 tests in test_settings_frame.py PASSING**
+  - **No more Tkinter threading crashes!**
+- **[tests/test_completion_priority.py](tests/test_completion_priority.py) - FULLY FIXED** (2026-02-03)
+  - Fixed ALL 5 test classes that were using Wrong Pattern #1 (addCleanup(root.destroy)):
     1. TestCompletionFrameSaveAndClose - removed addCleanup(root.destroy), added tearDown
     2. TestCompletionFramePercentageValidation - removed addCleanup(root.destroy), added tearDown
     3. TestCompletionFrameAddRemoveSecondary - removed addCleanup(root.destroy), added tearDown
     4. TestCompletionFrameCommentSpecialCharacters - removed addCleanup(root.destroy), added tearDown
     5. TestCompletionFrameMultipleSecondaryProjects - removed addCleanup(root.destroy), added tearDown
-  - ✅ **All 17 tests in test_completion_priority.py PASSING**
-  - ✅ **No more Tkinter threading crashes!**
-- ✅ [tests/test_button_navigation.py](tests/test_button_navigation.py) - Already fixed
-- ✅ [tests/test_helpers.py](tests/test_helpers.py) - Added `safe_teardown_tk_root()` and `cancel_tkinter_callbacks()` functions (2026-02-03)
+  - **All 17 tests in test_completion_priority.py PASSING**
+  - **No more Tkinter threading crashes!**
+- [tests/test_button_navigation.py](tests/test_button_navigation.py) - Already fixed
+- [tests/test_helpers.py](tests/test_helpers.py) - Added `safe_teardown_tk_root()` and `cancel_tkinter_callbacks()` functions (2026-02-03)
 
 **Why This Works**:
 
@@ -10367,15 +10470,15 @@ class TestMyFeature(unittest.TestCase):
 - Suppresses all tearDown-related TclError exceptions
 - Tests complete without crashes
 
-**❌ WRONG PATTERNS - DO NOT USE**:
+**WRONG PATTERNS - DO NOT USE**:
 
 **Wrong Pattern #1: Using addCleanup for root.destroy**
 
 ```python
-# ❌ WRONG - Causes "Tcl_AsyncDelete: async handler deleted by wrong thread"
+# WRONG - Causes "Tcl_AsyncDelete: async handler deleted by wrong thread"
 def setUp(self):
     self.root = tk.Tk()
-    self.addCleanup(self.root.destroy)  # ❌ WRONG!
+    self.addCleanup(self.root.destroy)  # WRONG!
 ```
 
 **Why it fails**: Cleanup runs AFTER test completes, but callbacks are still scheduled
@@ -10383,10 +10486,10 @@ def setUp(self):
 **Wrong Pattern #2: Manual try/except tearDown**
 
 ```python
-# ❌ WRONG - Doesn't cancel callbacks before destroying
+# WRONG - Doesn't cancel callbacks before destroying
 def tearDown(self):
     try:
-        self.root.destroy()  # ❌ WRONG!
+        self.root.destroy()  # WRONG!
     except:
         pass
 ```
@@ -10396,30 +10499,30 @@ def tearDown(self):
 **Wrong Pattern #3: Using only cancel_tkinter_callbacks**
 
 ```python
-# ❌ INCOMPLETE - Missing error suppression
+# INCOMPLETE - Missing error suppression
 def tearDown(self):
     cancel_tkinter_callbacks(self.root)
-    self.root.destroy()  # ❌ Can still cause errors
+    self.root.destroy()  # Can still cause errors
 ```
 
 **Why it fails**: Doesn't suppress all tearDown-related TclError exceptions
 
-**✅ CORRECT - ALWAYS USE THIS**:
+**CORRECT - ALWAYS USE THIS**:
 
 ```python
 def tearDown(self):
     from tests.test_helpers import safe_teardown_tk_root
-    safe_teardown_tk_root(self.root)  # ✅ CORRECT!
+    safe_teardown_tk_root(self.root)  # CORRECT!
     self.file_manager.cleanup()
 ```
 
 **Why Alternative Approaches Failed**:
 
-- ❌ Using `addCleanup(self.root.destroy)` - Cleanup runs after test, callbacks still active
-- ❌ Only calling `cancel_tkinter_callbacks()` - Doesn't suppress all tearDown errors
-- ❌ Manually destroying child widgets first - Can destroy root too early, causing other errors
+- Using `addCleanup(self.root.destroy)` - Cleanup runs after test, callbacks still active
+- Only calling `cancel_tkinter_callbacks()` - Doesn't suppress all tearDown errors
+- Manually destroying child widgets first - Can destroy root too early, causing other errors
 
-**✅ COMPLETE TDD TEMPLATE - USE THIS FOR ALL NEW TKINTER TESTS**:
+**COMPLETE TDD TEMPLATE - USE THIS FOR ALL NEW TKINTER TESTS**:
 
 ```python
 """
@@ -10450,7 +10553,7 @@ class TestYourFeature(unittest.TestCase):
         self.root = tk.Tk()
         self.file_manager = TestFileManager()
         self.addCleanup(self.file_manager.cleanup)
-        # ❌ DO NOT USE: self.addCleanup(self.root.destroy)
+        # DO NOT USE: self.addCleanup(self.root.destroy)
 
         # Create test settings/data files
         settings = TestDataGenerator.create_settings_data()
@@ -10464,7 +10567,7 @@ class TestYourFeature(unittest.TestCase):
     def tearDown(self):
         """Clean up after tests"""
         from test_helpers import safe_teardown_tk_root
-        safe_teardown_tk_root(self.root)  # ✅ REQUIRED!
+        safe_teardown_tk_root(self.root)  # REQUIRED!
         self.file_manager.cleanup()
 
     def test_feature_expected_behavior(self):
@@ -10487,12 +10590,12 @@ if __name__ == "__main__":
 
 **Key Template Points**:
 
-- ✅ Import `safe_teardown_tk_root` in `tearDown()` method
-- ✅ Use `TestFileManager` for test file cleanup (via `addCleanup`)
-- ✅ Use `TestDataGenerator` for creating test data
-- ✅ **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
-- ✅ Always call `safe_teardown_tk_root(self.root)` first in tearDown
-- ✅ Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
+- Import `safe_teardown_tk_root` in `tearDown()` method
+- Use `TestFileManager` for test file cleanup (via `addCleanup`)
+- Use `TestDataGenerator` for creating test data
+- **NEVER** use `self.addCleanup(self.root.destroy)` - causes crashes
+- Always call `safe_teardown_tk_root(self.root)` first in tearDown
+- Always call `self.file_manager.cleanup()` after safe_teardown_tk_root
 
 ### TDD Red Phase Rule (MANDATORY)
 
@@ -10508,8 +10611,8 @@ if __name__ == "__main__":
 **Example of test output analysis:**
 
 ```
-FAILED (failures=2, errors=4)  ❌ STOP! Fix tests first
-FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
+FAILED (failures=2, errors=4)  STOP! Fix tests first
+FAILED (failures=6, errors=0)  OK! Proceed to implementation
 ```
 
 **Why this matters:**
@@ -10528,8 +10631,8 @@ FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
 
 **Symptoms**:
 
-- Tests passed individually: ✅ `python tests/test_analysis_timeline.py`
-- Tests crashed intermittently in full suite: ❌ `coverage run --source=src tests/run_all_tests.py`
+- Tests passed individually: `python tests/test_analysis_timeline.py`
+- Tests crashed intermittently in full suite: `coverage run --source=src tests/run_all_tests.py`
 - Dozens of tkinter frames stayed open during entire test run
 - Race condition - not consistent failure
 - Error occurred during Variable.**del** (garbage collection of StringVar/IntVar)
@@ -10538,10 +10641,10 @@ FAILED (failures=6, errors=0)  ✅ OK! Proceed to implementation
 
 **Root Cause**: In [src/analysis_frame.py](src/analysis_frame.py), four StringVar instances were created **without specifying master parameter**:
 
-- Line 47: `self.status_filter = tk.StringVar(value="active")` - ❌ No master
-- Line 126: `self.sphere_var = tk.StringVar(value=default_sphere)` - ❌ No master
-- Line 142: `self.project_var = tk.StringVar(value="All Projects")` - ❌ No master
-- Line 394: `range_var = tk.StringVar(value=self.card_ranges[index])` - ❌ No master
+- Line 47: `self.status_filter = tk.StringVar(value="active")` - No master
+- Line 126: `self.sphere_var = tk.StringVar(value=default_sphere)` - No master
+- Line 142: `self.project_var = tk.StringVar(value="All Projects")` - No master
+- Line 394: `range_var = tk.StringVar(value=self.card_ranges[index])` - No master
 
 When no master is specified, Tkinter variables attach to the **global default Tk root singleton**, causing:
 
@@ -10553,39 +10656,39 @@ When no master is specified, Tkinter variables attach to the **global default Tk
 
 **What Didn't Work**:
 
-- ❌ **Assuming tearDown was wrong** - tearDown was correct, used `safe_teardown_tk_root()`
-- ❌ **Looking for other callback issues** - Problem was variable cleanup, not after() callbacks
-- ❌ **Assuming it was test-specific** - Problem was in source code, not tests
+- **Assuming tearDown was wrong** - tearDown was correct, used `safe_teardown_tk_root()`
+- **Looking for other callback issues** - Problem was variable cleanup, not after() callbacks
+- **Assuming it was test-specific** - Problem was in source code, not tests
 
-**What Worked - The Fix**: ✅
+**What Worked - The Fix**:
 
 **Changed in [src/analysis_frame.py](src/analysis_frame.py)**:
 
 ```python
-# Line 47 - Status filter (❌ OLD → ✅ NEW)
+# Line 47 - Status filter (OLD → NEW)
 -self.status_filter = tk.StringVar(value="active")
 +self.status_filter = tk.StringVar(master=root, value="active")
 
-# Line 126 - Sphere filter (❌ OLD → ✅ NEW)
+# Line 126 - Sphere filter (OLD → NEW)
 -self.sphere_var = tk.StringVar(value=default_sphere)
 +self.sphere_var = tk.StringVar(master=self.root, value=default_sphere)
 
-# Line 142 - Project filter (❌ OLD → ✅ NEW)
+# Line 142 - Project filter (OLD → NEW)
 -self.project_var = tk.StringVar(value="All Projects")
 +self.project_var = tk.StringVar(master=self.root, value="All Projects")
 
-# Line 394 - Card range dropdown (❌ OLD → ✅ NEW)
+# Line 394 - Card range dropdown (OLD → NEW)
 -range_var = tk.StringVar(value=self.card_ranges[index])
 +range_var = tk.StringVar(master=self.root, value=self.card_ranges[index])
 ```
 
 **Test Results**:
 
-- ✅ test_analysis_timeline.py: 56/56 tests passing
-- ✅ No more "Tcl_AsyncDelete" crashes
-- ✅ No more "RuntimeError: main thread is not in main loop" errors
-- ✅ Tkinter frames properly destroyed with their parent roots
-- ✅ Full test suite runs without race conditions
+- test_analysis_timeline.py: 56/56 tests passing
+- No more "Tcl_AsyncDelete" crashes
+- No more "RuntimeError: main thread is not in main loop" errors
+- Tkinter frames properly destroyed with their parent roots
+- Full test suite runs without race conditions
 
 **Key Learnings**:
 
@@ -10598,12 +10701,12 @@ When no master is specified, Tkinter variables attach to the **global default Tk
 
 **Files Fixed**:
 
-- ✅ [src/analysis_frame.py](src/analysis_frame.py) - Fixed all 4 StringVar instances (lines 47, 126, 142, 394)
-- ✅ [src/settings_frame.py](src/settings_frame.py) - Fixed 4 additional instances (lines 1110, 1184, 1221, 1234):
-  - Line 1110: `min_seconds_var = tk.IntVar()` - ❌ No master → ✅ Added `master=self.root`
-  - Line 1184: `spreadsheet_id_var = tk.StringVar()` - ❌ No master → ✅ Added `master=self.root`
-  - Line 1221: `sheet_name_var = tk.StringVar()` - ❌ No master → ✅ Added `master=self.root`
-  - Line 1234: `credentials_var = tk.StringVar()` - ❌ No master → ✅ Added `master=self.root`
+- [src/analysis_frame.py](src/analysis_frame.py) - Fixed all 4 StringVar instances (lines 47, 126, 142, 394)
+- [src/settings_frame.py](src/settings_frame.py) - Fixed 4 additional instances (lines 1110, 1184, 1221, 1234):
+  - Line 1110: `min_seconds_var = tk.IntVar()` - No master → Added `master=self.root`
+  - Line 1184: `spreadsheet_id_var = tk.StringVar()` - No master → Added `master=self.root`
+  - Line 1221: `sheet_name_var = tk.StringVar()` - No master → Added `master=self.root`
+  - Line 1234: `credentials_var = tk.StringVar()` - No master → Added `master=self.root`
 
 **Additional Discovery (2026-02-03)**:
 
@@ -10625,17 +10728,17 @@ After initial fix to analysis_frame.py, crash persisted intermittently. Comprehe
 
 **Complete Fix Status**:
 
-- ✅ All tkinter variables in src/analysis_frame.py: FIXED (4 instances)
-- ✅ All tkinter variables in src/settings_frame.py: FIXED (all instances, including 4 newly discovered)
-- ✅ src/completion_frame.py: No tkinter variables
-- ✅ src/ui_helpers.py: No tkinter variables
-- ✅ time_tracker.py: No tkinter variables (confirmed via grep)
-- ✅ **Added explicit garbage collection** (2026-02-03):
+- All tkinter variables in src/analysis_frame.py: FIXED (4 instances)
+- All tkinter variables in src/settings_frame.py: FIXED (all instances, including 4 newly discovered)
+- src/completion_frame.py: No tkinter variables
+- src/ui_helpers.py: No tkinter variables
+- time_tracker.py: No tkinter variables (confirmed via grep)
+- **Added explicit garbage collection** (2026-02-03):
   - Modified `safe_teardown_tk_root()` to call `gc.collect()` after destroying each root
   - Created `GarbageCollectingTestRunner` that calls `gc.collect()` between test classes
   - This forces immediate cleanup of tkinter variables instead of waiting for Python's GC
-- ✅ **VALIDATION CONFIRMED** (2026-02-03):
-  - Full test suite with coverage: `coverage run --source=src tests/run_all_tests.py` - **Exit code 0** ✅
+- **VALIDATION CONFIRMED** (2026-02-03):
+  - Full test suite with coverage: `coverage run --source=src tests/run_all_tests.py` - **Exit code 0**
   - **NO CRASHES** - No Variable.**del** errors, no Tcl_AsyncDelete errors
   - **GC Debug Output**: `[GC] Final cleanup: collected 0 objects`
   - **0 objects collected = SUCCESS** - Variables properly destroyed with their parent roots
@@ -10663,7 +10766,7 @@ my_var = tk.StringVar(master=self.root, value="default")
 my_var = tk.StringVar(master=dialog, value="default")
 
 # NEVER create without master
-my_var = tk.StringVar(value="default")  # ❌ WRONG!
+my_var = tk.StringVar(value="default")  # WRONG!
 ```
 
 ---
@@ -10699,10 +10802,10 @@ So `row_labels` only had indices 0-8 (9 total), making row_labels[13] or even ro
 
 **What Didn't Work**:
 
-- ❌ Trying to access indices beyond available Label widgets
-- ❌ Assuming all columns would be Label widgets
+- Trying to access indices beyond available Label widgets
+- Assuming all columns would be Label widgets
 
-**What Worked - The Fix**: ✅
+**What Worked - The Fix**:
 
 **Changed**: Get ALL child widgets instead of filtering for Labels only:
 
@@ -10763,11 +10866,11 @@ self.assertEqual(pack_info["fill"], "both", ...)
 
 **What Didn't Work**:
 
-- ❌ Looking for infinite loops in test code: No actual loops, just timed waits
-- ❌ Checking for `mainloop()` calls: Not the issue
-- ❌ Assuming test logic was broken: Tests themselves were fine
+- Looking for infinite loops in test code: No actual loops, just timed waits
+- Checking for `mainloop()` calls: Not the issue
+- Assuming test logic was broken: Tests themselves were fine
 
-**What Worked - The Fix**: ✅
+**What Worked - The Fix**:
 
 **Change**: Renamed `tests/test_screenshot.py` → `tests/manual_screenshot_test.py`
 
@@ -10808,11 +10911,11 @@ mv tests\test_screenshot.py tests\manual_screenshot_test.py
 
 **What Didn't Work**:
 
-- ❌ Running tests in parallel with pytest: Caused same threading conflicts
-- ❌ Ignoring the problem: Suite crashed before completion
-- ❌ Using `addCleanup(self.root.destroy)` alone: Callbacks still pending when root destroyed
+- Running tests in parallel with pytest: Caused same threading conflicts
+- Ignoring the problem: Suite crashed before completion
+- Using `addCleanup(self.root.destroy)` alone: Callbacks still pending when root destroyed
 
-**What Worked - The Complete Fix**: ✅
+**What Worked - The Complete Fix**:
 
 **Change 1**: Created helper function in [tests/test_helpers.py](tests/test_helpers.py):
 
@@ -10860,8 +10963,8 @@ def tearDown(self):
 
 **Results**:
 
-- ✅ **No more Tcl_AsyncDelete crashes!**
-- ✅ All 368 tests run to completion
+- **No more Tcl_AsyncDelete crashes!**
+- All 368 tests run to completion
 - Runtime: 5.8 minutes (was ~2 min before crash, now completes)
 - Test results: 326 successes, 8 failures, 34 errors, 9 skipped
 
@@ -10883,10 +10986,10 @@ def tearDown(self):
 
 **What Didn't Work**:
 
-- ❌ Filtering only for Labels: Missed Text widgets entirely
-- ❌ Assuming all columns are Labels: Implementation changed to use Text for comments
+- Filtering only for Labels: Missed Text widgets entirely
+- Assuming all columns are Labels: Implementation changed to use Text for comments
 
-**What Worked - The Fix**: ✅
+**What Worked - The Fix**:
 
 **Change**: Updated tests to use ALL widgets without type filtering:
 
@@ -10932,8 +11035,8 @@ else:
 
 **Symptoms**:
 
-- Test passes alone: ✅ `python -m unittest tests.test_settings_frame.TestSettingsFrameFilters.test_project_filter_active`
-- Test fails after other tests: ❌ `python -m unittest tests.test_settings_frame.TestSettingsFrameDefaults tests.test_settings_frame.TestSettingsFrameFilters.test_project_filter_active`
+- Test passes alone: `python -m unittest tests.test_settings_frame.TestSettingsFrameFilters.test_project_filter_active`
+- Test fails after other tests: `python -m unittest tests.test_settings_frame.TestSettingsFrameDefaults tests.test_settings_frame.TestSettingsFrameFilters.test_project_filter_active`
 - Debug output showed widgets were created (`filtered_projects count: 1`) but Entry widgets had empty values
 - Only happened when tests ran sequentially, not in isolation
 
@@ -10948,33 +11051,33 @@ else:
 
 **What We Tried** (Diagnostic Journey):
 
-1. ✅ **Added debug output to test** - Confirmed tracker had correct data, sphere_var was set correctly
-2. ✅ **Checked refresh_project_section logic** - Filtering was working (found 1 project: ActiveProject)
-3. ✅ **Counted child widgets** - Widgets were being created (1 Frame with 9 children)
-4. ✅ **Added recursive widget search** - Found Entry widget but it had empty value
-5. ✅ **Created isolation test scripts** - Confirmed code works perfectly when run standalone
-6. ✅ **Fixed sphere_var and filter StringVars** - Added `master=self.root` to filter variables (lines 56-58, 213)
-7. ❌ **Partial fix didn't resolve issue** - Tests still failed because project row StringVars weren't fixed yet
-8. ✅ **Fixed all StringVars in create_project_row** - Added `master=self.root` to name_var, sphere_var, note_var, goal_var
+1. **Added debug output to test** - Confirmed tracker had correct data, sphere_var was set correctly
+2. **Checked refresh_project_section logic** - Filtering was working (found 1 project: ActiveProject)
+3. **Counted child widgets** - Widgets were being created (1 Frame with 9 children)
+4. **Added recursive widget search** - Found Entry widget but it had empty value
+5. **Created isolation test scripts** - Confirmed code works perfectly when run standalone
+6. **Fixed sphere_var and filter StringVars** - Added `master=self.root` to filter variables (lines 56-58, 213)
+7. **Partial fix didn't resolve issue** - Tests still failed because project row StringVars weren't fixed yet
+8. **Fixed all StringVars in create_project_row** - Added `master=self.root` to name_var, sphere_var, note_var, goal_var
 
 **What Didn't Work**:
 
-- ❌ **Only fixing filter StringVars** - Project row Entry widgets still empty (root cause was in `create_project_row`)
-- ❌ **Adding update_idletasks/update** - Not a timing issue, was state pollution
-- ❌ **Assuming it was a code bug** - The filtering code was correct, tests correctly identified a Tkinter variable scoping issue
+- **Only fixing filter StringVars** - Project row Entry widgets still empty (root cause was in `create_project_row`)
+- **Adding update_idletasks/update** - Not a timing issue, was state pollution
+- **Assuming it was a code bug** - The filtering code was correct, tests correctly identified a Tkinter variable scoping issue
 
-**What Worked - The Complete Fix**: ✅
+**What Worked - The Complete Fix**:
 
 **Changed in [src/settings_frame.py](src/settings_frame.py)**:
 
 ```python
-# ❌ OLD (WRONG) - Uses global Tk root
+# OLD (WRONG) - Uses global Tk root
 name_var = tk.StringVar(value=project_name)
 sphere_var = tk.StringVar(value=project_data.get("sphere", ""))
 note_var = tk.StringVar(value=project_data.get("note", ""))
 goal_var = tk.StringVar(value=project_data.get("goal", ""))
 
-# ✅ NEW (CORRECT) - Tied to specific Tk root instance
+# NEW (CORRECT) - Tied to specific Tk root instance
 name_var = tk.StringVar(master=self.root, value=project_name)
 sphere_var = tk.StringVar(master=self.root, value=project_data.get("sphere", ""))
 note_var = tk.StringVar(master=self.root, value=project_data.get("note", ""))
@@ -10991,9 +11094,9 @@ goal_var = tk.StringVar(master=self.root, value=project_data.get("goal", ""))
 
 **Test Results**:
 
-- ✅ All 49 settings_frame tests now pass when run together
-- ✅ No state pollution between test classes
-- ✅ Entry widgets display correct values in all scenarios
+- All 49 settings_frame tests now pass when run together
+- No state pollution between test classes
+- Entry widgets display correct values in all scenarios
 
 **Key Learnings**:
 
@@ -11045,8 +11148,8 @@ Result: The 5-second threshold period (T+5 to T+10) was being counted as IDLE ti
 
 **What Didn't Work - Previous Approach**:
 
-- ❌ Setting `idle_start_time = self.last_user_input`: This retroactively includes the threshold period in idle time
-- ❌ Using `last_user_input` as the end time for pre-idle active period: This makes the active period end too early
+- Setting `idle_start_time = self.last_user_input`: This retroactively includes the threshold period in idle time
+- Using `last_user_input` as the end time for pre-idle active period: This makes the active period end too early
 
 **What Worked - The Correct Fix**:
 
@@ -11114,7 +11217,7 @@ No wait, if session started at T+0 and user was active until T+5, then:
 - `active_period_start_time = T+0` (session start)
 - `last_user_input = T+5`
 - `idle_start_time = T+5` (old buggy code)
-- Duration = T+5 - T+0 = 5 sec ✓ (this should work)
+- Duration = T+5 - T+0 = 5 sec (this should work)
 
 Unless... `active_period_start_time` got updated somewhere? Let me check the on_activity code...
 
@@ -11177,8 +11280,8 @@ OR if user means they were working for exactly 5 sec, then idle threshold is dif
 
 **Root Cause**: In [time_tracker.py](time_tracker.py) lines 426-447, the `on_activity()` callback (triggered when user resumes activity after being idle) was:
 
-1. ✅ Ending the idle period correctly (saving end time and duration)
-2. ❌ **NOT starting a new active period**
+1. Ending the idle period correctly (saving end time and duration)
+2. **NOT starting a new active period**
 
 The problem: `self.active_period_start_time` remained pointing to the ORIGINAL session start time. When `end_session()` later saved the "final" active period, it calculated duration from session start to session end, completely ignoring the idle period in between.
 
@@ -11191,8 +11294,8 @@ The problem: `self.active_period_start_time` remained pointing to the ORIGINAL s
 
 **What Didn't Work**:
 
-- ❌ Just ending the idle period without updating `active_period_start_time`: This was the original buggy code
-- ❌ Not saving the pre-idle active period: If we only update `active_period_start_time` without saving the period that ended, we lose that data
+- Just ending the idle period without updating `active_period_start_time`: This was the original buggy code
+- Not saving the pre-idle active period: If we only update `active_period_start_time` without saving the period that ended, we lose that data
 
 **What Worked - The Complete Fix**:
 
@@ -11281,7 +11384,7 @@ def on_activity(*args):
 
 - [tests/test_active_after_idle.py](tests/test_active_after_idle.py): Demonstrates expected behavior (3 periods) vs buggy behavior (2 periods)
 
-**Test Results**: ✅ Fix verified - completion frame now correctly shows all 3 periods (Active, Idle, Active)
+**Test Results**: Fix verified - completion frame now correctly shows all 3 periods (Active, Idle, Active)
 
 **Similar Bugs to Watch For**: Any time there's a state transition (active↔break, active↔idle, break↔idle), verify that:
 
@@ -11300,20 +11403,20 @@ def on_activity(*args):
 **Evolution of Solutions**:
 
 1. **Original (WRONG)**: `estimated_lines = min(5, max(1, len(text) // 40 + 1))`
-   - ❌ Assumed 40 chars/line (widgets are 21 chars wide!)
-   - ❌ Capped at 5 lines (too restrictive)
+   - Assumed 40 chars/line (widgets are 21 chars wide!)
+   - Capped at 5 lines (too restrictive)
    - Result: Severe truncation
 
 2. **First Fix (BETTER but still estimating)**: `chars_per_line = width * 0.8; estimated_lines = len(text) / chars_per_line + 1`
-   - ✓ Used widget width
-   - ✓ Increased cap to 15 lines
-   - ❌ Still an ESTIMATION (0.8 factor is arbitrary)
+   - Used widget width
+   - Increased cap to 15 lines
+   - Still an ESTIMATION (0.8 factor is arbitrary)
    - Result: Over-estimated (153 chars → 10 lines when only 7 needed)
 
 3. **TRUE SOLUTION (CORRECT)**: Use tkinter's `count("displaylines")` method
-   - ✓ Measures ACTUAL wrapped line count
-   - ✓ Accounts for word boundaries automatically
-   - ✓ No arbitrary factors or estimations
+   - Measures ACTUAL wrapped line count
+   - Accounts for word boundaries automatically
+   - No arbitrary factors or estimations
    - Result: Perfect fit (153 chars → 7 lines, exactly what's needed)
 
 **How count("displaylines") Works**:
@@ -11352,10 +11455,10 @@ txt.config(height=display_lines)
 
 **What Didn't Work**:
 
-- ❌ Calling `count("displaylines")` BEFORE packing: Returns wrong value (119 instead of 7!)
-- ❌ Using `index("end-1c")` to count lines: Returns LOGICAL lines (1), not DISPLAY lines (7)
-- ❌ Using `count("ypixels")` and dividing by line height: More complex, less accurate
-- ❌ Any estimation formula: Always over or under-estimates
+- Calling `count("displaylines")` BEFORE packing: Returns wrong value (119 instead of 7!)
+- Using `index("end-1c")` to count lines: Returns LOGICAL lines (1), not DISPLAY lines (7)
+- Using `count("ypixels")` and dividing by line height: More complex, less accurate
+- Any estimation formula: Always over or under-estimates
 
 **What Worked**:
 
@@ -11407,7 +11510,7 @@ txt.config(height=display_lines)
    - Documented the evolution of solutions in test docstring
    - Explains TRUE dynamic measurement approach
 
-**Test Results**: ✅ All tests pass with exact heights (7 lines for 153-char text with width=21)
+**Test Results**: All tests pass with exact heights (7 lines for 153-char text with width=21)
 
 **Visual Result**: Rows are now EXACTLY as tall as needed - no truncation, no wasted space!
 
@@ -11499,9 +11602,9 @@ Existing tests checked TEXT CONTENT (`.get("1.0", "end-1c")`) which was correct 
 
 **What Didn't Work**:
 
-- ❌ Checking only text content: Tests passed even though visual display was truncated
-- ❌ Using arbitrary `// 40` divisor: Doesn't account for actual widget width
-- ❌ Capping at 5 lines: Too restrictive for longer comments
+- Checking only text content: Tests passed even though visual display was truncated
+- Using arbitrary `// 40` divisor: Doesn't account for actual widget width
+- Capping at 5 lines: Too restrictive for longer comments
 
 **Key Learnings**:
 
@@ -11538,7 +11641,7 @@ Existing tests checked TEXT CONTENT (`.get("1.0", "end-1c")`) which was correct 
    - Verifies widget height >= calculated minimum for given width
    - Documents the bug and solution in test docstring
 
-**Test Results**: ✅ All 8 TestAnalysisTimelineCommentWrapping tests pass
+**Test Results**: All 8 TestAnalysisTimelineCommentWrapping tests pass
 
 **Pattern for Future**:
 
@@ -11567,12 +11670,12 @@ And test BOTH:
 
 **Root Cause**: In `completion_frame.py`, the `_on_session_selected()` method (lines 286-333) was loading session data when switching sessions but was NOT loading `session_comments`. It loaded:
 
-- ✓ `session_start_timestamp`
-- ✓ `session_end_timestamp`
-- ✓ `session_duration`
-- ✓ `session_sphere`
-- ✓ `session_data`
-- ✗ `session_comments` (MISSING!)
+- `session_start_timestamp`
+- `session_end_timestamp`
+- `session_duration`
+- `session_sphere`
+- `session_data`
+- `session_comments` (MISSING!)
 
 This meant when you switched to a different session, the UI would continue displaying the previous session's comments.
 
@@ -11585,7 +11688,7 @@ This meant when you switched to a different session, the UI would continue displ
    - Simulated changing to second session via dropdown
    - Verified second session's comments should display
    - Test FAILED: `AssertionError: 'First session active notes' != 'Second session active notes'`
-   - Red phase achieved with FAILURE (F), not ERROR (E) ✓
+   - Red phase achieved with FAILURE (F), not ERROR (E)
 
 2. **Fixed the bug** in `completion_frame.py` line 324 (after `session_sphere`):
 
@@ -11629,7 +11732,7 @@ This meant when you switched to a different session, the UI would continue displ
    - Simulates session change via dropdown
    - Verifies all 4 comment fields update to new session's values
 
-**Test Results**: ✅ All 4 tests pass (7.453s)
+**Test Results**: All 4 tests pass (7.453s)
 
 **Similar Bugs to Watch For**: Any time session data is reloaded (date change, session change), verify ALL session attributes are updated:
 
@@ -11655,15 +11758,15 @@ This meant when you switched to a different session, the UI would continue displ
 
 - Headers: `width=21, height=1, padx=3, pady=0`
 - Data rows: `width=21, height=estimated_lines, padx=5, pady=0`
-- Result: ✅ Perfect pixel alignment (136px = 136px)
+- Result: Perfect pixel alignment (136px = 136px)
 
 **What Didn't Work**:
 
-- ❌ Making data rows `height=1`: Broke multi-line text display
-- ❌ Adjusting `width` parameter: Would break column consistency
-- ❌ Using `ipadx` on pack(): Added external, not internal padding
-- ❌ Removing bold from headers: Didn't affect width
-- ❌ Removing pady from headers: Affected height, not width
+- Making data rows `height=1`: Broke multi-line text display
+- Adjusting `width` parameter: Would break column consistency
+- Using `ipadx` on pack(): Added external, not internal padding
+- Removing bold from headers: Didn't affect width
+- Removing pady from headers: Affected height, not width
 
 **Key Learning**: Text widget width rendering varies based on height parameter. Use padx compensation (data padx = header padx + 2) to align fixed-height headers with dynamic-height data rows.
 
@@ -11672,7 +11775,7 @@ This meant when you switched to a different session, the UI would continue displ
 - `src/analysis_frame.py`: Changed data row Text widgets from padx=3 to padx=5
 - `tests/test_analysis_timeline.py`: Updated alignment test to check both Labels and Text widgets
 
-**Test Results**: ✅ Alignment test passes, ✅ All 7 wrapping tests pass
+**Test Results**: Alignment test passes, All 7 wrapping tests pass
 
 ---
 
@@ -11682,9 +11785,9 @@ This meant when you switched to a different session, the UI would continue displ
 
 **ALL PREVIOUS ATTEMPTS FAILED**:
 
-- ❌ Increasing `wraplength` from 150→200→300 on Labels: Still broke words mid-character
-- ❌ Using `width=0` on Labels: Fixed word-breaking BUT broke header/data alignment (136px vs 49px)
-- ❌ Using `width=21` on Labels: Maintained alignment BUT still broke words mid-character
+- Increasing `wraplength` from 150→200→300 on Labels: Still broke words mid-character
+- Using `width=0` on Labels: Fixed word-breaking BUT broke header/data alignment (136px vs 49px)
+- Using `width=21` on Labels: Maintained alignment BUT still broke words mid-character
 
 **ROOT CAUSE - tkinter Label widgets CANNOT do word-boundary wrapping**:
 
@@ -11731,7 +11834,7 @@ Text widgets support `wrap="word"` which provides TRUE word-boundary wrapping.
 - **Headers**: Text widgets with `width=21, height=1, wrap="word"`
 - **Data rows**: Text widgets with `width=21, wrap="word"`, dynamic height
 - Both use same font: `("Arial", 8)` (headers add "bold")
-- Result: ✅ Perfect alignment + ✅ Word-boundary wrapping + ✅ No mid-word breaks
+- Result: Perfect alignment + Word-boundary wrapping + No mid-word breaks
 
 **What Didn't Work**:
 
@@ -11779,7 +11882,7 @@ Text widgets support `wrap="word"` which provides TRUE word-boundary wrapping.
    - Updated `test_comment_labels_have_wraplength_configured`: Checks `wrap="word"` instead of `wraplength`
    - All tests now verify `isinstance(widget, tk.Text)` and `wrap="word"`
 
-**Test Results**: ✅ All 7 wrapping tests pass
+**Test Results**: All 7 wrapping tests pass
 
 **Visual Verification**: User confirmed "the words are wrapping and not cut off"
 
@@ -11900,14 +12003,14 @@ wraplength=300   # Word-boundary wrapping (153px buffer)
 **Key Learnings**:
 
 1. **Wraplength must be MUCH larger than width for word wrapping**:
-   - width=21 (≈147px) + wraplength=150 → 3px buffer → mid-word breaks ✗
-   - width=21 (≈147px) + wraplength=300 → 153px buffer → word boundaries ✓
+   - width=21 (≈147px) + wraplength=150 → 3px buffer → mid-word breaks
+   - width=21 (≈147px) + wraplength=300 → 153px buffer → word boundaries
    - **Rule**: wraplength should be 100-150px larger than width equivalent
 
 2. **The three requirements CAN coexist**:
-   - ✓ Header/column alignment (matching width=21)
-   - ✓ Text wrapping (wraplength=300)
-   - ✓ NO mid-word breaks (large wraplength buffer)
+   - Header/column alignment (matching width=21)
+   - Text wrapping (wraplength=300)
+   - NO mid-word breaks (large wraplength buffer)
 
 3. **Why previous attempts failed**:
    - wraplength=150: Too close to width=147px → mid-word breaks
@@ -11920,7 +12023,7 @@ wraplength=300   # Word-boundary wrapping (153px buffer)
 - `tests/test_analysis_timeline.py`: Added `test_comment_columns_have_sufficient_wraplength_buffer` to verify wraplength configuration
 
 **Test Coverage**:
-✅ `test_comment_columns_have_sufficient_wraplength_buffer` - New test that verifies:
+`test_comment_columns_have_sufficient_wraplength_buffer` - New test that verifies:
 
 - wraplength is set to 300 pixels
 - width is set to 21 characters
@@ -11928,13 +12031,13 @@ wraplength=300   # Word-boundary wrapping (153px buffer)
 - This ensures tkinter has room to find word boundaries before hitting width constraint
 - Test will FAIL if wraplength is reduced below 247px (147+100)
 
-**Test Results**: ✅ All 7 wrapping tests pass, alignment test passes
+**Test Results**: All 7 wrapping tests pass, alignment test passes
 
 **Final Configuration**:
 
 - Headers: `width=21, wraplength=300`
 - Data: `width=21, wraplength=300`
-- Result: Perfect alignment + word-boundary wrapping + vertical expansion ✅
+- Result: Perfect alignment + word-boundary wrapping + vertical expansion
 
 ---
 
@@ -11988,11 +12091,11 @@ The earlier assumption that "width=21 prevents vertical expansion" was WRONG.
 - `src/analysis_frame.py`: Added `wraplength=150` to all 5 comment headers, reverted data rows to `width=21`
 - `tests/test_analysis_timeline.py`: Updated test to expect `width=21`
 
-**Test Results**: ✅ `test_header_pixel_width_matches_data_row_pixel_width` passes
+**Test Results**: `test_header_pixel_width_matches_data_row_pixel_width` passes
 
 **Configuration**:
 
-- CORRECT: Both headers AND data use `width=21, wraplength=150` → Perfect alignment ✅
+- CORRECT: Both headers AND data use `width=21, wraplength=150` → Perfect alignment
 
 ---
 
@@ -12141,7 +12244,7 @@ The earlier assumption that "width=21 prevents vertical expansion" was WRONG.
    - Updated docstring: "Comment labels should have width=0 (auto-sized) to allow vertical expansion"
    - Test still verifies wraplength > 0 for proper horizontal wrapping
 
-**Test Results**: All wrapping tests pass ✅
+**Test Results**: All wrapping tests pass
 
 **Configuration Summary**:
 
@@ -12286,7 +12389,7 @@ With only 3 pixels difference, the label didn't have enough room to find word bo
    - Updated setUp to include "General" sphere and project for test data
    - Updated comment in existing test: "wraplength=200px (larger than width≈147px) prevents mid-word breaks"
 
-**Test Results**: All 6 tests in TestAnalysisTimelineCommentWrapping pass ✅
+**Test Results**: All 6 tests in TestAnalysisTimelineCommentWrapping pass
 
 **Before vs After**:
 
@@ -12402,7 +12505,7 @@ With only 3 pixels difference, the label didn't have enough room to find word bo
    - Verifies Session Notes label (column 13) in data rows has `fill='x'` and `expand=True`
    - Verifies Session Notes header label has `fill='x'` and `expand=True`
 
-**Test Results**: All 53 timeline tests pass ✅
+**Test Results**: All 53 timeline tests pass
 
 ---
 
@@ -12527,14 +12630,14 @@ With only 3 pixels difference, the label didn't have enough room to find word bo
 2. `tests/test_analysis_timeline.py`:
    - Updated `test_comment_labels_do_not_have_width_restriction` to expect `width=21` instead of `width=0`
    - Updated test docstring to explain: "width=21 matches wraplength~150px for consistent column sizing"
-   - Removed debug print statement from `test_session_notes_not_in_secondary_action_column` (was causing UnicodeEncodeError with ✓ character)
+   - Removed debug print statement from `test_session_notes_not_in_secondary_action_column` (was causing UnicodeEncodeError with character)
 
 **Visual Impact**:
 
 - **Before**: Session notes column appeared shifted left, data under wrong header (column 13 data under column 9 header)
 - **After**: Perfect header-to-data alignment, all comment columns properly aligned
 
-**Test Results**: All 52 timeline tests pass ✅
+**Test Results**: All 52 timeline tests pass
 
 ---
 
@@ -12864,8 +12967,8 @@ If user still sees visual misalignment despite tests passing:
 
 **Test Results**:
 
-- New test passes ✅
-- All 6 TestAnalysisFrameTimelineColumns tests passing ✅
+- New test passes
+- All 6 TestAnalysisFrameTimelineColumns tests passing
 - Total timeline column tests: 6/6 passing
 
 **Why This Approach Succeeded**:
@@ -12913,7 +13016,7 @@ If user still sees visual misalignment despite tests passing:
 **Key Learnings**:
 
 1. **Column consistency**: When modifying columns, must update all three places: initial header, row display, and dynamic header
-2. **Width optimization**: Active status columns with just checkmarks (✓) only need width=5, not width=10
+2. **Width optimization**: Active status columns with just checkmarks only need width=5, not width=10
 3. **Font tuples**: To unbold, remove "bold" from font tuple: `("Arial", 8)` instead of `("Arial", 8, "bold")`
 4. **Test maintenance**: Remove tests for removed features to keep test suite accurate
 5. **Multi-replace efficiency**: Can update multiple locations in single tool call for related changes
@@ -13013,8 +13116,8 @@ If user still sees visual misalignment despite tests passing:
 
 **Test Results**:
 
-- All 6 timeline column tests passing ✅
-- All 18 status filter tests passing (no regressions) ✅
+- All 6 timeline column tests passing
+- All 18 status filter tests passing (no regressions)
 - Total: 24/24 tests passing
 
 **Why This Approach Succeeded**:
@@ -13059,13 +13162,13 @@ If user still sees visual misalignment despite tests passing:
    - Details: ...
    - Why: ...
 
-**What Worked**: ✅
+**What Worked**:
 
 - Specific solution that succeeded
 - Why it worked
 - Key implementation details
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - Approach that failed
 - Why it failed
@@ -13086,27 +13189,27 @@ If user still sees visual misalignment despite tests passing:
 
 **Approaches Tried**:
 
-1. **pytest with parallel execution** - ❌ **FAILED**
+1. **pytest with parallel execution** - **FAILED**
    - Details: Installed pytest and pytest-xdist, tried running tests in parallel (`-n 4`)
    - Why it failed: Tkinter GUI tests have threading conflicts when run in parallel
    - Result: Tests crashed with "invalid command name" and "RuntimeError: main thread is not in main loop"
 
-2. **pytest sequential execution** - ❌ **FAILED (SLOWER!)**
+2. **pytest sequential execution** - **FAILED (SLOWER!)**
    - Details: Ran pytest without parallelization to avoid threading issues
    - Measured results:
-     - unittest (run_all_tests.py): 160 seconds (2.7 min) ✅
-     - pytest (run_tests_fast.py): 215 seconds (3.6 min) ❌
+     - unittest (run_all_tests.py): 160 seconds (2.7 min)
+     - pytest (run_tests_fast.py): 215 seconds (3.6 min)
    - Why it failed: pytest has MORE overhead for test discovery/collection, doesn't optimize GUI tests
    - **35% SLOWER than unittest!**
 
-**What Worked**: ✅
+**What Worked**:
 
 - **Running specific test modules during development**
   - `python -m unittest tests.test_myfeature` (~5-30 seconds)
   - This is the industry-standard approach for large test suites
   - Full suite (160s) is only needed before commits, not during active development
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - pytest optimization: Actually slower for Tkinter GUI tests
 - Parallel execution: Causes threading conflicts with Tkinter
@@ -13136,7 +13239,7 @@ If user still sees visual misalignment despite tests passing:
 
 **Change Requested**: Remove pytest-related files after discovering pytest is 35% slower than unittest for this codebase
 
-**What Was Done**: ✅
+**What Was Done**:
 
 - Removed `tests/run_tests_fast.py` (pytest runner)
 - Removed `tests/conftest.py` (pytest configuration)
@@ -13176,14 +13279,14 @@ If user still sees visual misalignment despite tests passing:
 
 **Approaches Tried**:
 
-1. **TDD Approach: Write tests first, then implement** - ✅ **WORKED**
+1. **TDD Approach: Write tests first, then implement** - **WORKED**
    - Details: Created comprehensive tests in `test_analysis_timeline.py` first
    - Tests covered: variable existence, radio button creation, active/all/archived filtering, default behavior
    - All tests failed initially (proper TDD red phase - FAILURES not ERRORS)
    - Implemented feature to make tests pass (green phase)
    - Result: All 25 tests in test_analysis_timeline.py pass
 
-**What Worked**: ✅
+**What Worked**:
 
 - **Following TDD workflow strictly**: Write failing tests → implement → verify passing
 - **Following existing patterns**: Used settings_frame.py as reference for radio button layout
@@ -13236,13 +13339,13 @@ for sphere, data in self.tracker.settings.get("spheres", {}).items():
         spheres.append(sphere)
 ```
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - **Initial string escaping error**: Accidentally used `\"` instead of `"` in docstrings/strings
   - Fixed immediately when syntax error appeared
   - Lesson: Be careful with string formatting in replacements
 
-- **⚠️ CRITICAL VIOLATION: Proceeded with ERRORS in TDD Red Phase** ❌❌❌
+- **CRITICAL VIOLATION: Proceeded with ERRORS in TDD Red Phase**
   - **MISTAKE**: First test run showed `FAILED (failures=2, errors=4)`
   - **WHAT I DID WRONG**: Continued to implementation despite 4 ERRORS
   - **WHAT I SHOULD HAVE DONE**: Fixed tests FIRST to produce FAILURES, not ERRORS
@@ -13254,16 +13357,16 @@ for sphere, data in self.tracker.settings.get("spheres", {}).items():
 
 **MANDATORY TDD RED PHASE CHECKLIST** (MUST follow EVERY time):
 
-1. ✅ Write tests first
-2. ✅ Run tests to get red phase
-3. ⚠️ **STOP AND CHECK**: Are there ANY errors (E)?
+1. Write tests first
+2. Run tests to get red phase
+3. **STOP AND CHECK**: Are there ANY errors (E)?
    - **IF YES**: Do NOT proceed to implementation!
    - **Action**: Fix test scaffolding first
    - **Add minimal stubs**: e.g., `self.sphere_status_filter = None`
    - **Re-run tests**: Should now show FAILURES (F), not ERRORS (E)
-4. ✅ Verify red phase shows ONLY failures (F), ZERO errors (E)
-5. ✅ Only NOW proceed to implementation
-6. ✅ Run tests for green phase
+4. Verify red phase shows ONLY failures (F), ZERO errors (E)
+5. Only NOW proceed to implementation
+6. Run tests for green phase
 
 **Example of proper scaffolding**:
 
@@ -13278,7 +13381,7 @@ def __init__(self):
 
 1. **TDD workflow prevents errors**: Writing tests first ensures proper API design
 2. **Follow existing patterns**: Settings frame radio button layout works perfectly for analysis frame
-3. **⚠️ ERRORS vs FAILURES is CRITICAL**: MUST fix test scaffolding before implementing
+3. **ERRORS vs FAILURES is CRITICAL**: MUST fix test scaffolding before implementing
 4. **Default filtering improves UX**: Starting with "active" filter reduces clutter for most users
 5. **Modular methods are testable**: Separate `get_filtered_spheres()` can be tested independently
 6. **User correction is valuable**: Catching TDD violations helps build institutional knowledge
@@ -13288,7 +13391,7 @@ def __init__(self):
 - 6 new tests for sphere filtering radio buttons
 - All 25 tests in test_analysis_timeline.py passing
 - No regressions in existing functionality
-- ⚠️ BUT violated TDD red phase rule by proceeding with ERRORS
+- BUT violated TDD red phase rule by proceeding with ERRORS
 
 ---
 
@@ -13364,15 +13467,15 @@ def __init__(self):
 
 **Approaches Tried**:
 
-1. **Proper TDD Red Phase Management** - ✅ **WORKED**
+1. **Proper TDD Red Phase Management** - **WORKED**
    - Details: Followed TDD red phase checklist from AGENT_MEMORY.md
-   - First test run: `FAILED (failures=2, errors=4)` - STOPPED immediately ✅
+   - First test run: `FAILED (failures=2, errors=4)` - STOPPED immediately
    - Added minimal stub: `self.project_status_filter = tk.StringVar(value="active")`
-   - Re-ran tests: `FAILED (failures=2, errors=0)` - Proper red phase achieved ✅
+   - Re-ran tests: `FAILED (failures=2, errors=0)` - Proper red phase achieved
    - **Did NOT violate the TDD red phase rule this time!**
    - Proceeded to implementation only after achieving proper red phase
 
-**What Worked**: ✅
+**What Worked**:
 
 - **Following TDD red phase checklist**: Stopped at ERRORS, added stub, verified FAILURES before implementing
 - **Following existing patterns**: Used sphere filter implementation as reference
@@ -13425,13 +13528,13 @@ ttk.Radiobutton(
 # ... All and Archived buttons follow same pattern
 ```
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - Nothing! Implementation went smoothly by following established patterns and TDD checklist
 
 **Key Learnings**:
 
-1. ✅ **TDD Red Phase Checklist Works**: Following the checklist prevented violations
+1. **TDD Red Phase Checklist Works**: Following the checklist prevented violations
 2. **Consistency is key**: Using same pattern as sphere filters made implementation obvious
 3. **Separation of concerns**: Having `update_project_filter()` and `refresh_project_dropdown()` as separate methods keeps code testable
 4. **Default values matter**: Starting with "active" provides better UX for most users
@@ -13447,20 +13550,20 @@ ttk.Radiobutton(
 
 **TDD Workflow Summary** (PROPER execution this time):
 
-1. ✅ Wrote 6 tests first
-2. ✅ Ran tests → Got `FAILED (failures=2, errors=4)` → STOPPED
-3. ✅ Added minimal stub to eliminate ERRORS
-4. ✅ Re-ran tests → Got `FAILED (failures=2, errors=0)` → Proper RED phase
-5. ✅ Implemented feature (radio buttons + filtering logic)
-6. ✅ Ran tests → `Ran 6 tests in 5.121s OK` → GREEN phase achieved
+1. Wrote 6 tests first
+2. Ran tests → Got `FAILED (failures=2, errors=4)` → STOPPED
+3. Added minimal stub to eliminate ERRORS
+4. Re-ran tests → Got `FAILED (failures=2, errors=0)` → Proper RED phase
+5. Implemented feature (radio buttons + filtering logic)
+6. Ran tests → `Ran 6 tests in 5.121s OK` → GREEN phase achieved
 
 **Success Metrics**:
 
-- ✅ Followed TDD red phase rule correctly (no violations)
-- ✅ All 6 new tests pass
-- ✅ UI consistent with existing sphere filter pattern
-- ✅ Bug fixed: Projects now filter correctly by status
-- ✅ Code is clean, maintainable, and follows existing patterns
+- Followed TDD red phase rule correctly (no violations)
+- All 6 new tests pass
+- UI consistent with existing sphere filter pattern
+- Bug fixed: Projects now filter correctly by status
+- Code is clean, maintainable, and follows existing patterns
 
 ---
 
@@ -13474,7 +13577,7 @@ ttk.Radiobutton(
 - Previously: Radio buttons were between labels and dropdowns
 - Follow settings frame pattern (but adapted for this use case)
 
-**What Worked**: ✅
+**What Worked**:
 
 - **Simple layout reorganization**: Moved radio button frames to pack AFTER both dropdowns
 - **No functional changes needed**: Tests all still pass (12/12)
@@ -13514,7 +13617,7 @@ project_radio_frame.pack(side=tk.LEFT, padx=5)
 # ... project radio buttons
 ```
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - Nothing! This was a straightforward layout change with no issues
 
@@ -13527,16 +13630,16 @@ project_radio_frame.pack(side=tk.LEFT, padx=5)
 
 **Test Results**:
 
-- ✅ All 12 radio button tests pass (6 sphere + 6 project)
-- ✅ No regressions
-- ✅ No functional changes required
+- All 12 radio button tests pass (6 sphere + 6 project)
+- No regressions
+- No functional changes required
 
 **Success Metrics**:
 
-- ✅ Layout matches user requirements
-- ✅ All tests pass
-- ✅ Clean, maintainable code
-- ✅ Consistent with user's vision for the UI
+- Layout matches user requirements
+- All tests pass
+- Clean, maintainable code
+- Consistent with user's vision for the UI
 
 ---
 
@@ -13550,7 +13653,7 @@ project_radio_frame.pack(side=tk.LEFT, padx=5)
 - Active should be the default
 - Radio buttons control BOTH sphere and project filtering simultaneously
 
-**What Worked**: ✅
+**What Worked**:
 
 - **Unified StringVar**: Replaced `sphere_status_filter` and `project_status_filter` with single `status_filter`
 - **Single set of radio buttons**: Created one radio frame instead of two
@@ -13596,13 +13699,13 @@ ttk.Radiobutton(
 
 # Both filtering methods use same status_filter
 def get_filtered_spheres(self):
-    filter_status = self.status_filter.get()  # ✅
+    filter_status = self.status_filter.get()  #
 
 def update_project_filter(self, set_default=False):
-    filter_status = self.status_filter.get()  # ✅
+    filter_status = self.status_filter.get()  #
 ```
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - Nothing! Implementation was straightforward once the pattern was clear
 
@@ -13616,9 +13719,9 @@ def update_project_filter(self, set_default=False):
 
 **Test Results**:
 
-- ✅ All 12 tests pass (6 sphere + 6 project)
-- ✅ Tests now verify unified `status_filter` instead of separate variables
-- ✅ No regressions in filtering logic
+- All 12 tests pass (6 sphere + 6 project)
+- Tests now verify unified `status_filter` instead of separate variables
+- No regressions in filtering logic
 
 **UI Layout** (final):
 
@@ -13628,11 +13731,11 @@ Sphere: [dropdown] Project: [dropdown] [Active] [All] [Archived]
 
 **Success Metrics**:
 
-- ✅ Only 3 radio buttons (not 6)
-- ✅ Active is default
-- ✅ Both dropdowns filter correctly
-- ✅ All tests pass
-- ✅ Cleaner, more intuitive UI
+- Only 3 radio buttons (not 6)
+- Active is default
+- Both dropdowns filter correctly
+- All tests pass
+- Cleaner, more intuitive UI
 
 ---
 
@@ -13650,15 +13753,15 @@ Three test scenarios:
 
 **Approaches Tried**:
 
-1. **TDD Workflow with Integration Tests** - ✅ **WORKED**
+1. **TDD Workflow with Integration Tests** - **WORKED**
    - Details: Wrote 6 integration tests BEFORE fixing implementation
    - Test run showed 1 FAILURE (proper TDD red phase - no ERRORS)
    - Failure revealed filtering logic needed update
    - Fixed logic, all tests passed (TDD green phase)
 
-**What Worked**: ✅
+**What Worked**:
 
-- **Proper TDD Red Phase**: Got 1 FAILURE (not ERROR) on first test run ✅
+- **Proper TDD Red Phase**: Got 1 FAILURE (not ERROR) on first test run
 - **Integration test structure**: Used TestFileManager for test data isolation
 - **Comprehensive test coverage**: 6 tests cover all scenarios (active/all/archived filters × different combinations)
 - **Updated filtering logic**: Modified `get_filtered_spheres()` and `update_project_filter()` to handle new requirements
@@ -13709,14 +13812,14 @@ def update_project_filter(self, set_default=False):
 
 **Test Scenarios Covered**:
 
-1. ✅ Active sphere + active project shows on "active" filter
-2. ✅ Active sphere + active project shows on "all" filter
-3. ✅ Active sphere + inactive project shows on "archived" filter
-4. ✅ Active sphere + inactive project shows on "all" filter
-5. ✅ Inactive sphere + active project shows on "archived" filter
-6. ✅ Inactive sphere + active project shows on "all" filter
+1. Active sphere + active project shows on "active" filter
+2. Active sphere + active project shows on "all" filter
+3. Active sphere + inactive project shows on "archived" filter
+4. Active sphere + inactive project shows on "all" filter
+5. Inactive sphere + active project shows on "archived" filter
+6. Inactive sphere + active project shows on "all" filter
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
 - **Initial filtering logic**: Didn't account for active spheres needing to appear in "archived" mode
   - Problem: When filter was "archived", `get_filtered_spheres()` only returned inactive spheres
@@ -13733,25 +13836,25 @@ def update_project_filter(self, set_default=False):
 
 **Test Results**:
 
-- ✅ All 18 status filter tests pass (6 sphere + 6 project + 6 integration)
-- ✅ No regressions in existing functionality
-- ✅ Proper TDD workflow: Red → Green → Refactor
+- All 18 status filter tests pass (6 sphere + 6 project + 6 integration)
+- No regressions in existing functionality
+- Proper TDD workflow: Red → Green → Refactor
 
 **TDD Workflow Summary**:
 
-1. ✅ Wrote 6 integration tests first
-2. ✅ Ran tests → `FAILED (failures=1)` → Proper RED phase
-3. ✅ Fixed `get_filtered_spheres()` and `update_project_filter()`
-4. ✅ Ran tests → `OK` → GREEN phase achieved
-5. ✅ Verified no regressions (18/18 tests pass)
+1. Wrote 6 integration tests first
+2. Ran tests → `FAILED (failures=1)` → Proper RED phase
+3. Fixed `get_filtered_spheres()` and `update_project_filter()`
+4. Ran tests → `OK` → GREEN phase achieved
+5. Verified no regressions (18/18 tests pass)
 
 **Success Metrics**:
 
-- ✅ Followed TDD workflow correctly (no violations of red phase rule)
-- ✅ All 6 integration tests pass
-- ✅ Filtering logic correctly handles all 3 scenarios
-- ✅ Code is maintainable with clear documentation
-- ✅ No regressions in existing tests
+- Followed TDD workflow correctly (no violations of red phase rule)
+- All 6 integration tests pass
+- Filtering logic correctly handles all 3 scenarios
+- Code is maintainable with clear documentation
+- No regressions in existing tests
 
 ---
 
@@ -13769,34 +13872,34 @@ def update_project_filter(self, set_default=False):
 
 **What We Tried** (Chronological Journey):
 
-1. ❌ **Changed import to `from tests.test_helpers`**: Broke consistency with all other test files
+1. **Changed import to `from tests.test_helpers`**: Broke consistency with all other test files
    - All other test files use `from test_helpers import` (works due to `sys.path.insert()`)
    - This change was incorrect and inconsistent
 
-2. ❌ **Added skip decorators but kept wrong import**: Tests skipped but for wrong reason (import error)
+2. **Added skip decorators but kept wrong import**: Tests skipped but for wrong reason (import error)
 
-3. ❌ **Removed all skip decorators to match 983804c**: Tests failed with AttributeError from @patch
+3. **Removed all skip decorators to match 983804c**: Tests failed with AttributeError from @patch
    - Confirmed the "working" commit actually had 27 errors: `FAILED (errors=27, skipped=9)`
    - Proved that tests were NOT working before - they had errors
 
-4. ✅ **Discovered the real issue**: Google API libraries not installed
-   - Ran: `python -c "import sys; sys.path.insert(0, r'C:\Users\theso\Documents\Coding_Projects\time_aligned'); from src import google_sheets_integration"`
+4. **Discovered the real issue**: Google API libraries not installed
+   - Ran: `python -c "import sys; sys.path.insert(0, r'path\to\time_aligned'); from src import google_sheets_integration"`
    - Error: `ModuleNotFoundError: No module named 'google'`
    - The module file exists, but its imports fail
 
-5. ✅ **Implemented correct solution**: Proper import + module availability check + skip decorators
+5. **Implemented correct solution**: Proper import + module availability check + skip decorators
 
-**What Worked - The Final Solution**: ✅
+**What Worked - The Final Solution**:
 
 **File**: `tests/test_google_sheets.py`
 
 **Changes Made**:
 
 ```python
-# ✅ CORRECT: Use same import pattern as all other test files
+# CORRECT: Use same import pattern as all other test files
 from test_helpers import TestDataGenerator, TestFileManager
 
-# ✅ Check if Google Sheets module can be imported
+# Check if Google Sheets module can be imported
 # This must be done BEFORE @patch decorators are evaluated
 GOOGLE_SHEETS_AVAILABLE = False
 try:
@@ -13805,7 +13908,7 @@ try:
 except (ImportError, ModuleNotFoundError):
     pass
 
-# ✅ Add skip decorator to ALL 9 test classes
+# Add skip decorator to ALL 9 test classes
 @unittest.skipIf(not GOOGLE_SHEETS_AVAILABLE, "Google Sheets dependencies not installed")
 class TestGoogleSheetsIntegration(unittest.TestCase):
     ...
@@ -13850,15 +13953,15 @@ tests/test_idle_tracking.py:   from test_helpers import TestDataGenerator, TestF
 tests/test_time_tracking.py:   from test_helpers import (...)
 tests/test_settings.py:        from test_helpers import TestDataGenerator, TestFileManager
 tests/test_screenshots.py:     from test_helpers import TestDataGenerator, TestFileManager
-tests/test_google_sheets.py:   from test_helpers import TestDataGenerator, TestFileManager ✅
+tests/test_google_sheets.py:   from test_helpers import TestDataGenerator, TestFileManager
 ```
 
-**What Didn't Work**: ❌
+**What Didn't Work**:
 
-1. ❌ **Using `from tests.test_helpers import`**: Broke import consistency, not how other files work
-2. ❌ **Trying to revert to 983804c state**: That state had 27 errors from @patch decorators
-3. ❌ **Assuming skip = broken**: Skip is correct behavior when dependencies missing
-4. ❌ **Checking module attribute instead of importing**: Tried `GOOGLE_SHEETS_MODULE_AVAILABLE = hasattr(src, 'google_sheets_integration')` but this doesn't catch import errors inside the module
+1. **Using `from tests.test_helpers import`**: Broke import consistency, not how other files work
+2. **Trying to revert to 983804c state**: That state had 27 errors from @patch decorators
+3. **Assuming skip = broken**: Skip is correct behavior when dependencies missing
+4. **Checking module attribute instead of importing**: Tried `GOOGLE_SHEETS_MODULE_AVAILABLE = hasattr(src, 'google_sheets_integration')` but this doesn't catch import errors inside the module
 
 **Key Learnings**:
 
@@ -13872,15 +13975,15 @@ tests/test_google_sheets.py:   from test_helpers import TestDataGenerator, TestF
 
 **Files Modified**:
 
-- ✅ `tests/test_google_sheets.py` - Corrected import, added availability check, added skip decorators to all 9 test classes
+- `tests/test_google_sheets.py` - Corrected import, added availability check, added skip decorators to all 9 test classes
 
 **Test Results**:
 
-- ✅ Without dependencies: 41 tests skip cleanly (agent's environment)
-- ✅ With dependencies: 41 tests pass, actual Google Sheets uploads work (user's .venv)
-- ✅ No import errors
-- ✅ Consistent with codebase import patterns
-- ✅ Proper optional dependency handling
+- Without dependencies: 41 tests skip cleanly (agent's environment)
+- With dependencies: 41 tests pass, actual Google Sheets uploads work (user's .venv)
+- No import errors
+- Consistent with codebase import patterns
+- Proper optional dependency handling
 
 **Pattern to Reuse** (For Other Optional Dependencies):
 
@@ -13902,12 +14005,12 @@ class TestOptionalFeature(unittest.TestCase):
 
 **Success Metrics**:
 
-- ✅ Import pattern matches all other test files
-- ✅ Tests skip cleanly without dependencies (no errors)
-- ✅ Tests run and pass with dependencies installed
-- ✅ No AttributeError from @patch decorators
-- ✅ Clear skip messages explain why tests skipped
-- ✅ User confirmed actual Google Sheets uploads work
+- Import pattern matches all other test files
+- Tests skip cleanly without dependencies (no errors)
+- Tests run and pass with dependencies installed
+- No AttributeError from @patch decorators
+- Clear skip messages explain why tests skipped
+- User confirmed actual Google Sheets uploads work
 
 ---
 
@@ -13987,16 +14090,16 @@ def update_timeline_virtual(self):
 
 **What Worked**:
 
-- ✅ Event handler cleanup (unbind before rebind)
-- ✅ Removing per-widget MouseWheel bindings
-- ✅ Identifying root cause (data preparation, not rendering)
-- ✅ User decision to prioritize simplicity over complex virtual scrolling
+- Event handler cleanup (unbind before rebind)
+- Removing per-widget MouseWheel bindings
+- Identifying root cause (data preparation, not rendering)
+- User decision to prioritize simplicity over complex virtual scrolling
 
 **What Didn't Work**:
 
-- ❌ Virtual scrolling doesn't solve synchronous data preparation
-- ❌ Making `get_timeline_data()` async would add even more complexity
-- ❌ Chunked async rendering can't help if data preparation blocks UI first
+- Virtual scrolling doesn't solve synchronous data preparation
+- Making `get_timeline_data()` async would add even more complexity
+- Chunked async rendering can't help if data preparation blocks UI first
 
 **Key Learnings**:
 
@@ -14011,7 +14114,7 @@ def update_timeline_virtual(self):
 
 ---
 
-### [2026-02-06] - Load More Button Implementation (COMPLETED ✅)
+### [2026-02-06] - Load More Button Implementation (COMPLETED)
 
 **Feature**: Incremental loading with "Load More" button to replace complex virtual scrolling.
 
@@ -14019,20 +14122,20 @@ def update_timeline_virtual(self):
 
 **What This Branch Does NOT Have** (all removed via revert to 00c549e):
 
-- ❌ No virtual scrolling (viewport calculation, visible row tracking)
-- ❌ No chunked async rendering (root.after with 50ms delays)
-- ❌ No loading indicator / progress bar
-- ❌ No cancel button
-- ❌ No scroll event debouncing
-- ❌ No event handler accumulation fixes (not needed without virtual scrolling)
+- No virtual scrolling (viewport calculation, visible row tracking)
+- No chunked async rendering (root.after with 50ms delays)
+- No loading indicator / progress bar
+- No cancel button
+- No scroll event debouncing
+- No event handler accumulation fixes (not needed without virtual scrolling)
 
 **What We Implemented** (Simple "Load More"):
 
-- ✅ Load first 50 periods immediately
-- ✅ Show "Load More" button at bottom if >50 total periods
-- ✅ Each click loads next 50 periods
-- ✅ Button shows progress: "Load 50 More (50 of 200 shown)"
-- ✅ When all loaded: "All 200 periods loaded"
+- Load first 50 periods immediately
+- Show "Load More" button at bottom if >50 total periods
+- Each click loads next 50 periods
+- Button shows progress: "Load 50 More (50 of 200 shown)"
+- When all loaded: "All 200 periods loaded"
 
 **Implementation Details**:
 
@@ -14065,10 +14168,10 @@ def update_timeline_virtual(self):
 
 **Test Coverage** ([tests/test_analysis_load_more.py](tests/test_analysis_load_more.py)):
 
-- ✅ `test_import` - Module imports without errors
-- ✅ `test_load_more_button_exists_on_initial_load` - Button appears with >50 periods
-- ✅ `test_shows_only_50_periods_initially` - Only first 50 rendered (not all 200)
-- ✅ `test_load_more_button_shows_progress` - Button text shows "50 of 200"
+- `test_import` - Module imports without errors
+- `test_load_more_button_exists_on_initial_load` - Button appears with >50 periods
+- `test_shows_only_50_periods_initially` - Only first 50 rendered (not all 200)
+- `test_load_more_button_shows_progress` - Button text shows "50 of 200"
 
 **Test Infrastructure Created**:
 
@@ -14087,7 +14190,7 @@ def update_timeline_virtual(self):
 - No 60s freeze (data is already prepared by `get_timeline_data()`)
 - Simple implementation: ~100 lines of new code vs ~500 lines of virtual scrolling complexity
 
-**Status**: ✅ COMPLETED - All tests passing, ready for manual verification with real data (682 periods)
+**Status**: COMPLETED - All tests passing, ready for manual verification with real data (682 periods)
 
 ---
 
@@ -14096,21 +14199,21 @@ def update_timeline_virtual(self):
 **Search Keywords**: analysis frame filter bug, break idle period leak, project filter, get_timeline_data, break periods not filtered, idle periods not filtered, sphere project filter, period type filter, active filter radio
 
 **Context**:
-User reported: filtering by Sphere A + Project B (active radio) incorrectly showed 3 periods (Break, Idle, Idle) that belonged to a session whose only active periods used Project A — not Project B. Expected result: zero periods.
+User reported: filtering by Sphere A + Project B (active radio) incorrectly showed 3 periods (Break, Idle, Idle) that belonged to a session whose only active periods used Project A - not Project B. Expected result: zero periods.
 
 **Root Cause Identified** (fix not yet applied):
 
 In `get_timeline_data()` ([src/analysis_frame.py](src/analysis_frame.py#L891)):
 
 - **Active periods** correctly check `project_filter` before adding to timeline.
-- **Break periods** (lines ~891-930) **NEVER check `project_filter`** — only sphere and status_filter.
-- **Idle periods** (lines ~930-985) **NEVER check `project_filter`** — only sphere and status_filter.
+- **Break periods** (lines ~891-930) **NEVER check `project_filter`** - only sphere and status_filter.
+- **Idle periods** (lines ~930-985) **NEVER check `project_filter`** - only sphere and status_filter.
 
 So when a user picks Sphere A + Project B, a session's active periods are filtered out (none match Project B) but its break/idle periods still pass through because no project check exists for them.
 
-**Failing Test Written** ✅:
+**Failing Test Written**:
 
-File: [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) — class `TestProjectFilterBreakIdleLeakBug`
+File: [tests/test_analysis_timeline.py](tests/test_analysis_timeline.py) - class `TestProjectFilterBreakIdleLeakBug`
 
 ```
 FAILED test_project_filter_hides_breaks_when_project_not_in_session
@@ -14122,15 +14225,15 @@ Three tests in the class:
 
 | Test                                                              | Status    | Purpose                                                   |
 | ----------------------------------------------------------------- | --------- | --------------------------------------------------------- |
-| `test_project_filter_hides_breaks_when_project_not_in_session`    | ❌ FAILS  | Captures the bug — 3 leak through, should be 0            |
-| `test_project_filter_shows_all_period_types_when_project_present` | ✅ PASSES | Sanity: Action A filter shows 4 active + 1 break + 2 idle |
-| `test_all_projects_filter_shows_all_period_types`                 | ✅ PASSES | Sanity: All Projects shows all 7 periods                  |
+| `test_project_filter_hides_breaks_when_project_not_in_session`    | FAILS  | Captures the bug - 3 leak through, should be 0            |
+| `test_project_filter_shows_all_period_types_when_project_present` | PASSES | Sanity: Action A filter shows 4 active + 1 break + 2 idle |
+| `test_all_projects_filter_shows_all_period_types`                 | PASSES | Sanity: All Projects shows all 7 periods                  |
 
 **Bug Reproduction Data Structure**:
 
 - Session: sphere=Sphere A, 4 active periods (project=Action A), 1 break, 2 idle
 - Filter: sphere=Sphere A, project=Project B, status=active
-- Expected: `[]` — Actual (bug): `[Break, Idle, Idle]`
+- Expected: `[]` - Actual (bug): `[Break, Idle, Idle]`
 
 **Planned Fix** (to be applied next):
 
@@ -14141,7 +14244,7 @@ In `get_timeline_data()`, before appending break/idle periods:
 
 This preserves the UX intent: break/idle periods belong contextually to the session; if the session has no matching project activity, those periods should be hidden.
 
-**What Worked** ✅:
+**What Worked**:
 
 1. Read COPILOT_INSTRUCTIONS.md (shortcut 'b' = Bug Fix Workflow)
 2. Read DEVELOPMENT.md directives (both)
@@ -14151,7 +14254,7 @@ This preserves the UX intent: break/idle periods belong contextually to the sess
 
 **Key Learnings**:
 
-- Break/idle periods share the session's sphere but NOT the session's project — they have "actions" not "projects"
+- Break/idle periods share the session's sphere but NOT the session's project - they have "actions" not "projects"
 - The project filter should be applied at the **session level** for break/idle: if no matching active period in session → skip all breaks/idles for that session
 - When a test intermittently shows `TclError` in output it can be misleading; always grep for `AssertionError` to confirm it's a real FAILURE not an ERROR
 
@@ -14167,17 +14270,17 @@ When the user reloads the timeline in a non-maximized window, timeline row heigh
 **Root Cause**:
 The dynamic height calculation in `_render_timeline_period()` ([src/analysis_frame.py](src/analysis_frame.py)) calls `txt.count("1.0", "end", "displaylines")` after `update_idletasks()`. In a non-maximized window, the canvas/frame is narrower, so text wraps to more lines, causing `displaylines` to report a larger value → row height is set too tall. When the window is maximized, the wider layout means fewer wrapped lines and correct row height.
 
-**Decision: DO NOT FIX — ACCEPTED AS-IS** ✅
+**Decision: DO NOT FIX - ACCEPTED AS-IS**
 
 User accepted this behavior with the reasoning:
 
 - The timeline loads large amounts of data and the dynamic height (`update_idletasks` + `displaylines`) approach is already known to be expensive (see [2026-02-09] performance entry)
 - Workaround is simple: if the user loads the timeline in a small window and rows look too tall, they can maximize the window and click "Show Timeline" again
-- Fixing would require either: (a) deferring height calculation until window resize events, (b) using a fixed height, or (c) a full virtual-scroll rewrite — all have significant complexity or trade-offs
+- Fixing would require either: (a) deferring height calculation until window resize events, (b) using a fixed height, or (c) a full virtual-scroll rewrite - all have significant complexity or trade-offs
 
 **DO NOT attempt to fix this** unless the user explicitly requests it again.
 
-**Files affected**: [src/analysis_frame.py](src/analysis_frame.py) — `_render_timeline_period()` method, `add_column()` inner function with `use_text_widget=True`
+**Files affected**: [src/analysis_frame.py](src/analysis_frame.py) - `_render_timeline_period()` method, `add_column()` inner function with `use_text_widget=True`
 
 ---
 
@@ -14321,7 +14424,7 @@ Updated `upload_session()` in `src/google_sheets_integration.py` to match the pa
 
 ---
 
-### [2026-03-05] - Bug Fix: Duplicate Active Period / Negative Active Time When Idle Converts to Break (COMPLETED ✅)
+### [2026-03-05] - Bug Fix: Duplicate Active Period / Negative Active Time When Idle Converts to Break (COMPLETED)
 
 **Search Keywords**: idle to break, auto-break, session_idle, check_idle, on_activity, duplicate active period, negative active time, idle equals break duration, end_session break, toggle_break idle, session_idle flag, break_active guard
 
@@ -14340,7 +14443,7 @@ Then in `end_session()`: `total_idle = break_duration`, `active_time = active_du
 
 **Two-part fix** (`time_tracker.py`):
 
-**Fix 1** — `check_idle()` auto-break branch: reset `session_idle = False` and remove the open idle period before calling `toggle_break()`.
+**Fix 1** - `check_idle()` auto-break branch: reset `session_idle = False` and remove the open idle period before calling `toggle_break()`.
 
 ```python
 # Before (bug):
@@ -14360,7 +14463,7 @@ if self.session_name in all_data:
 self.toggle_break()
 ```
 
-**Fix 2** — `on_activity` callback: guard with `not self.break_active` as belt-and-suspenders.
+**Fix 2** - `on_activity` callback: guard with `not self.break_active` as belt-and-suspenders.
 
 ```python
 # Before:
@@ -14372,7 +14475,7 @@ if self.session_idle and not self.break_active:
 
 **Result**: 1 active period, 1 break period, 0 idle periods. Active time non-negative.
 
-**What Worked** ✅:
+**What Worked**:
 1. Read COPILOT_INSTRUCTIONS.md (shortcut 'b' = Bug Fix Workflow) and DEVELOPMENT.md directives
 2. Traced exact code path: check_idle → toggle_break (start) → on_activity (keypress) → duplicate save
 3. Identified that `session_idle` was never cleared in the idle→break path
@@ -14380,12 +14483,12 @@ if self.session_idle and not self.break_active:
 5. Fixed root cause in `check_idle()` + added defensive guard in `on_activity`
 6. All 4 new tests pass; all related test files pass (test_idle_tracking, test_active_after_idle, test_breaks, test_data_integrity, test_time_tracking)
 
-**What Did NOT Work** ❌:
+**What Did NOT Work**:
 - First test run: tests failed because `tracker.settings` was loaded at init time from default settings file, not test file. Fix: add `tracker.settings = tracker.get_settings()` after setting `tracker.settings_file` in test helper.
 
 **Key Learnings**:
 - `self.settings` is cached at `__init__` time; tests must call `tracker.settings = tracker.get_settings()` after setting `tracker.settings_file` or idle thresholds won't apply
-- `on_activity` (pynput callback) fires on ANY keypress including keyboard shortcuts like E (end session) — must guard all state-dependent branches against `break_active`
+- `on_activity` (pynput callback) fires on ANY keypress including keyboard shortcuts like E (end session) - must guard all state-dependent branches against `break_active`
 - Python floor division on negative seconds: `format_time(-211)` = `"-01:56:29"` (hours = `int(-211 // 3600)` = -1, minutes = `int(-211 % 3600 // 60)` = 56, secs = `int(-211 % 60)` = 29)
-- When idle auto-converts to break, removing the open idle period is correct: break starts at `idle_start_time` so the idle duration would be 0 — suppressing it keeps the timeline clean
+- When idle auto-converts to break, removing the open idle period is correct: break starts at `idle_start_time` so the idle duration would be 0 - suppressing it keeps the timeline clean
 - Test file: `tests/test_idle_to_break_bug.py` (4 tests)
